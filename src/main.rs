@@ -6,6 +6,7 @@ use std::pin::Pin;
 use std::collections::BTreeMap;
 use std::task::Poll;
 use futures::future::FutureExt;
+use async_tungstenite::WebSocketStream;
 
 pub mod world;
 
@@ -26,7 +27,7 @@ async fn main() {
                 if let Ok((socket, addr)) = socket {
                     let my_id = next_session;
                     next_session += 1;
-                    sessions.insert(my_id, Session::AwaitingHandshake { socket });
+                    sessions.insert(my_id, Session::new(socket));
                 };
             },
 
@@ -51,15 +52,13 @@ async fn race_all<O>(futures: Vec<&mut (dyn Future<Output = O> + Unpin)>) -> O {
     (Racer { futures }).await
 }
 
-enum Session {
-    AwaitingHandshake { socket: TcpStream },
-    Playing { socket: TcpStream }
+struct Session {
+    socket: WebSocketStream<TcpStream>
 }
 impl Session {
-    pub fn get_socket(&mut self) -> TcpStream {
-        match self {
-            Session::AwaitingHandshake { socket } => socket,
-            Session::Playing { socket} => socket
+    pub fn new(socket: TcpStream) -> Session {
+        Session {
+            socket: WebSocketStream::from(socket)
         }
     }
 }
