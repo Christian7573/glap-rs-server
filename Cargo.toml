@@ -19,4 +19,7 @@ nphysics2d = "0.16.1"
 nalgebra = "0.21.1"
 futures = "0.3.5"
 rmp-serde = "0.14.4"
-serde = "1.0.114"
+
+[dependencies.serde]
+version = "1.0.114"
+features = ["derive"]

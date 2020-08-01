@@ -9,6 +9,7 @@ use futures::future::FutureExt;
 use async_tungstenite::WebSocketStream;
 
 pub mod world;
+pub mod codec;
 
 #[async_std::main]
 async fn main() {
@@ -52,13 +53,57 @@ async fn race_all<O>(futures: Vec<&mut (dyn Future<Output = O> + Unpin)>) -> O {
     (Racer { futures }).await
 }
 
-struct Session {
-    socket: WebSocketStream<TcpStream>
+enum Session {
+    AcceptingWebSocket(Pin<Box<dyn Future<Output = Result<WebSocketStream<TcpStream>, async_tungstenite::tungstenite::Error>>>>),
+    Disconnected,
+    AwaitingHandshake(WebSocketStream<TcpStream>)
 }
 impl Session {
     pub fn new(socket: TcpStream) -> Session {
-        Session {
-            socket: WebSocketStream::from(socket)
+        let future = async_tungstenite::accept_async(socket);
+        let pinbox;
+        unsafe { pinbox = Pin::new_unchecked(Box::new(future)); }
+        Session::AcceptingWebSocket(pinbox)
+    }
+}
+
+enum SessionEvent {
+    None,
+    Disconnected    
+}
+
+impl Stream for Session {
+    type Item = SessionEvent;
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        ctx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        match &mut *self {
+            Session::AcceptingWebSocket(future) => {
+                if let Poll::Ready(result) = future.as_mut().poll(ctx) {
+                    if let Ok(stream) = result {
+                        //New connection, but the event loop will handle that
+                        std::mem::replace(self.get_mut(), Session::AwaitingHandshake(stream));
+                        Poll::Pending
+                    } else {
+                        std::mem::replace(self.get_mut(), Session::Disconnected);
+                        Poll::Ready(Some(SessionEvent::Disconnected))
+                    }
+                } else { Poll::Pending }
+            },
+
+            Session::Disconnected => Poll::Ready(None),
+
+            Session::AwaitingHandshake(stream) => {
+                if let Poll::Ready(result) = Pin::new(stream).poll_next(ctx) {
+                    if let Some(Ok(msg)) = result {
+                        todo!()
+                    } else {
+                        std::mem::replace(self.get_mut(), Session::Disconnected);
+                        Poll::Ready(Some(SessionEvent::Disconnected))
+                    }
+                } else { Poll::Pending }
+            }
         }
     }
 }
