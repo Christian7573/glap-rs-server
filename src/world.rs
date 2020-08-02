@@ -1,9 +1,10 @@
 use nalgebra::Vector2;
-use nphysics2d::object::RigidBody;
+use nphysics2d::object::{RigidBody, Body, DefaultColliderSet};
 use std::collections::BTreeMap;
-use nphysics2d::object::DefaultColliderSet;
 use nphysics2d::joint::DefaultJointConstraintSet;
 use nphysics2d::force_generator::DefaultForceGeneratorSet;
+use num_traits::Pow;
+use nphysics2d::algebra::{Force2, ForceType};
 
 type MyUnits = f32;
 type MyColliderHandle = nphysics2d::object::DefaultColliderHandle;
@@ -33,6 +34,35 @@ impl Simulation {
 
         simulation
     }
+
+    fn celestial_gravity(&mut self) {
+        fn do_gravity_for_part(part: &mut RigidBody<MyUnits>, celestial_bodies: &BTreeMap<u16, RigidBody<MyUnits>>) {
+            const GRAVITATION_CONSTANT: f32 = 0.00000001; //Lolrandom
+            for body in celestial_bodies.values() {
+                let distance: (f32, f32) = ((part.position().translation.x - body.position().translation.x).abs(),
+                                            (part.position().translation.y - body.position().translation.y).abs());
+                let magnitude: f32 = part.augmented_mass().linear * body.augmented_mass().linear 
+                                     / (distance.0.pow(2f32) + distance.1.pow(2f32))
+                                     * GRAVITATION_CONSTANT;
+                if distance.0 > distance.1 {
+                    part.apply_force(0, &Force2::new(Vector2::new(magnitude, distance.1 / distance.0 * magnitude), 0.0), ForceType::Force, true);
+                } else {
+                    part.apply_force(0, &Force2::new(Vector2::new(distance.0 / distance.1 * magnitude, magnitude), 0.0), ForceType::Force, true);
+                }
+                
+            }
+        }
+        for player in self.bodies.player_parts.values_mut() {
+            for part in player.values_mut() { do_gravity_for_part(part, &mut self.bodies.celestial_objects); }
+        }
+        for part in self.bodies.free_parts.values_mut() {
+            do_gravity_for_part(part, &self.bodies.celestial_objects);
+        }
+    }
+
+    pub fn step() {
+        
+    }
 }
 
 pub struct World {
@@ -40,6 +70,13 @@ pub struct World {
     free_parts: BTreeMap<u16, RigidBody<MyUnits>>,
     player_parts: BTreeMap<u16, BTreeMap<u16, RigidBody<MyUnits>>>,
     removal_events: std::collections::VecDeque<MyHandle>
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+pub enum MyHandle {
+    CelestialObject(u16),
+    FreePart(u16),
+    PlayerPart(u16, u16)
 }
 impl Default for World {
     fn default() -> World { World {
@@ -50,12 +87,6 @@ impl Default for World {
     } }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash)]
-pub enum MyHandle {
-    CelestialObject(u16),
-    FreePart(u16),
-    PlayerPart(u16, u16)
-}
 impl nphysics2d::object::BodySet<MyUnits> for World {
     type Handle = MyHandle;
     fn get(&self, handle: Self::Handle) -> Option<&dyn nphysics2d::object::Body<MyUnits>> {
@@ -101,4 +132,3 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
         self.removal_events.pop_front()
     }
 }
-

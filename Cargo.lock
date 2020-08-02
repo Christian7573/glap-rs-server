@@ -426,6 +426,7 @@ dependencies = [
  "futures",
  "nalgebra",
  "nphysics2d",
+ "num-traits",
  "rmp-serde",
  "serde",
 ]
