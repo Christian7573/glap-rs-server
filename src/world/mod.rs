@@ -83,25 +83,43 @@ pub struct World {
     next_celestial_object: u16,
     next_part: u16
 }
-#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Copy, Eq)]
 pub enum MyHandle {
     CelestialObject(u16),
-    FreePart(u16),
-    PlayerPart(u16, u16)
+    Part(Option<u16>, u16),
+}
+impl Clone for MyHandle {
+    fn clone(&self) -> MyHandle { *self }
+}
+impl PartialEq for MyHandle {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            MyHandle::CelestialObject(id) => if let MyHandle::CelestialObject(other_id) = other { *id == *other_id } else { false },
+            MyHandle::Part(_, id) => if let MyHandle::Part(_, other_id) = other { *id == *other_id } else { false }
+        }
+    }
+}
+impl std::hash::Hash for MyHandle {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u16(match self {
+            MyHandle::CelestialObject(id) => *id,
+            MyHandle::Part(_, id) => *id
+        });
+    }
 }
 
 impl World {
-    fn add_celestial_object(&mut self, body: RigidBody<MyUnits>) -> MyHandle {
+    pub fn add_celestial_object(&mut self, body: RigidBody<MyUnits>) -> MyHandle {
         let id = self.next_celestial_object;
         self.next_celestial_object += 1;
         let handle = MyHandle::CelestialObject(id);
         self.celestial_objects.insert(id, body);
         handle
     }
-    fn add_free_part(&mut self, body: RigidBody<MyUnits>) -> MyHandle {
+    pub fn add_part(&mut self, body: RigidBody<MyUnits>, player: Option<u16>) -> MyHandle {
         let id = self.next_part;
         self.next_part += 1;
-        let handle = MyHandle::FreePart(id);
+        let handle = MyHandle::Part(player, id);
         self.free_parts.insert(id, body);
         handle
     }
@@ -121,8 +139,8 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
     fn get(&self, handle: Self::Handle) -> Option<&dyn nphysics2d::object::Body<MyUnits>> {
         let ptr = match handle {
             MyHandle::CelestialObject(id) => self.celestial_objects.get(&id),
-            MyHandle::PlayerPart(player, id) => self.player_parts.get(&player).map(|player| player.get(&id)).flatten(),
-            MyHandle::FreePart(id) => self.celestial_objects.get(&id),
+            MyHandle::Part(Some(player), id) => self.player_parts.get(&player).map(|player| player.get(&id)).flatten(),
+            MyHandle::Part(None, id) => self.celestial_objects.get(&id),
         };
         if let Some(ptr) = ptr { Some(ptr) }
         else { None }
@@ -130,8 +148,8 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
     fn get_mut(&mut self, handle: Self::Handle) -> Option<&mut dyn nphysics2d::object::Body<MyUnits>> {
         let ptr = match handle {
             MyHandle::CelestialObject(id) => self.celestial_objects.get_mut(&id),
-            MyHandle::PlayerPart(player, id) => self.player_parts.get_mut(&player).map(|player| player.get_mut(&id)).flatten(),
-            MyHandle::FreePart(id) => self.celestial_objects.get_mut(&id),
+            MyHandle::Part(Some(player), id) => self.player_parts.get_mut(&player).map(|player| player.get_mut(&id)).flatten(),
+            MyHandle::Part(None, id) => self.celestial_objects.get_mut(&id),
         };
         if let Some(ptr) = ptr { Some(ptr) }
         else { None }
@@ -139,23 +157,23 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
     fn contains(&self, handle: Self::Handle) -> bool {
         match handle {
             MyHandle::CelestialObject(id) => self.celestial_objects.contains_key(&id),
-            MyHandle::PlayerPart(player, id) => self.player_parts.get(&player).map(|player| player.contains_key(&id)).unwrap_or(false),
-            MyHandle::FreePart(id) => self.celestial_objects.contains_key(&id),
+            MyHandle::Part(Some(player), id) => self.player_parts.get(&player).map(|player| player.contains_key(&id)).unwrap_or(false),
+            MyHandle::Part(None, id) => self.celestial_objects.contains_key(&id),
         }
     }
     fn foreach(&self, f: &mut dyn FnMut(Self::Handle, &dyn nphysics2d::object::Body<MyUnits>)) {
         for (id, body) in &self.celestial_objects { f(MyHandle::CelestialObject(*id), body); }
         for (player, bodies) in &self.player_parts {
-            for (id, body) in bodies { f(MyHandle::PlayerPart(*player, *id), body); }
+            for (id, body) in bodies { f(MyHandle::Part(Some(*player), *id), body); }
         }
-        for (id, body) in &self.free_parts { f(MyHandle::FreePart(*id), body); }
+        for (id, body) in &self.free_parts { f(MyHandle::Part(None, *id), body); }
     }
     fn foreach_mut(&mut self, f: &mut dyn FnMut(Self::Handle, &mut dyn nphysics2d::object::Body<MyUnits>)) {
         for (id, body) in &mut self.celestial_objects { f(MyHandle::CelestialObject(*id), body); }
         for (player, bodies) in &mut self.player_parts {
-            for (id, body) in bodies { f(MyHandle::PlayerPart(*player, *id), body); }
+            for (id, body) in bodies { f(MyHandle::Part(Some(*player), *id), body); }
         }
-        for (id, body) in &mut self.free_parts { f(MyHandle::FreePart(*id), body); }
+        for (id, body) in &mut self.free_parts { f(MyHandle::Part(None, *id), body); }
     }
     fn pop_removal_event(&mut self) -> Option<Self::Handle> {
         self.removal_events.pop_front()
