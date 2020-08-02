@@ -14,7 +14,7 @@ pub enum Session {
     AwaitingHandshake(MyWebSocket)
 }
 pub enum SessionEvent {
-    
+    ReadyToSpawn
 }
 
 impl Session {
@@ -53,7 +53,13 @@ impl Stream for Session {
                 if let Poll::Ready(result) = Pin::new(stream).poll_next(ctx) {
                     match result {
                         Some(Message::Binary(dat)) => {
-                            todo!()
+                            if let Ok(FromClientMsg::Handshake{ client, session}) = deserialize(dat.as_slice()) {
+                                Poll::Ready(Some(SessionEvent::ReadyToSpawn))
+                                //Event loop will call back once it has prepared a physics body and whatnot for us
+                            } else {
+                                std::mem::replace(self.get_mut(), Session::Disconnected);
+                                Poll::Ready(None)
+                            }
                         },
                         Some(Message::Ping(_)) => Poll::Pending,
                         _ => {
