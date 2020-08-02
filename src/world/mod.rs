@@ -5,6 +5,8 @@ use nphysics2d::force_generator::DefaultForceGeneratorSet;
 use num_traits::Pow;
 use nphysics2d::algebra::{Force2, ForceType};
 
+pub mod planets;
+
 type MyUnits = f32;
 type MyColliderHandle = nphysics2d::object::DefaultColliderHandle;
 type MyMechanicalWorld = nphysics2d::world::MechanicalWorld<MyUnits, MyHandle, MyColliderHandle>;
@@ -20,18 +22,20 @@ pub struct Simulation {
     colliders: MyColliderSet,
     joints: MyJointSet,
     persistant_forces: MyForceSet,
-    step_time: f32
+    planets: planets::Planets
 }
 impl Simulation {
     pub fn new(step_time: f32) -> Simulation {
+        let mut mechanics = MyMechanicalWorld::new(Vector2::new(0.0, 0.0));
+        let mut geometry: MyGeometricalWorld = MyGeometricalWorld::new();
+        let mut colliders: MyColliderSet = MyColliderSet::new();
+        let mut bodies = World::default();
+        let planets = planets::Planets::new(&mut mechanics, &mut geometry, &mut colliders, &mut bodies);
         let mut simulation = Simulation {
-            bodies: World::default(),
-            mechanics: MyMechanicalWorld::new(Vector2::new(0.0, 0.0)),
-            geometry: MyGeometricalWorld::new(),
-            colliders: MyColliderSet::new(),
+            mechanics, geometry, colliders, bodies,
             joints: MyJointSet::new(),
             persistant_forces: MyForceSet::new(),
-            step_time
+            planets,
         };
         simulation.mechanics.set_timestep(step_time);
 
@@ -75,24 +79,43 @@ pub struct World {
     celestial_objects: BTreeMap<u16, RigidBody<MyUnits>>,
     free_parts: BTreeMap<u16, RigidBody<MyUnits>>,
     player_parts: BTreeMap<u16, BTreeMap<u16, RigidBody<MyUnits>>>,
-    removal_events: std::collections::VecDeque<MyHandle>
+    removal_events: std::collections::VecDeque<MyHandle>,
+    next_celestial_object: u16,
+    next_part: u16
 }
-
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
 pub enum MyHandle {
     CelestialObject(u16),
     FreePart(u16),
     PlayerPart(u16, u16)
 }
+
+impl World {
+    fn add_celestial_object(&mut self, body: RigidBody<MyUnits>) -> MyHandle {
+        let id = self.next_celestial_object;
+        self.next_celestial_object += 1;
+        let handle = MyHandle::CelestialObject(id);
+        self.celestial_objects.insert(id, body);
+        handle
+    }
+    fn add_free_part(&mut self, body: RigidBody<MyUnits>) -> MyHandle {
+        let id = self.next_part;
+        self.next_part += 1;
+        let handle = MyHandle::FreePart(id);
+        self.free_parts.insert(id, body);
+        handle
+    }
+}
 impl Default for World {
     fn default() -> World { World {
         celestial_objects: BTreeMap::new(),
         free_parts: BTreeMap::new(),
         player_parts: BTreeMap::new(),
-        removal_events: std::collections::VecDeque::new()
+        removal_events: std::collections::VecDeque::new(),
+        next_celestial_object: 0,
+        next_part: 0,
     } }
 }
-
 impl nphysics2d::object::BodySet<MyUnits> for World {
     type Handle = MyHandle;
     fn get(&self, handle: Self::Handle) -> Option<&dyn nphysics2d::object::Body<MyUnits>> {

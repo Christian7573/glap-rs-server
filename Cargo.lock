@@ -425,6 +425,7 @@ dependencies = [
  "async-tungstenite",
  "futures",
  "nalgebra",
+ "ncollide2d",
  "nphysics2d",
  "num-traits",
  "rmp-serde",
