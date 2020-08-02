@@ -37,8 +37,7 @@ impl Stream for Session {
                 if let Poll::Ready(result) = future.as_mut().poll(ctx) {
                     if let Ok(stream) = result {
                         let mut socket: MyWebSocket = stream.into();
-                        socket.queue_send(Message::Binary(serialize(&ToClientMsg::TestEnumVarriant(String::from("Testing testing..."))).unwrap()));
-                        socket.queue_send(Message::Binary(serialize(&ToClientMsg::LmaoXd).unwrap()));
+                        //socket.queue_send(Message::Binary(serialize(&ToClientMsg::TestHandshake(String::from("glap.rs-0.1.0"), None)).unwrap()));
                         std::mem::replace(self.get_mut(), Session::AwaitingHandshake(socket));
                         Poll::Pending
                     } else {
@@ -52,11 +51,15 @@ impl Stream for Session {
 
             Session::AwaitingHandshake(stream) => {
                 if let Poll::Ready(result) = Pin::new(stream).poll_next(ctx) {
-                    if let Some(msg) = result {
-                        todo!()
-                    } else {
-                        std::mem::replace(self.get_mut(), Session::Disconnected);
-                        Poll::Ready(None)
+                    match result {
+                        Some(Message::Binary(dat)) => {
+                            todo!()
+                        },
+                        Some(Message::Ping(_)) => Poll::Pending,
+                        _ => {
+                            std::mem::replace(self.get_mut(), Session::Disconnected);
+                            Poll::Ready(None)
+                        }
                     }
                 } else { Poll::Pending }
             }
