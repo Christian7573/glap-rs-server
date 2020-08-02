@@ -18,8 +18,9 @@ async fn main() {
     let sessions: BTreeMap<u16, Session> = BTreeMap::new();
     let mut next_session: u16 = 1;
     
-    let ticker = async_std::stream::interval(std::time::Duration::from_secs_f32(1.0/60.0));
-    let mut simulation = world::Simulation::new();
+    const TIMESTEP: f32 = 1.0/60.0;
+    let ticker = async_std::stream::interval(std::time::Duration::from_secs_f32(TIMESTEP));
+    let mut simulation = world::Simulation::new(TIMESTEP);
 
     struct EventSource {
         inbound: async_std::net::TcpListener,

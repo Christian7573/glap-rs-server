@@ -1,7 +1,6 @@
 use nalgebra::Vector2;
-use nphysics2d::object::{RigidBody, Body, DefaultColliderSet};
+use nphysics2d::object::{RigidBody, Body};
 use std::collections::BTreeMap;
-use nphysics2d::joint::DefaultJointConstraintSet;
 use nphysics2d::force_generator::DefaultForceGeneratorSet;
 use num_traits::Pow;
 use nphysics2d::algebra::{Force2, ForceType};
@@ -10,25 +9,31 @@ type MyUnits = f32;
 type MyColliderHandle = nphysics2d::object::DefaultColliderHandle;
 type MyMechanicalWorld = nphysics2d::world::MechanicalWorld<MyUnits, MyHandle, MyColliderHandle>;
 type MyGeometricalWorld = nphysics2d::world::GeometricalWorld<MyUnits, MyHandle, MyColliderHandle>;
+type MyColliderSet = nphysics2d::object::DefaultColliderSet<MyUnits, MyHandle>;
+type MyJointSet = nphysics2d::joint::DefaultJointConstraintSet<MyUnits, MyHandle>;
+type MyForceSet = nphysics2d::force_generator::DefaultForceGeneratorSet<MyUnits, MyHandle>;
 
 pub struct Simulation {
     bodies: World,
     mechanics: MyMechanicalWorld,
     geometry: MyGeometricalWorld,
-    colliders: DefaultColliderSet<MyUnits>,
-    joints: DefaultJointConstraintSet<MyUnits>,
-    persistant_forces: DefaultForceGeneratorSet<MyUnits>
+    colliders: MyColliderSet,
+    joints: MyJointSet,
+    persistant_forces: MyForceSet,
+    step_time: f32
 }
 impl Simulation {
-    pub fn new() -> Simulation {
+    pub fn new(step_time: f32) -> Simulation {
         let mut simulation = Simulation {
             bodies: World::default(),
             mechanics: MyMechanicalWorld::new(Vector2::new(0.0, 0.0)),
             geometry: MyGeometricalWorld::new(),
-            colliders: DefaultColliderSet::new(),
-            joints: DefaultJointConstraintSet::new(),
-            persistant_forces: DefaultForceGeneratorSet::new()
+            colliders: MyColliderSet::new(),
+            joints: MyJointSet::new(),
+            persistant_forces: MyForceSet::new(),
+            step_time
         };
+        simulation.mechanics.set_timestep(step_time);
 
         //Add planets n stuff here
 
@@ -45,9 +50,9 @@ impl Simulation {
                                      / (distance.0.pow(2f32) + distance.1.pow(2f32))
                                      * GRAVITATION_CONSTANT;
                 if distance.0 > distance.1 {
-                    part.apply_force(0, &Force2::new(Vector2::new(magnitude, distance.1 / distance.0 * magnitude), 0.0), ForceType::Force, true);
+                    part.apply_force(0, &Force2::linear(Vector2::new(magnitude, distance.1 / distance.0 * magnitude)), ForceType::Force, true);
                 } else {
-                    part.apply_force(0, &Force2::new(Vector2::new(distance.0 / distance.1 * magnitude, magnitude), 0.0), ForceType::Force, true);
+                    part.apply_force(0, &Force2::linear(Vector2::new(distance.0 / distance.1 * magnitude, magnitude)), ForceType::Force, true);
                 }
                 
             }
@@ -60,8 +65,9 @@ impl Simulation {
         }
     }
 
-    pub fn step() {
-        
+    pub fn simulate(&mut self) {
+        self.celestial_gravity();
+        self.mechanics.step(&mut self.geometry, &mut self.bodies, &mut self.colliders, &mut self.joints, &mut self.persistant_forces);
     }
 }
 
