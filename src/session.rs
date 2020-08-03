@@ -53,7 +53,7 @@ impl Stream for Session {
                 if let Poll::Ready(result) = Pin::new(stream).poll_next(ctx) {
                     match result {
                         Some(Message::Binary(dat)) => {
-                            if let Ok(FromClientMsg::Handshake{ client, session}) = deserialize(dat.as_slice()) {
+                            if let Ok(FromClientMsg::Handshake{ client, session }) = deserialize(dat.as_slice()) {
                                 Poll::Ready(Some(SessionEvent::ReadyToSpawn))
                                 //Event loop will call back once it has prepared a physics body and whatnot for us
                             } else {

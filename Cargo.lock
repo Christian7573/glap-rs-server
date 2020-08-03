@@ -430,6 +430,7 @@ dependencies = [
  "num-traits",
  "rmp-serde",
  "serde",
+ "tinyvec 0.4.1",
 ]
 
 [[package]]
@@ -1139,6 +1140,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "53953d2d3a5ad81d9f844a32f14ebb121f50b650cd59d0ee2a07cf13c617efed"
 
 [[package]]
+name = "tinyvec"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d509a3e5acd065f0877e6db98d026d2900d57aa32abbb614a2cb959802c3ddf"
+
+[[package]]
 name = "tungstenite"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1178,7 +1185,7 @@ version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6fb19cf769fa8c6a80a162df694621ebeb4dafb606470b2b2fce0be40a98a977"
 dependencies = [
- "tinyvec",
+ "tinyvec 0.3.3",
 ]
 
 [[package]]

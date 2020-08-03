@@ -6,6 +6,7 @@ use num_traits::Pow;
 use nphysics2d::algebra::{Force2, ForceType};
 
 pub mod planets;
+pub mod parts;
 
 type MyUnits = f32;
 type MyColliderHandle = nphysics2d::object::DefaultColliderHandle;
@@ -30,7 +31,7 @@ impl Simulation {
         let mut geometry: MyGeometricalWorld = MyGeometricalWorld::new();
         let mut colliders: MyColliderSet = MyColliderSet::new();
         let mut bodies = World::default();
-        let planets = planets::Planets::new(&mut mechanics, &mut geometry, &mut colliders, &mut bodies);
+        let planets = planets::Planets::new(&mut colliders, &mut bodies);
         let mut simulation = Simulation {
             mechanics, geometry, colliders, bodies,
             joints: MyJointSet::new(),
