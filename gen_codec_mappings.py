@@ -83,61 +83,39 @@ class NameExtraction:
             self.collection += character
             return self
 
-progression = ReadingName("ToClientMsg {", CollectingBlock("{","}", HoldValue()))
-for char in codec_file:
-    progression = progression.progress(char)
-if type(progression) != HoldValue:
-    print("Unsuccessful in extracting ToClientMsg")
-    exit()
+def process_enum_mapping(opening_name, out_name):
+    global codec_file
+    progression = ReadingName(opening_name, CollectingBlock("{","}", HoldValue()))
+    for char in codec_file:
+        progression = progression.progress(char)
+    if type(progression) != HoldValue:
+        print("Unsuccessful in extracting", opening_name)
+        exit()
 
-to_client_msg = progression.value
-progression = NameExtraction()
-for char in to_client_msg:
-    progression = progression.progress(char)
-if type(progression) != NameExtraction:
-    print("Unsuccessful in parsing ToClientMsg")
-    exit()
-if progression.collection != "":
-    progression.names.append(progression.collection)
+    to_client_msg = progression.value
+    progression = NameExtraction()
+    for char in to_client_msg:
+        progression = progression.progress(char)
+    if type(progression) != NameExtraction:
+        print("Unsuccessful in parsing", opening_name)
+        exit()
+    if progression.collection != "":
+        progression.names.append(progression.collection)
 
-out = "export const FromServer = { "
-for name in progression.names:
-    out += name + r':{},'
-out += " };\nFromServer.to_id = new Map([ "
-for i in range(len(progression.names)):
-    out += "[FromServer." + progression.names[i] + "," + str(i) + "],"
-out += " ]);\nFromServer.from_id = new Map([ "
-for i in range(len(progression.names)):
-    out += "[" + str(i) + ",FromServer." + progression.names[i] + "],"
-out += " ]);\n\n"
+    out = "export const %s = { " % out_name
+    for name in progression.names:
+        out += name + r':{},'
+    out += " };\n%s.to_id = new Map([ " % out_name
+    for i in range(len(progression.names)):
+        out += "[%s.%s,%s]," % (out_name, progression.names[i], str(i))
+    out += " ]);\n%s.from_id = new Map([ " % out_name
+    for i in range(len(progression.names)):
+        out += "[%s,%s.%s]," % (str(i), out_name, progression.names[i])
+    out += " ]);\n\n"
+    return out
 
-progression = ReadingName("FromClientMsg {", CollectingBlock("{","}", HoldValue()))
-for char in codec_file:
-    progression = progression.progress(char)
-if type(progression) != HoldValue:
-    print("Unsuccessful in extracting FromClientMsg")
-    exit()
-
-from_client_msg = progression.value
-progression = NameExtraction()
-for char in from_client_msg:
-    progression = progression.progress(char)
-if type(progression) != NameExtraction:
-    print("Unsuccessful in parsing FromClientMsg")
-    exit()
-if progression.collection != "":
-    progression.names.append(progression.collection)
-
-out += "export const ToServer = { "
-for name in progression.names:
-    out += name + r':{},'
-out += " };\nToServer.to_id = new Map([ "
-for i in range(len(progression.names)):
-    out += "[ToServer." + progression.names[i] + "," + str(i) + "],"
-out += " ]);\nToServer.from_id = new Map([ "
-for i in range(len(progression.names)):
-    out += "[" + str(i) + ",ToServer." + progression.names[i] + "],"
-out += " ]);\n\n"
+out = process_enum_mapping("ToClientMsg {", "FromServer")
+out += process_enum_mapping("FromClientMsg {", "ToServer")
 
 outfile = open("./codec.js", "w")
 outfile.write(out)
