@@ -104,7 +104,7 @@ def process_enum_mapping(opening_name, out_name):
     if progression.collection != "":
         progression.names.append(progression.collection)
 
-    out = "export const %s = { " % out_name
+    out = "export const %s = { to_id: new Map(), from_id: new Map(), " % out_name
     for name in progression.names:
         out += name + r':{},'
     out += " };\n%s.to_id = new Map([ " % out_name
@@ -119,6 +119,6 @@ def process_enum_mapping(opening_name, out_name):
 out = process_enum_mapping("ToClientMsg {", "FromServer")
 out += process_enum_mapping("FromClientMsg {", "ToServer")
 
-outfile = open("./codec.js", "w")
+outfile = open("./codec.ts", "w")
 outfile.write(out)
 outfile.close()
