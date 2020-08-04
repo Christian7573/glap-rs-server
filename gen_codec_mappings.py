@@ -104,15 +104,15 @@ def process_enum_mapping(opening_name, out_name):
     if progression.collection != "":
         progression.names.append(progression.collection)
 
-    out = "export const %s = { to_id: new Map(), from_id: new Map(), " % out_name
+    out = "export const %s = { to_id: new Map<object,string>(), from_id: new Map<string,object>(), " % out_name
     for name in progression.names:
         out += name + r':{},'
     out += " };\n%s.to_id = new Map([ " % out_name
     for i in range(len(progression.names)):
-        out += "[%s.%s,%s]," % (out_name, progression.names[i], str(i))
+        out += "[%s.%s,'%s']," % (out_name, progression.names[i], str(i))
     out += " ]);\n%s.from_id = new Map([ " % out_name
     for i in range(len(progression.names)):
-        out += "[%s,%s.%s]," % (str(i), out_name, progression.names[i])
+        out += "['%s',%s.%s]," % (str(i), out_name, progression.names[i])
     out += " ]);\n\n"
     return out
 

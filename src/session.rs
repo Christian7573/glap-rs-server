@@ -4,7 +4,7 @@ use async_std::prelude::*;
 use async_std::net::TcpStream;
 use async_tungstenite::WebSocketStream;
 use async_tungstenite::tungstenite::{Error as WsError, Message};
-use futures::{Sink, SinkExt};
+use futures::{Sink, SinkExt, Stream, StreamExt};
 
 use crate::codec::*;
 
@@ -50,10 +50,12 @@ impl Stream for Session {
             Session::Disconnected => Poll::Ready(None),
 
             Session::AwaitingHandshake(stream) => {
-                if let Poll::Ready(result) = Pin::new(stream).poll_next(ctx) {
+                if let Poll::Ready(result) = stream.poll_next_unpin(ctx) {
                     match result {
                         Some(Message::Binary(dat)) => {
                             if let Ok(FromClientMsg::Handshake{ client, session }) = deserialize(dat.as_slice()) {
+                                println!("Made it here");
+                                stream.queue_send(accept_handshake());
                                 Poll::Ready(Some(SessionEvent::ReadyToSpawn))
                                 //Event loop will call back once it has prepared a physics body and whatnot for us
                             } else {
