@@ -1,6 +1,6 @@
-export const FromServer = { ZOutOfOrder:{},TestHandshake:{}, };
-FromServer.to_id = new Map([ [FromServer.ZOutOfOrder,0],[FromServer.TestHandshake,1], ]);
-FromServer.from_id = new Map([ [0,FromServer.ZOutOfOrder],[1,FromServer.TestHandshake], ]);
+export const FromServer = { HandshakeAccepted:{},AddCelestialObject:{}, };
+FromServer.to_id = new Map([ [FromServer.HandshakeAccepted,0],[FromServer.AddCelestialObject,1], ]);
+FromServer.from_id = new Map([ [0,FromServer.HandshakeAccepted],[1,FromServer.AddCelestialObject], ]);
 
 export const ToServer = { Handshake:{}, };
 ToServer.to_id = new Map([ [ToServer.Handshake,0], ]);

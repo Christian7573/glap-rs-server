@@ -79,6 +79,8 @@ class NameExtraction:
             return CommentBypass(self)
         elif character == "(":
             return CollectingBlock("(",")",self)
+        elif character == "{":
+            return CollectingBlock("{","}",self)
         else:
             self.collection += character
             return self
