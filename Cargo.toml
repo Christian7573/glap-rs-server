@@ -22,6 +22,7 @@ rmp-serde = "0.14.4"
 num-traits = "0.2.12"
 ncollide2d = "0.23.2"
 tinyvec = "0.4.1"
+flatbuffers = "0.6.1"
 
 [dependencies.serde]
 version = "1.0.114"

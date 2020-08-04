@@ -37,7 +37,6 @@ impl Stream for Session {
                 if let Poll::Ready(result) = future.as_mut().poll(ctx) {
                     if let Ok(stream) = result {
                         let mut socket: MyWebSocket = stream.into();
-                        //socket.queue_send(Message::Binary(serialize(&ToClientMsg::TestHandshake(String::from("glap.rs-0.1.0"), None)).unwrap()));
                         println!("Accepted websocket");
                         std::mem::replace(self.get_mut(), Session::AwaitingHandshake(socket));
                         Poll::Pending
@@ -54,35 +53,22 @@ impl Stream for Session {
                 if let Poll::Ready(result) = stream.poll_next_unpin(ctx) {
                     match result {
                         Some(Message::Binary(dat)) => {
-                            println!("Message recieved");
-                            match deserialize::<FromClientMsg>(dat.as_slice()) {
-                                Ok(FromClientMsg::Handshake{ client, session }) => {
-                                    println!("Made it here");
-                                    stream.queue_send(accept_handshake());
+                            let buf = flatbuffers::get_root::<to_server::Msg>(&dat[..]);
+                            match buf.msg_type() {
+                                to_server::ToServerMsg::Handshake => {
+                                    let mut builder = flatbuffers::FlatBufferBuilder::new();
+                                    let handshake_accepted = to_client::HandshakeAccepted::create(&mut builder, &to_client::HandshakeAcceptedArgs {});
+                                    let msg = to_client::Msg::create(&mut builder, &to_client::MsgArgs { msg: Some(handshake_accepted.as_union_value()), msg_type: to_client::ToClientMsg::HandshakeAccepted });
+                                    builder.finish(msg, None);
+                                    stream.queue_send(Message::Binary(builder.finished_data().to_vec()));
                                     Poll::Ready(Some(SessionEvent::ReadyToSpawn))
-                                    //Event loop will call back once it has prepared a physics body and whatnot for us
                                 },
-                                Err(error) => {
-                                    println!("{}", error);
-                                    std::mem::replace(self.get_mut(), Session::Disconnected);
-                                    Poll::Ready(None)
-                                },
-                                Ok(_) => {
-                                    println!("Msg bad");
+                                _ => {
+                                    println!("Commit die v2");
                                     std::mem::replace(self.get_mut(), Session::Disconnected);
                                     Poll::Ready(None)
                                 }
                             }
-                            // if let Ok(FromClientMsg::Handshake{ client, session }) = deserialize::<FromClientMsg>(dat.as_slice()) {
-                            //     println!("Made it here");
-                            //     stream.queue_send(accept_handshake());
-                            //     Poll::Ready(Some(SessionEvent::ReadyToSpawn))
-                            //     //Event loop will call back once it has prepared a physics body and whatnot for us
-                            // } else {
-                                // println!("Msg bad");
-                                // std::mem::replace(self.get_mut(), Session::Disconnected);
-                                // Poll::Ready(None)
-                            // }
                         },
                         Some(Message::Ping(_)) => Poll::Pending,
                         _ => {

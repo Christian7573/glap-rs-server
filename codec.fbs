@@ -1,0 +1,16 @@
+namespace ToServer;
+
+table Handshake { client: string; session: string; }
+union ToServerMsg {
+    Handshake: Handshake
+}
+table Msg { msg: ToServerMsg; }
+
+
+namespace ToClient;
+
+table HandshakeAccepted {}
+union ToClientMsg {
+    HandshakeAccepted: HandshakeAccepted,
+}
+table Msg { msg: ToClientMsg; }
