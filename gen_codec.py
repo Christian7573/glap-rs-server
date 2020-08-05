@@ -23,7 +23,7 @@ class OptionType:
         self.inner = inner
         self._rust_signature = "Option<%s>" % inner.rust_signature()
         self._rust_serialize = "if let Some(tmp) = %%s {out.push(1); %s} else {out.push(0);}" % inner.rust_serialize("tmp")
-        self._rust_deserialize = "%%s = {if buf[index] > 0 {index += 1; let tmp; %s Some(tmp)} else {index += 1; None}};" % inner.rust_deserialize("tmp")
+        self._rust_deserialize = "%%s = {if buf[*index] > 0 {*index += 1; let tmp; %s Some(tmp)} else {*index += 1; None}};" % inner.rust_deserialize("tmp")
         self._typescript_signature = "%s?" % inner.typescript_signature()
     def rust_signature(self):
         return self._rust_signature
@@ -85,12 +85,12 @@ rust_out.write(rust_header.read())
 rust_out.write("\n\n")
 rust_header.close()
 for category in categories:
-    rust_out.write("enum %s {\n" % category.name)
+    rust_out.write("pub enum %s {\n" % category.name)
     for message in category.messages:
         if len(message.fields) > 0:
-            rust_out.write("\t%s { ")
+            rust_out.write("\t%s { " % message.name)
             for field in message.fields:
-                rust_out.write("%s: %s, " % (field.name, field.kind.rust_signature))
+                rust_out.write("%s: %s, " % (field.name, field.kind.rust_signature()))
             rust_out.write("},\n")
         else:
             rust_out.write("\t%s,\n" % message.name)
@@ -98,13 +98,13 @@ for category in categories:
     for i, message in enumerate(category.messages):
         rust_out.write("\t\t\tSelf::%s { %s} => {\n\t\t\t\tout.push(%s);\n" % (message.name, ", ".join(map(lambda field: field.name, message.fields)), str(i)))
         for field in message.fields:
-            rust_out.write("\t\t\t\t%s\n" % field.kind.rust_serialize("self." + field.name))
-        rust_out.write("\t\t\t},")
-    rust_out.write("\t\t};\n\t\tout\n\t}\n\tpub fn deserialize(buf: &[u8], index: &mut usize) -> Self {\n\t\tlet i = *index;\n\t\tindex += 1;\n\t\tmatch buf[i] {\n")
+            rust_out.write("\t\t\t\t%s\n" % field.kind.rust_serialize(field.name))
+        rust_out.write("\t\t\t},\n")
+    rust_out.write("\t\t};\n\t\tout\n\t}\n\tpub fn deserialize(buf: &[u8], index: &mut usize) -> Self {\n\t\tlet i = *index;\n\t\t*index += 1;\n\t\tmatch buf[i] {\n")
     for i, message in enumerate(category.messages):
         rust_out.write("\t\t\t%s => {\n\t\t\t\t%s\n" % (str(i), " ".join(map(lambda field: ("let %s;" % field.name), message.fields))))
         for field in message.fields:
             rust_out.write("\t\t\t\t%s\n" % field.kind.rust_deserialize(field.name))
-        rust_out.write("\t\t\t\t%s { %s}\n\t\t\t},\n" % (message.name, ", ".join(map(lambda field: field.name, message.fields))))
-    rust_out.write("\t\t};\n\t\tout\n\t}\n}\n\n")
+        rust_out.write("\t\t\t\t%s::%s { %s}\n\t\t\t},\n" % (category.name, message.name, ", ".join(map(lambda field: field.name, message.fields))))
+    rust_out.write("\t\t}\n\t}\n}\n\n")
 rust_out.close()
