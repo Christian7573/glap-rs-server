@@ -17,14 +17,14 @@ type MyJointSet = nphysics2d::joint::DefaultJointConstraintSet<MyUnits, MyHandle
 type MyForceSet = nphysics2d::force_generator::DefaultForceGeneratorSet<MyUnits, MyHandle>;
 
 pub struct Simulation {
-    pub bodies: World,
+    pub world: World,
     mechanics: MyMechanicalWorld,
     geometry: MyGeometricalWorld,
-    colliders: MyColliderSet,
+    pub colliders: MyColliderSet,
     joints: MyJointSet,
     persistant_forces: MyForceSet,
     pub planets: planets::Planets,
-    part_static: parts::PartStatic
+    pub part_static: parts::PartStatic
 }
 impl Simulation {
     pub fn new(step_time: f32) -> Simulation {
@@ -34,7 +34,7 @@ impl Simulation {
         let mut bodies = World::default();
         let planets = planets::Planets::new(&mut colliders, &mut bodies);
         let mut simulation = Simulation {
-            mechanics, geometry, colliders, bodies,
+            mechanics, geometry, colliders, world: bodies,
             joints: MyJointSet::new(),
             persistant_forces: MyForceSet::new(),
             planets,
@@ -64,17 +64,17 @@ impl Simulation {
                 
             }
         }
-        for player in self.bodies.player_parts.values_mut() {
-            for part in player.values_mut() { do_gravity_for_part(part, &mut self.bodies.celestial_objects); }
+        for player in self.world.player_parts.values_mut() {
+            for part in player.values_mut() { do_gravity_for_part(part, &mut self.world.celestial_objects); }
         }
-        for part in self.bodies.free_parts.values_mut() {
-            do_gravity_for_part(part, &self.bodies.celestial_objects);
+        for part in self.world.free_parts.values_mut() {
+            do_gravity_for_part(part, &self.world.celestial_objects);
         }
     }
 
     pub fn simulate(&mut self) {
         self.celestial_gravity();
-        self.mechanics.step(&mut self.geometry, &mut self.bodies, &mut self.colliders, &mut self.joints, &mut self.persistant_forces);
+        self.mechanics.step(&mut self.geometry, &mut self.world, &mut self.colliders, &mut self.joints, &mut self.persistant_forces);
     }
 }
 
@@ -123,7 +123,13 @@ impl World {
         let id = self.next_part;
         self.next_part += 1;
         let handle = MyHandle::Part(player, id);
-        self.free_parts.insert(id, body);
+        if let Some(player) = player {
+            if let Some(player) = self.player_parts.get_mut(&player) {
+                player.insert(id, body);
+            } else { panic!(); }
+        } else {
+            self.free_parts.insert(id, body);
+        };
         handle
     }
     pub fn get_rigid(&self, handle: MyHandle) -> Option<&RigidBody<MyUnits>> {
@@ -138,6 +144,15 @@ impl World {
             MyHandle::CelestialObject(id) => self.celestial_objects.get_mut(&id),
             MyHandle::Part(Some(player), id) => self.player_parts.get_mut(&player).map(|player| player.get_mut(&id)).flatten(),
             MyHandle::Part(None, id) => self.free_parts.get_mut(&id)
+        }
+    }
+    pub fn add_player(&mut self, id: u16) {
+        if self.player_parts.contains_key(&id) { panic!(); }
+        self.player_parts.insert(id, BTreeMap::new());
+    }
+    pub fn remove_player(&mut self, id: u16) {
+        if let Some(player) = self.player_parts.remove(&id) {
+            self.removal_events.extend(player.keys().map(|key| MyHandle::Part(Some(id), *key)));
         }
     }
 }

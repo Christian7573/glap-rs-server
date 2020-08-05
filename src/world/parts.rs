@@ -1,4 +1,4 @@
-use nphysics2d::object::{RigidBody, Body, RigidBodyDesc, Collider, ColliderDesc, BodyPartHandle};
+use nphysics2d::object::{RigidBody, Body, RigidBodyDesc, Collider, ColliderDesc, BodyPartHandle, BodyStatus};
 use nphysics2d::algebra::{Force2, ForceType};
 use nphysics2d::math::Isometry;
 use nalgebra::{Vector2, Point2};
@@ -21,7 +21,7 @@ pub struct Part {
     pub body: MyHandle,
 }
 impl Part {
-    fn new(kind: PartKind, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> Part {
+    pub fn new(kind: PartKind, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> Part {
         let body = kind.initialize(bodies, colliders, part_static);
         Part {
             kind, body,
@@ -40,7 +40,7 @@ impl PartKind {
     pub fn initialize(&self, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> MyHandle {
         match self {
             PartKind::Core | PartKind::Hub => {
-                let body = RigidBodyDesc::new().mass(1.0).build();
+                let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).mass(1.0).build();
                 let handle = bodies.add_part(body, None);
                 let translation = if let PartKind::Hub = self { Vector2::new(0.0, 0.5) } else { Vector2::zero() };
                 let collider = ColliderDesc::new(part_static.unit_cuboid.clone())

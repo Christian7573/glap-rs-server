@@ -37,13 +37,12 @@ impl Session {
         Session::AcceptingWebSocket(pinbox)
     }
 
-    pub fn spawn(&mut self, simulation: &crate::world::Simulation, core: super::world::parts::Part) {
+    pub fn spawn(&mut self, id: u16, simulation: &crate::world::Simulation, core: super::world::parts::Part) {
         if let Session::AwaitingHandshake(socket) = self {
-                let id = if let MyHandle::Part(Some(id), _) = core.body { id } else { panic!(); };
                 socket.queue_send(Message::Binary(ToClientMsg::HandshakeAccepted{id}.serialize()));
                 //Send over celestial object locations
                 for planet in simulation.planets.celestial_objects().iter() {
-                    let position = simulation.bodies.get_rigid(planet.body).unwrap().position().translation;
+                    let position = simulation.world.get_rigid(planet.body).unwrap().position().translation;
                     socket.queue_send(Message::Binary(ToClientMsg::AddCelestialObject {
                         name: planet.name.clone(), display_name: planet.name.clone(),
                         id: planet.id, radius: planet.radius, position: (position.x, position.y)
@@ -78,7 +77,7 @@ impl Stream for Session {
                     match result {
                         Some(Message::Binary(dat)) => {
                             match ToServerMsg::deserialize(dat.as_slice(), &mut 0) {
-                                ToServerMsg::Handshake{ client, session } => {
+                                Ok(ToServerMsg::Handshake{ client, session }) => {
                                     Poll::Ready(Some(SessionEvent::ReadyToSpawn))
                                 },
                                 _ => Poll::Ready(None)

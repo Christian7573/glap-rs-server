@@ -65,8 +65,9 @@ async fn main() {
             
             SessionEvent(id, ReadyToSpawn) => {
                 //Graduate session to being existant
-                
-                //event_source.sessions.get_mut(&id).unwrap().spawn(&simulation);
+                simulation.world.add_player(id);
+                let part = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+                event_source.sessions.get_mut(&id).unwrap().spawn(id, &simulation, part);
             },
 
             _ => todo!()

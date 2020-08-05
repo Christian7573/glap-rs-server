@@ -36,7 +36,7 @@ class OptionType:
     def typescript_serialize(self, name):
         return "if (%s === null) out.push(0); else {out.push(1); %s};" % (name, self.inner.typescript_serialize(name))
     def typescript_deserialize(self, name):
-        return "if (buf[index.v += 1] > 0) {%s} else {%s = null;}" % (self.inner.typescript_deserialize(name), name)
+        return "if (buf[index.v++] > 0) {%s} else {%s = null;}" % (self.inner.typescript_deserialize(name), name)
 
 TypeString = BasicType("String", "string", "string", "string")
 TypeFloat = BasicType("f32", "float", "number", "float")
@@ -129,7 +129,7 @@ for category in categories:
         for field in message.fields:
             typescript_out.write("\t\t%s\n" % field.kind.typescript_serialize("this." + field.name))
         typescript_out.write("\t\treturn new Uint8Array(out);\n\t}\n}\n")
-    typescript_out.write("function deserialize_%s(buf: Uint8Array, index: Box<number>) {\n\tswitch (index.v += 1) {\n" % category.name)
+    typescript_out.write("function deserialize_%s(buf: Uint8Array, index: Box<number>) {\n\tswitch (buf[index.v++]) {\n" % category.name)
     for i, message in enumerate(category.messages):
         typescript_out.write("\t\tcase %s: {\n\t\t\t%s\n" % (i, " ".join(map(lambda field: "let %s: %s;" % (field.name, field.kind.typescript_signature()), message.fields))))
         for field in message.fields:

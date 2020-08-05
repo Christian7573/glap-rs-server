@@ -13,8 +13,8 @@ function type_string_serialize(out: number[], string: string) {
 function type_string_deserialize(buf: Uint8Array, index: Box<number>): string {
     let out = "";
     let i = index.v + 1;
-    index.v += buf[index.v += 1];
-    while (i < index.v) out += String.fromCharCode(buf[i += 1]);
+    index.v += buf[index.v++];
+    while (i < index.v) out += String.fromCharCode(buf[i++]);
     return out; 
 }
 
@@ -24,7 +24,7 @@ function type_float_serialize(out: number[], float: number) {
     out.push(view[0], view[1], view[2], view[3]);
 }
 function type_float_deserialize(buf: Uint8Array, index: Box<number>): number {
-    const view = new Float32Array(buf.buffer, index.v, 1);
+    const view = new Float32Array(buf.buffer.slice(index.v, index.v + 4));
     return view[0];
 }
 
@@ -34,7 +34,7 @@ function type_ushort_serialize(out: number[], ushort: number) {
     out.push(view[0], view[1]);
 }
 function type_ushort_deserialize(buf: Uint8Array, index: Box<number>): number {
-    const view = new Uint16Array(buf.buffer, index.v, 1);
+    const view = new Uint16Array(buf.buffer.slice(index.v, index.v + 2));
     return view[0];
 }
 
