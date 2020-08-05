@@ -24,7 +24,7 @@ class OptionType:
         self._rust_signature = "Option<%s>" % inner.rust_signature()
         self._rust_serialize = "if let Some(tmp) = %%s {out.push(1); %s} else {out.push(0);}" % inner.rust_serialize("tmp")
         self._rust_deserialize = "%%s = {if buf[*index] > 0 {*index += 1; let tmp; %s Some(tmp)} else {*index += 1; None}};" % inner.rust_deserialize("tmp")
-        self._typescript_signature = "%s?" % inner.typescript_signature()
+        self._typescript_signature = "%s|null" % inner.typescript_signature()
     def rust_signature(self):
         return self._rust_signature
     def rust_serialize(self, name):
@@ -36,11 +36,11 @@ class OptionType:
     def typescript_serialize(self, name):
         return "if (%s === null) out.push(0); else {out.push(1); %s};" % (name, self.inner.typescript_serialize(name))
     def typescript_deserialize(self, name):
-        return "if (out[index] > 0) {index += 1; %s} else {index += 1; %s = null;}" % (self.inner.typescript_deserialize(name), name)
+        return "if (buf[index.v += 1] > 0) {%s} else {%s = null;}" % (self.inner.typescript_deserialize(name), name)
 
 TypeString = BasicType("String", "string", "string", "string")
 TypeFloat = BasicType("f32", "float", "number", "float")
-TypeUShort = BasicType("u16", "u16", "number", "short")
+TypeUShort = BasicType("u16", "u16", "number", "ushort")
 
 class MessageCategory:
     def __init__(self, name):
@@ -108,3 +108,33 @@ for category in categories:
         rust_out.write("\t\t\t\t%s::%s { %s}\n\t\t\t},\n" % (category.name, message.name, ", ".join(map(lambda field: field.name, message.fields))))
     rust_out.write("\t\t}\n\t}\n}\n\n")
 rust_out.close()
+
+typescript_header = open("codec_header.ts", "r")
+typescript_out = open("codec.ts", "w")
+typescript_out.write(typescript_header.read())
+typescript_out.write("\n\n")
+typescript_header.close()
+for category in categories:
+    for i, message in enumerate(category.messages):
+        typescript_out.write("class %s_%s {\n\tstatic readonly id = %s;\n" % (category.name, message.name, i))
+        typescript_out.write("\t%s\n\tconstructor(%s) {\n\t\t%s\n\t}\n" % (
+            " ".join(map(lambda field: "%s: %s;" % (field.name, field.kind.typescript_signature()), message.fields)),
+            " ".join(map(lambda field: "%s: %s," % (field.name, field.kind.typescript_signature()), message.fields)),
+            " ".join(map(lambda field: "this.%s = %s;" % (field.name, field.name), message.fields))
+        ))
+        typescript_out.write("\tserialize(): Uint8Array\n\t\t{let out = [%s];\n" % i)
+        for field in message.fields:
+            typescript_out.write("\t\t%s\n" % field.kind.typescript_serialize("this." + field.name))
+        typescript_out.write("\t\treturn new Uint8Array(out);\n\t}\n}\n")
+    typescript_out.write("function deserialize_%s(buf: Uint8Array, index: Box<number>) {\n\tswitch (index.v += 1) {\n" % category.name)
+    for i, message in enumerate(category.messages):
+        typescript_out.write("\t\tcase %s: {\n\t\t\t%s\n" % (i, " ".join(map(lambda field: "let %s: %s;" % (field.name, field.kind.typescript_signature()), message.fields))))
+        for field in message.fields:
+            typescript_out.write("\t\t\t%s\n" % field.kind.typescript_deserialize(field.name))
+        typescript_out.write("\t\t\treturn new %s_%s(%s);\n\t\t}; break;" % (category.name, message.name, ", ".join(map(lambda field: field.name, message.fields))))
+    typescript_out.write("\t\tdefault: throw new Error();\n\t}\n}\nexport const %s = {\n\tdeserialize: deserialize_%s,\n\t%s\n};\n\n" % (
+        category.name, category.name,
+        ", ".join(map(lambda message: "%s: %s_%s" % (message.name, category.name, message.name), category.messages))
+    ))
+typescript_out.close()
+    
