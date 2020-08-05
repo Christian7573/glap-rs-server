@@ -1,14 +1,34 @@
 use tinyvec::ArrayVec;
-use nphysics2d::object::{RigidBody, Body};
+use nphysics2d::object::{RigidBody, Body, RigidBodyDesc, Collider, ColliderDesc, BodyPartHandle};
 use nphysics2d::algebra::{Force2, ForceType};
 use nphysics2d::math::Isometry;
 use nalgebra::{Vector2, Point2};
+use ncollide2d::shape::{Cuboid, ShapeHandle};
+use super::{MyUnits, MyHandle};
+use num_traits::identities::{Zero, One};
 
-pub struct Box<Part> {
-    kind: PartKind,
-    attachments: ArrayVec<[Option<Part>; 5]>,
-    thrust_mode: CompactThrustMode,
+pub struct PartStatic {
+    unit_cuboid: ShapeHandle<MyUnits>,
+}
+impl Default for PartStatic {
+    fn default() -> PartStatic { PartStatic {
+        unit_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.5)))
+    } }
+}
 
+pub struct Part {
+    pub kind: PartKind,
+    pub attachments: Vec<Part>,
+    pub body: MyHandle,
+}
+impl Part {
+    fn new(kind: PartKind, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> Part {
+        let body = kind.initialize(bodies, colliders, part_static);
+        Part {
+            kind, body,
+            attachments: Vec::with_capacity(5),
+        }
+    }
 }
 
 pub enum PartKind {
@@ -18,6 +38,21 @@ pub enum PartKind {
     Hub
 }
 impl PartKind {
+    pub fn initialize(&self, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> MyHandle {
+        match self {
+            PartKind::Core | PartKind::Hub => {
+                let body = RigidBodyDesc::new().mass(1.0).build();
+                let handle = bodies.add_part(body, None);
+                let translation = if let PartKind::Hub = self { Vector2::new(0.0, 0.5) } else { Vector2::zero() };
+                let collider = ColliderDesc::new(part_static.unit_cuboid.clone())
+                    .translation(translation)
+                    .build(BodyPartHandle (handle, 0));
+                colliders.insert(collider);
+                handle
+            },
+            PartKind::Cargo | PartKind::LandingThruster => todo!()
+        }
+    }
     // pub fn thrust(&self, body: &mut RigidBody<super::MyUnits>) {
     //     match self {
     //         PartKind::Core => (), //This one is fired elsewhere

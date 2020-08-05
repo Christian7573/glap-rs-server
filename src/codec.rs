@@ -8,6 +8,67 @@ use std::cmp::Ordering;
 extern crate flatbuffers;
 use self::flatbuffers::EndianScalar;
 
+// struct Vector2, aligned to 4
+#[repr(C, align(4))]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Vector2 {
+  x_: f32,
+  y_: f32,
+} // pub struct Vector2
+impl flatbuffers::SafeSliceAccess for Vector2 {}
+impl<'a> flatbuffers::Follow<'a> for Vector2 {
+  type Inner = &'a Vector2;
+  #[inline]
+  fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    <&'a Vector2>::follow(buf, loc)
+  }
+}
+impl<'a> flatbuffers::Follow<'a> for &'a Vector2 {
+  type Inner = &'a Vector2;
+  #[inline]
+  fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    flatbuffers::follow_cast_ref::<Vector2>(buf, loc)
+  }
+}
+impl<'b> flatbuffers::Push for Vector2 {
+    type Output = Vector2;
+    #[inline]
+    fn push(&self, dst: &mut [u8], _rest: &[u8]) {
+        let src = unsafe {
+            ::std::slice::from_raw_parts(self as *const Vector2 as *const u8, Self::size())
+        };
+        dst.copy_from_slice(src);
+    }
+}
+impl<'b> flatbuffers::Push for &'b Vector2 {
+    type Output = Vector2;
+
+    #[inline]
+    fn push(&self, dst: &mut [u8], _rest: &[u8]) {
+        let src = unsafe {
+            ::std::slice::from_raw_parts(*self as *const Vector2 as *const u8, Self::size())
+        };
+        dst.copy_from_slice(src);
+    }
+}
+
+
+impl Vector2 {
+  pub fn new(_x: f32, _y: f32) -> Self {
+    Vector2 {
+      x_: _x.to_little_endian(),
+      y_: _y.to_little_endian(),
+
+    }
+  }
+  pub fn x(&self) -> f32 {
+    self.x_.from_little_endian()
+  }
+  pub fn y(&self) -> f32 {
+    self.y_.from_little_endian()
+  }
+}
+
 #[allow(unused_imports, dead_code)]
 pub mod to_server {
 
@@ -277,11 +338,12 @@ pub mod to_client {
 pub enum ToClientMsg {
   NONE = 0,
   HandshakeAccepted = 1,
+  AddCelestialObject = 2,
 
 }
 
 pub const ENUM_MIN_TO_CLIENT_MSG: u8 = 0;
-pub const ENUM_MAX_TO_CLIENT_MSG: u8 = 1;
+pub const ENUM_MAX_TO_CLIENT_MSG: u8 = 2;
 
 impl<'a> flatbuffers::Follow<'a> for ToClientMsg {
   type Inner = Self;
@@ -315,15 +377,17 @@ impl flatbuffers::Push for ToClientMsg {
 }
 
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_TO_CLIENT_MSG: [ToClientMsg; 2] = [
+pub const ENUM_VALUES_TO_CLIENT_MSG: [ToClientMsg; 3] = [
   ToClientMsg::NONE,
-  ToClientMsg::HandshakeAccepted
+  ToClientMsg::HandshakeAccepted,
+  ToClientMsg::AddCelestialObject
 ];
 
 #[allow(non_camel_case_types)]
-pub const ENUM_NAMES_TO_CLIENT_MSG: [&str; 2] = [
+pub const ENUM_NAMES_TO_CLIENT_MSG: [&str; 3] = [
     "NONE",
-    "HandshakeAccepted"
+    "HandshakeAccepted",
+    "AddCelestialObject"
 ];
 
 pub fn enum_name_to_client_msg(e: ToClientMsg) -> &'static str {
@@ -393,6 +457,128 @@ impl<'a: 'b, 'b> HandshakeAcceptedBuilder<'a, 'b> {
   }
 }
 
+pub enum AddCelestialObjectOffset {}
+#[derive(Copy, Clone, Debug, PartialEq)]
+
+pub struct AddCelestialObject<'a> {
+  pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for AddCelestialObject<'a> {
+    type Inner = AddCelestialObject<'a>;
+    #[inline]
+    fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self { _tab: flatbuffers::Table { buf, loc } }
+    }
+}
+
+impl<'a> AddCelestialObject<'a> {
+    #[inline]
+    pub fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+        AddCelestialObject {
+            _tab: table,
+        }
+    }
+    #[allow(unused_mut)]
+    pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr>(
+        _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr>,
+        args: &'args AddCelestialObjectArgs<'args>) -> flatbuffers::WIPOffset<AddCelestialObject<'bldr>> {
+      let mut builder = AddCelestialObjectBuilder::new(_fbb);
+      if let Some(x) = args.position { builder.add_position(x); }
+      builder.add_radius(args.radius);
+      if let Some(x) = args.display_name { builder.add_display_name(x); }
+      if let Some(x) = args.name { builder.add_name(x); }
+      builder.add_id(args.id);
+      builder.finish()
+    }
+
+    pub const VT_NAME: flatbuffers::VOffsetT = 4;
+    pub const VT_DISPLAY_NAME: flatbuffers::VOffsetT = 6;
+    pub const VT_RADIUS: flatbuffers::VOffsetT = 8;
+    pub const VT_ID: flatbuffers::VOffsetT = 10;
+    pub const VT_POSITION: flatbuffers::VOffsetT = 12;
+
+  #[inline]
+  pub fn name(&self) -> Option<&'a str> {
+    self._tab.get::<flatbuffers::ForwardsUOffset<&str>>(AddCelestialObject::VT_NAME, None)
+  }
+  #[inline]
+  pub fn display_name(&self) -> Option<&'a str> {
+    self._tab.get::<flatbuffers::ForwardsUOffset<&str>>(AddCelestialObject::VT_DISPLAY_NAME, None)
+  }
+  #[inline]
+  pub fn radius(&self) -> f32 {
+    self._tab.get::<f32>(AddCelestialObject::VT_RADIUS, Some(0.0)).unwrap()
+  }
+  #[inline]
+  pub fn id(&self) -> u16 {
+    self._tab.get::<u16>(AddCelestialObject::VT_ID, Some(0)).unwrap()
+  }
+  #[inline]
+  pub fn position(&self) -> Option<&'a super::Vector2> {
+    self._tab.get::<super::Vector2>(AddCelestialObject::VT_POSITION, None)
+  }
+}
+
+pub struct AddCelestialObjectArgs<'a> {
+    pub name: Option<flatbuffers::WIPOffset<&'a str>>,
+    pub display_name: Option<flatbuffers::WIPOffset<&'a str>>,
+    pub radius: f32,
+    pub id: u16,
+    pub position: Option<&'a super::Vector2>,
+}
+impl<'a> Default for AddCelestialObjectArgs<'a> {
+    #[inline]
+    fn default() -> Self {
+        AddCelestialObjectArgs {
+            name: None,
+            display_name: None,
+            radius: 0.0,
+            id: 0,
+            position: None,
+        }
+    }
+}
+pub struct AddCelestialObjectBuilder<'a: 'b, 'b> {
+  fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a>,
+  start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b> AddCelestialObjectBuilder<'a, 'b> {
+  #[inline]
+  pub fn add_name(&mut self, name: flatbuffers::WIPOffset<&'b  str>) {
+    self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(AddCelestialObject::VT_NAME, name);
+  }
+  #[inline]
+  pub fn add_display_name(&mut self, display_name: flatbuffers::WIPOffset<&'b  str>) {
+    self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(AddCelestialObject::VT_DISPLAY_NAME, display_name);
+  }
+  #[inline]
+  pub fn add_radius(&mut self, radius: f32) {
+    self.fbb_.push_slot::<f32>(AddCelestialObject::VT_RADIUS, radius, 0.0);
+  }
+  #[inline]
+  pub fn add_id(&mut self, id: u16) {
+    self.fbb_.push_slot::<u16>(AddCelestialObject::VT_ID, id, 0);
+  }
+  #[inline]
+  pub fn add_position(&mut self, position: &super::Vector2) {
+    self.fbb_.push_slot_always::<&super::Vector2>(AddCelestialObject::VT_POSITION, position);
+  }
+  #[inline]
+  pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a>) -> AddCelestialObjectBuilder<'a, 'b> {
+    let start = _fbb.start_table();
+    AddCelestialObjectBuilder {
+      fbb_: _fbb,
+      start_: start,
+    }
+  }
+  #[inline]
+  pub fn finish(self) -> flatbuffers::WIPOffset<AddCelestialObject<'a>> {
+    let o = self.fbb_.end_table(self.start_);
+    flatbuffers::WIPOffset::new(o.value())
+  }
+}
+
 pub enum MsgOffset {}
 #[derive(Copy, Clone, Debug, PartialEq)]
 
@@ -441,6 +627,16 @@ impl<'a> Msg<'a> {
   pub fn msg_as_handshake_accepted(&self) -> Option<HandshakeAccepted<'a>> {
     if self.msg_type() == ToClientMsg::HandshakeAccepted {
       self.msg().map(HandshakeAccepted::init_from_table)
+    } else {
+      None
+    }
+  }
+
+  #[inline]
+  #[allow(non_snake_case)]
+  pub fn msg_as_add_celestial_object(&self) -> Option<AddCelestialObject<'a>> {
+    if self.msg_type() == ToClientMsg::AddCelestialObject {
+      self.msg().map(AddCelestialObject::init_from_table)
     } else {
       None
     }

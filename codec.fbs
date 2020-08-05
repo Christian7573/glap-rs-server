@@ -1,3 +1,5 @@
+struct Vector2 { x: float; y: float; }
+
 namespace ToServer;
 
 table Handshake { client: string; session: string; }
@@ -10,7 +12,15 @@ table Msg { msg: ToServerMsg; }
 namespace ToClient;
 
 table HandshakeAccepted {}
+table AddCelestialObject {
+    name: string;
+    display_name: string;
+    radius: float;
+    id: ushort;
+    position: Vector2;
+}
 union ToClientMsg {
     HandshakeAccepted: HandshakeAccepted,
+    AddCelestialObject: AddCelestialObject,
 }
 table Msg { msg: ToClientMsg; }

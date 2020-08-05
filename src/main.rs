@@ -23,9 +23,9 @@ async fn main() {
     let mut simulation = world::Simulation::new(TIMESTEP);
 
     struct EventSource {
-        inbound: async_std::net::TcpListener,
-        sessions: BTreeMap<u16, Session>,
-        ticker: async_std::stream::Interval
+        pub inbound: async_std::net::TcpListener,
+        pub sessions: BTreeMap<u16, Session>,
+        pub ticker: async_std::stream::Interval
     }
     enum Event {
         NewSession(TcpStream),
@@ -60,8 +60,15 @@ async fn main() {
                 next_session += 1;
                 event_source.sessions.insert(id, Session::new(socket));
             },
-            Simulate => {},
+            Simulate => { simulation.simulate(); },
             SessionDisconnect(id) => { event_source.sessions.remove(&id); },
+            
+            SessionEvent(id, ReadyToSpawn) => {
+                //Graduate session to being existant
+                
+                event_source.sessions.get_mut(&id).unwrap().spawn(&simulation);
+            },
+
             _ => todo!()
         }
     }

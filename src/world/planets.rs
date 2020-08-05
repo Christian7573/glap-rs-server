@@ -36,11 +36,15 @@ impl Planets {
             earth
         }
     }
+
+    pub fn celestial_objects<'a>(&'a self) -> [&'a CelestialObject; 1] {
+        [&self.earth]
+    }
 }
 
 pub struct CelestialObject {
-    name: String,
-    display_name: String,
-    radius: f32,
-    body: MyHandle
+    pub name: String,
+    pub display_name: String,
+    pub radius: f32,
+    pub body: MyHandle
 }

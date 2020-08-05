@@ -17,13 +17,14 @@ type MyJointSet = nphysics2d::joint::DefaultJointConstraintSet<MyUnits, MyHandle
 type MyForceSet = nphysics2d::force_generator::DefaultForceGeneratorSet<MyUnits, MyHandle>;
 
 pub struct Simulation {
-    bodies: World,
+    pub bodies: World,
     mechanics: MyMechanicalWorld,
     geometry: MyGeometricalWorld,
     colliders: MyColliderSet,
     joints: MyJointSet,
     persistant_forces: MyForceSet,
-    planets: planets::Planets
+    pub planets: planets::Planets,
+    part_static: parts::PartStatic
 }
 impl Simulation {
     pub fn new(step_time: f32) -> Simulation {
@@ -37,6 +38,7 @@ impl Simulation {
             joints: MyJointSet::new(),
             persistant_forces: MyForceSet::new(),
             planets,
+            part_static: Default::default()
         };
         simulation.mechanics.set_timestep(step_time);
 
@@ -123,6 +125,20 @@ impl World {
         let handle = MyHandle::Part(player, id);
         self.free_parts.insert(id, body);
         handle
+    }
+    pub fn get_rigid(&self, handle: MyHandle) -> Option<&RigidBody<MyUnits>> {
+        match handle {
+            MyHandle::CelestialObject(id) => self.celestial_objects.get(&id),
+            MyHandle::Part(Some(player), id) => self.player_parts.get(&player).map(|player| player.get(&id)).flatten(),
+            MyHandle::Part(None, id) => self.free_parts.get(&id)
+        }
+    }
+    pub fn get_rigid_mut(&mut self, handle: MyHandle) -> Option<&mut RigidBody<MyUnits>> {
+        match handle {
+            MyHandle::CelestialObject(id) => self.celestial_objects.get_mut(&id),
+            MyHandle::Part(Some(player), id) => self.player_parts.get_mut(&player).map(|player| player.get_mut(&id)).flatten(),
+            MyHandle::Part(None, id) => self.free_parts.get_mut(&id)
+        }
     }
 }
 impl Default for World {
