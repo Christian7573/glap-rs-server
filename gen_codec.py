@@ -2,7 +2,7 @@ class BasicType:
     def __init__(self, rust_name, rust_method, typescript_name, typescript_method):
         self._rust_signature = rust_name
         self._rust_serialize = "type_%s_serialize(&mut out, %%s);" % rust_method
-        self._rust_deserialize = "%%s = type_%s_deserialize(&buf, index);" % rust_method
+        self._rust_deserialize = "%%s = type_%s_deserialize(&buf, index)?;" % rust_method
         self._typescript_signature = typescript_name
         self._typescript_serialize = "type_%s_serialize(out, %%s);" % typescript_method
         self._typescript_deserialize = "%%s = type_%s_deserialize(buf, index);" % typescript_method
@@ -103,13 +103,13 @@ for category in categories:
         for field in message.fields:
             rust_out.write("\t\t\t\t%s\n" % field.kind.rust_serialize(field.name))
         rust_out.write("\t\t\t},\n")
-    rust_out.write("\t\t};\n\t\tout\n\t}\n\tpub fn deserialize(buf: &[u8], index: &mut usize) -> Self {\n\t\tlet i = *index;\n\t\t*index += 1;\n\t\tmatch buf[i] {\n")
+    rust_out.write("\t\t};\n\t\tout\n\t}\n\tpub fn deserialize(buf: &[u8], index: &mut usize) -> Result<Self,()> {\n\t\tlet i = *index;\n\t\t*index += 1;\n\t\tmatch buf[i] {\n")
     for i, message in enumerate(category.messages):
         rust_out.write("\t\t\t%s => {\n\t\t\t\t%s\n" % (str(i), " ".join(map(lambda field: ("let %s;" % field.name), message.fields))))
         for field in message.fields:
             rust_out.write("\t\t\t\t%s\n" % field.kind.rust_deserialize(field.name))
-        rust_out.write("\t\t\t\t%s::%s { %s}\n\t\t\t},\n" % (category.name, message.name, ", ".join(map(lambda field: field.name, message.fields))))
-    rust_out.write("\t\t}\n\t}\n}\n\n")
+        rust_out.write("\t\t\t\tOk(%s::%s { %s})\n\t\t\t},\n" % (category.name, message.name, ", ".join(map(lambda field: field.name, message.fields))))
+    rust_out.write("\t\t\t_ => Err(())\n\t\t}\n\t}\n}\n\n")
 rust_out.close()
 
 typescript_header = open("codec_header.ts", "r")
