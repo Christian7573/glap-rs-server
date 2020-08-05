@@ -43,7 +43,11 @@ impl Session {
                 socket.queue_send(Message::Binary(ToClientMsg::HandshakeAccepted{id}.serialize()));
                 //Send over celestial object locations
                 for planet in simulation.planets.celestial_objects().iter() {
-                    //socket.queue_send(Message::Binary(ToClientMsg::))
+                    let position = simulation.bodies.get_rigid(planet.body).unwrap().position().translation;
+                    socket.queue_send(Message::Binary(ToClientMsg::AddCelestialObject {
+                        name: planet.name.clone(), display_name: planet.name.clone(),
+                        id: planet.id, radius: planet.radius, position: (position.x, position.y)
+                    }.serialize()));
                 }
         } else { panic!() }
     }
@@ -90,9 +94,9 @@ impl Stream for Session {
                 if let Poll::Ready(result) = socket.poll_next_unpin(ctx) {
                     match result {
                         Some(Message::Binary(dat)) => {
-                            
+                            todo!()
                         },
-                        Some(Message::Ping(_)) => (),
+                        Some(Message::Ping(_)) => Poll::Pending,
                         _ => Poll::Ready(None)
                     }
                 } else { Poll::Pending }

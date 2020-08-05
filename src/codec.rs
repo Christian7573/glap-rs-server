@@ -61,8 +61,8 @@ impl ToServerMsg {
 		match buf[i] {
 			0 => {
 				let client; let session;
-				client = type_string_deserialize(&buf, &mut index);
-				session = {if buf[*index] > 0 {*index += 1; let tmp; tmp = type_string_deserialize(&buf, &mut index); Some(tmp)} else {*index += 1; None}};
+				client = type_string_deserialize(&buf, index);
+				session = {if buf[*index] > 0 {*index += 1; let tmp; tmp = type_string_deserialize(&buf, index); Some(tmp)} else {*index += 1; None}};
 				ToServerMsg::Handshake { client, session}
 			},
 		}
@@ -98,16 +98,16 @@ impl ToClientMsg {
 		match buf[i] {
 			0 => {
 				let id;
-				id = type_u16_deserialize(&buf, &mut index);
+				id = type_u16_deserialize(&buf, index);
 				ToClientMsg::HandshakeAccepted { id}
 			},
 			1 => {
 				let name; let display_name; let radius; let id; let position;
-				name = type_string_deserialize(&buf, &mut index);
-				display_name = type_string_deserialize(&buf, &mut index);
-				radius = type_float_deserialize(&buf, &mut index);
-				id = type_u16_deserialize(&buf, &mut index);
-				position = type_float_pair_deserialize(&buf, &mut index);
+				name = type_string_deserialize(&buf, index);
+				display_name = type_string_deserialize(&buf, index);
+				radius = type_float_deserialize(&buf, index);
+				id = type_u16_deserialize(&buf, index);
+				position = type_float_pair_deserialize(&buf, index);
 				ToClientMsg::AddCelestialObject { name, display_name, radius, id, position}
 			},
 		}

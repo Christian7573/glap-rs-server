@@ -1,4 +1,3 @@
-use tinyvec::ArrayVec;
 use nphysics2d::object::{RigidBody, Body, RigidBodyDesc, Collider, ColliderDesc, BodyPartHandle};
 use nphysics2d::algebra::{Force2, ForceType};
 use nphysics2d::math::Isometry;

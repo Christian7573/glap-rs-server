@@ -23,12 +23,15 @@ impl Planets {
                 //.margin()
                 .build(BodyPartHandle(body_handle, 0));
             colliders.insert(collider);
+
+            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
             
             CelestialObject {
                 name: String::from("earth"),
                 display_name: String::from("Earth"),
                 radius: RADIUS,
-                body: body_handle
+                body: body_handle,
+                id
             }
         };
 
@@ -46,5 +49,6 @@ pub struct CelestialObject {
     pub name: String,
     pub display_name: String,
     pub radius: f32,
-    pub body: MyHandle
+    pub body: MyHandle,
+    pub id: u16
 }

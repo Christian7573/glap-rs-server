@@ -2,7 +2,7 @@ class BasicType:
     def __init__(self, rust_name, rust_method, typescript_name, typescript_method):
         self._rust_signature = rust_name
         self._rust_serialize = "type_%s_serialize(&mut out, %%s);" % rust_method
-        self._rust_deserialize = "%%s = type_%s_deserialize(&buf, &mut index);" % rust_method
+        self._rust_deserialize = "%%s = type_%s_deserialize(&buf, index);" % rust_method
         self._typescript_signature = typescript_name
         self._typescript_serialize = "type_%s_serialize(out, %%s);" % typescript_method
         self._typescript_deserialize = "%%s = type_%s_deserialize(buf, index);" % typescript_method
