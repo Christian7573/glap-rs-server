@@ -66,7 +66,7 @@ async fn main() {
             SessionEvent(id, ReadyToSpawn) => {
                 //Graduate session to being existant
                 
-                event_source.sessions.get_mut(&id).unwrap().spawn(&simulation);
+                //event_source.sessions.get_mut(&id).unwrap().spawn(&simulation);
             },
 
             _ => todo!()

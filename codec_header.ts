@@ -37,3 +37,11 @@ function type_ushort_deserialize(buf: Uint8Array, index: Box<number>): number {
     const view = new Uint16Array(buf.buffer, index.v, 1);
     return view[0];
 }
+
+function type_float_pair_serialize(out: number[], pair: [number, number]) {
+    type_float_serialize(out, pair[0])
+    type_float_serialize(out, pair[1]);
+}
+function type_float_pair_deserialize(buf: Uint8Array, index: Box<number>): [number, number] {
+    return [type_float_deserialize(buf, index), type_float_deserialize(buf, index)];
+}

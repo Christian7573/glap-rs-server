@@ -6,6 +6,8 @@ use async_tungstenite::WebSocketStream;
 use async_tungstenite::tungstenite::{Error as WsError, Message};
 use futures::{Sink, SinkExt, Stream, StreamExt};
 use nphysics2d::object::{Body, BodySet, RigidBody};
+use super::world::MyHandle;
+use super::world::parts::{Part, PartKind};
 
 use crate::codec::*;
 
@@ -35,27 +37,13 @@ impl Session {
         Session::AcceptingWebSocket(pinbox)
     }
 
-    pub fn spawn(&mut self, simulation: &crate::world::Simulation) {
+    pub fn spawn(&mut self, simulation: &crate::world::Simulation, core: super::world::parts::Part) {
         if let Session::AwaitingHandshake(socket) = self {
+                let id = if let MyHandle::Part(Some(id), _) = core.body { id } else { panic!(); };
+                socket.queue_send(Message::Binary(ToClientMsg::HandshakeAccepted{id}.serialize()));
                 //Send over celestial object locations
                 for planet in simulation.planets.celestial_objects().iter() {
-                    let mut builder = flatbuffers::FlatBufferBuilder::new();
-                    let name = builder.create_string(&planet.name);
-                    let display_name = builder.create_string(&planet.name);
-                    let id = match planet.body {
-                        crate::world::MyHandle::CelestialObject(id) => id,
-                        _ => panic!()
-                    };
-                    let translation = simulation.bodies.get_rigid(planet.body).unwrap().position().translation;
-                    let add_obj = to_client::AddCelestialObject::create(&mut builder, &to_client::AddCelestialObjectArgs {
-                        name: Some(name), display_name: Some(display_name), radius: planet.radius, id,
-                        position: Some(&Vector2::new(translation.x, translation.y))
-                    });
-                    let msg = to_client::Msg::create(&mut builder, &to_client::MsgArgs {
-                        msg: Some(add_obj.as_union_value()), msg_type: to_client::ToClientMsg::AddCelestialObject
-                    });
-                    builder.finish(msg, None);
-                    socket.queue_send(Message::Binary(builder.finished_data().to_vec()));
+                    //socket.queue_send(Message::Binary(ToClientMsg::))
                 }
         } else { panic!() }
     }
@@ -85,14 +73,8 @@ impl Stream for Session {
                 if let Poll::Ready(result) = stream.poll_next_unpin(ctx) {
                     match result {
                         Some(Message::Binary(dat)) => {
-                            let buf = flatbuffers::get_root::<to_server::Msg>(&dat[..]);
-                            match buf.msg_type() {
-                                to_server::ToServerMsg::Handshake => {
-                                    let mut builder = flatbuffers::FlatBufferBuilder::new();
-                                    let handshake_accepted = to_client::HandshakeAccepted::create(&mut builder, &to_client::HandshakeAcceptedArgs {});
-                                    let msg = to_client::Msg::create(&mut builder, &to_client::MsgArgs { msg: Some(handshake_accepted.as_union_value()), msg_type: to_client::ToClientMsg::HandshakeAccepted });
-                                    builder.finish(msg, None);
-                                    stream.queue_send(Message::Binary(builder.finished_data().to_vec()));
+                            match ToServerMsg::deserialize(dat.as_slice(), &mut 0) {
+                                ToServerMsg::Handshake{ client, session } => {
                                     Poll::Ready(Some(SessionEvent::ReadyToSpawn))
                                 },
                                 _ => Poll::Ready(None)

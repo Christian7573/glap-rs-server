@@ -31,3 +31,11 @@ fn type_u16_serialize(out: &mut Vec<u8>, float: &u16) {
 fn type_u16_deserialize(buf: &[u8], index: &mut usize) -> u16 {
     buf.read_with(index, byte::BE).unwrap()
 }
+
+fn type_float_pair_serialize(out: &mut Vec<u8>, pair: &(f32, f32)) {
+    type_float_serialize(out, &pair.0);
+    type_float_serialize(out, &pair.1);
+}
+fn type_float_pair_deserialize(buf: &[u8], index: &mut usize) -> (f32, f32) {
+    (type_float_deserialize(buf, index), type_float_deserialize(buf, index))
+}

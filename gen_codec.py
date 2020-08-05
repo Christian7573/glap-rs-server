@@ -41,6 +41,7 @@ class OptionType:
 TypeString = BasicType("String", "string", "string", "string")
 TypeFloat = BasicType("f32", "float", "number", "float")
 TypeUShort = BasicType("u16", "u16", "number", "ushort")
+TypeFloatPair = BasicType("(f32,f32)", "float_pair", "[number, number]", "float_pair")
 
 class MessageCategory:
     def __init__(self, name):
@@ -78,6 +79,8 @@ AddCelestialObject.fields.append(Field("name", TypeString))
 AddCelestialObject.fields.append(Field("display_name", TypeString))
 AddCelestialObject.fields.append(Field("radius", TypeFloat))
 AddCelestialObject.fields.append(Field("id", TypeUShort))
+AddCelestialObject.fields.append(Field("position", TypeFloatPair))
+ToClientMsg.messages.append(AddCelestialObject)
 
 rust_header = open("codec_header.rs", "r")
 rust_out = open("codec.rs", "w")

@@ -32,6 +32,14 @@ fn type_u16_deserialize(buf: &[u8], index: &mut usize) -> u16 {
     buf.read_with(index, byte::BE).unwrap()
 }
 
+fn type_float_pair_serialize(out: &mut Vec<u8>, pair: &(f32, f32)) {
+    type_float_serialize(out, &pair.0);
+    type_float_serialize(out, &pair.1);
+}
+fn type_float_pair_deserialize(buf: &[u8], index: &mut usize) -> (f32, f32) {
+    (type_float_deserialize(buf, index), type_float_deserialize(buf, index))
+}
+
 pub enum ToServerMsg {
 	Handshake { client: String, session: Option<String>, },
 }
@@ -63,6 +71,7 @@ impl ToServerMsg {
 
 pub enum ToClientMsg {
 	HandshakeAccepted { id: u16, },
+	AddCelestialObject { name: String, display_name: String, radius: f32, id: u16, position: (f32,f32), },
 }
 impl ToClientMsg {
 	pub fn serialize(&self) -> Vec<u8> {
@@ -71,6 +80,14 @@ impl ToClientMsg {
 			Self::HandshakeAccepted { id} => {
 				out.push(0);
 				type_u16_serialize(&mut out, id);
+			},
+			Self::AddCelestialObject { name, display_name, radius, id, position} => {
+				out.push(1);
+				type_string_serialize(&mut out, name);
+				type_string_serialize(&mut out, display_name);
+				type_float_serialize(&mut out, radius);
+				type_u16_serialize(&mut out, id);
+				type_float_pair_serialize(&mut out, position);
 			},
 		};
 		out
@@ -83,6 +100,15 @@ impl ToClientMsg {
 				let id;
 				id = type_u16_deserialize(&buf, &mut index);
 				ToClientMsg::HandshakeAccepted { id}
+			},
+			1 => {
+				let name; let display_name; let radius; let id; let position;
+				name = type_string_deserialize(&buf, &mut index);
+				display_name = type_string_deserialize(&buf, &mut index);
+				radius = type_float_deserialize(&buf, &mut index);
+				id = type_u16_deserialize(&buf, &mut index);
+				position = type_float_pair_deserialize(&buf, &mut index);
+				ToClientMsg::AddCelestialObject { name, display_name, radius, id, position}
 			},
 		}
 	}
