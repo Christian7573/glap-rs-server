@@ -27,11 +27,8 @@ fn type_float_deserialize(buf: &[u8], index: &mut usize) -> Result<f32, ()> {
 
 fn type_u16_serialize(out: &mut Vec<u8>, ushort: &u16) {
     let mut index = out.len();
-    println!("{}", *ushort);
-    println!("{}", index);
     out.push(0); out.push(0);
     out.write_with::<u16>(&mut index, *ushort, byte::BE);
-    println!("{}", index);
 }
 fn type_u16_deserialize(buf: &[u8], index: &mut usize) -> Result<u16, ()> {
     buf.read_with(index, byte::BE).or(Err(()))

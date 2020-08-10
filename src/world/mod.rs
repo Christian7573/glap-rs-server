@@ -57,9 +57,9 @@ impl Simulation {
                                      / (distance.0.pow(2f32) + distance.1.pow(2f32))
                                      * GRAVITATION_CONSTANT;
                 if distance.0 > distance.1 {
-                    part.apply_force(0, &Force2::linear(Vector2::new(magnitude, distance.1 / distance.0 * magnitude)), ForceType::Force, true);
+                    part.apply_force(0, &Force2::linear(Vector2::new(magnitude, distance.1 / distance.0 * magnitude)), ForceType::Force, false);
                 } else {
-                    part.apply_force(0, &Force2::linear(Vector2::new(distance.0 / distance.1 * magnitude, magnitude)), ForceType::Force, true);
+                    part.apply_force(0, &Force2::linear(Vector2::new(distance.0 / distance.1 * magnitude, magnitude)), ForceType::Force, false);
                 }
                 
             }
