@@ -86,7 +86,7 @@ pub struct World {
     next_celestial_object: u16,
     next_part: u16
 }
-#[derive(Copy, Eq)]
+#[derive(Copy, Eq, Debug)]
 pub enum MyHandle {
     CelestialObject(u16),
     Part(Option<u16>, u16),
@@ -117,6 +117,7 @@ impl World {
         self.next_celestial_object += 1;
         let handle = MyHandle::CelestialObject(id);
         self.celestial_objects.insert(id, body);
+        println!("Added celestial object {:?}", handle);
         handle
     }
     pub fn add_part(&mut self, body: RigidBody<MyUnits>, player: Option<u16>) -> MyHandle {
@@ -130,9 +131,11 @@ impl World {
         } else {
             self.free_parts.insert(id, body);
         };
+        println!("Added part {:?}", handle);
         handle
     }
     pub fn get_rigid(&self, handle: MyHandle) -> Option<&RigidBody<MyUnits>> {
+        println!("Got immutable Rigid body {:?}", handle);
         match handle {
             MyHandle::CelestialObject(id) => self.celestial_objects.get(&id),
             MyHandle::Part(Some(player), id) => self.player_parts.get(&player).map(|player| player.get(&id)).flatten(),
@@ -140,6 +143,7 @@ impl World {
         }
     }
     pub fn get_rigid_mut(&mut self, handle: MyHandle) -> Option<&mut RigidBody<MyUnits>> {
+        println!("Got mutable Rigid body {:?}", handle);
         match handle {
             MyHandle::CelestialObject(id) => self.celestial_objects.get_mut(&id),
             MyHandle::Part(Some(player), id) => self.player_parts.get_mut(&player).map(|player| player.get_mut(&id)).flatten(),
@@ -147,10 +151,12 @@ impl World {
         }
     }
     pub fn add_player(&mut self, id: u16) {
+        println!("Added player {}", id);
         if self.player_parts.contains_key(&id) { panic!(); }
         self.player_parts.insert(id, BTreeMap::new());
     }
     pub fn remove_player(&mut self, id: u16) {
+        println!("Removed player {}", id);
         if let Some(player) = self.player_parts.remove(&id) {
             self.removal_events.extend(player.keys().map(|key| MyHandle::Part(Some(id), *key)));
         }
@@ -169,6 +175,7 @@ impl Default for World {
 impl nphysics2d::object::BodySet<MyUnits> for World {
     type Handle = MyHandle;
     fn get(&self, handle: Self::Handle) -> Option<&dyn nphysics2d::object::Body<MyUnits>> {
+        println!("Got immutable body {:?}", handle);
         let ptr = match handle {
             MyHandle::CelestialObject(id) => self.celestial_objects.get(&id),
             MyHandle::Part(Some(player), id) => self.player_parts.get(&player).map(|player| player.get(&id)).flatten(),
@@ -178,6 +185,7 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
         else { None }
     }
     fn get_mut(&mut self, handle: Self::Handle) -> Option<&mut dyn nphysics2d::object::Body<MyUnits>> {
+        println!("Got mutable body {:?}", handle);
         let ptr = match handle {
             MyHandle::CelestialObject(id) => self.celestial_objects.get_mut(&id),
             MyHandle::Part(Some(player), id) => self.player_parts.get_mut(&player).map(|player| player.get_mut(&id)).flatten(),
@@ -187,6 +195,7 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
         else { None }
     }
     fn contains(&self, handle: Self::Handle) -> bool {
+        println!("Checked for body {:?}", handle);
         match handle {
             MyHandle::CelestialObject(id) => self.celestial_objects.contains_key(&id),
             MyHandle::Part(Some(player), id) => self.player_parts.get(&player).map(|player| player.contains_key(&id)).unwrap_or(false),
@@ -194,6 +203,7 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
         }
     }
     fn foreach(&self, f: &mut dyn FnMut(Self::Handle, &dyn nphysics2d::object::Body<MyUnits>)) {
+        println!("Foreach immutable");
         for (id, body) in &self.celestial_objects { f(MyHandle::CelestialObject(*id), body); }
         for (player, bodies) in &self.player_parts {
             for (id, body) in bodies { f(MyHandle::Part(Some(*player), *id), body); }
@@ -201,6 +211,7 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
         for (id, body) in &self.free_parts { f(MyHandle::Part(None, *id), body); }
     }
     fn foreach_mut(&mut self, f: &mut dyn FnMut(Self::Handle, &mut dyn nphysics2d::object::Body<MyUnits>)) {
+        println!("Foreach mutable");
         for (id, body) in &mut self.celestial_objects { f(MyHandle::CelestialObject(*id), body); }
         for (player, bodies) in &mut self.player_parts {
             for (id, body) in bodies { f(MyHandle::Part(Some(*player), *id), body); }
