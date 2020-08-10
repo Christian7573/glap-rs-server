@@ -42,6 +42,24 @@ fn type_float_pair_deserialize(buf: &[u8], index: &mut usize) -> Result<(f32,f32
     Ok((type_float_deserialize(buf, index)?, type_float_deserialize(buf, index)?))
 }
 
+pub enum PartKind {
+	Core, Cargo, LandingThruster, Hub
+}
+impl PartKind {
+	pub fn serialize(&self, buf: &mut Vec<u8>) {
+		buf.push(match self {
+			Self::Core => 0, Self::Cargo => 1, Self::LandingThruster => 2, Self::Hub => 3
+		});
+	}
+	pub fn deserialize(buf: &[u8], index: &mut usize) -> Result<Self, ()> {
+		let me = buf[*index]; *index += 1;
+		match me {
+			0 => Ok(Self::Core), 1 => Ok(Self::Cargo), 2 => Ok(Self::LandingThruster), 3 => Ok(Self::Hub),
+			_ => Err(())
+		}
+	}
+}
+
 pub enum ToServerMsg {
 	Handshake { client: String, session: Option<String>, },
 }
@@ -75,6 +93,9 @@ impl ToServerMsg {
 pub enum ToClientMsg {
 	HandshakeAccepted { id: u16, },
 	AddCelestialObject { name: String, display_name: String, radius: f32, id: u16, position: (f32,f32), },
+	AddPart { id: u16, kind: PartKind, },
+	MovePart { id: u16, x: f32, y: f32, radians: f32, },
+	RemovePart { id: u16, },
 }
 impl ToClientMsg {
 	pub fn serialize(&self) -> Vec<u8> {
@@ -91,6 +112,22 @@ impl ToClientMsg {
 				type_float_serialize(&mut out, radius);
 				type_u16_serialize(&mut out, id);
 				type_float_pair_serialize(&mut out, position);
+			},
+			Self::AddPart { id, kind} => {
+				out.push(2);
+				type_u16_serialize(&mut out, id);
+				kind.serialize(&mut out);
+			},
+			Self::MovePart { id, x, y, radians} => {
+				out.push(3);
+				type_u16_serialize(&mut out, id);
+				type_float_serialize(&mut out, x);
+				type_float_serialize(&mut out, y);
+				type_float_serialize(&mut out, radians);
+			},
+			Self::RemovePart { id} => {
+				out.push(4);
+				type_u16_serialize(&mut out, id);
 			},
 		};
 		out
@@ -112,6 +149,25 @@ impl ToClientMsg {
 				id = type_u16_deserialize(&buf, index)?;
 				position = type_float_pair_deserialize(&buf, index)?;
 				Ok(ToClientMsg::AddCelestialObject { name, display_name, radius, id, position})
+			},
+			2 => {
+				let id; let kind;
+				id = type_u16_deserialize(&buf, index)?;
+				kind = PartKind::deserialize(&buf, index)?;
+				Ok(ToClientMsg::AddPart { id, kind})
+			},
+			3 => {
+				let id; let x; let y; let radians;
+				id = type_u16_deserialize(&buf, index)?;
+				x = type_float_deserialize(&buf, index)?;
+				y = type_float_deserialize(&buf, index)?;
+				radians = type_float_deserialize(&buf, index)?;
+				Ok(ToClientMsg::MovePart { id, x, y, radians})
+			},
+			4 => {
+				let id;
+				id = type_u16_deserialize(&buf, index)?;
+				Ok(ToClientMsg::RemovePart { id})
 			},
 			_ => Err(())
 		}

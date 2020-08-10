@@ -37,6 +37,26 @@ class OptionType:
         return "if (%s === null) out.push(0); else {out.push(1); %s};" % (name, self.inner.typescript_serialize(name))
     def typescript_deserialize(self, name):
         return "if (buf[index.v++] > 0) {%s} else {%s = null;}" % (self.inner.typescript_deserialize(name), name)
+class EnumType:
+    def __init__(self, name):
+        self._rust_signature = name
+        self._rust_serialize = "%s.serialize(&mut out);"
+        self._rust_deserialize = "%%s = %s::deserialize(&buf, index)?;" % name
+        self._typescript_signature = name
+        self._typescript_serialize = "enum_%s_serialize(out, %%s);" % name
+        self._typescript_deserialize = "%%s = enum_%s_deserialize(buf, index);" % name
+    def rust_signature(self):
+        return self._rust_signature
+    def rust_serialize(self, name):
+        return self._rust_serialize % name
+    def rust_deserialize(self, name):
+        return self._rust_deserialize % name
+    def typescript_signature(self):
+        return self._typescript_signature
+    def typescript_serialize(self, name):
+        return self._typescript_serialize % name
+    def typescript_deserialize(self, name):
+        return self._typescript_deserialize % name
 
 TypeString = BasicType("String", "string", "string", "string")
 TypeFloat = BasicType("f32", "float", "number", "float")
@@ -55,8 +75,23 @@ class Field:
     def __init__(self, name, kind):
         self.name = name
         self.kind = kind
+class Enum:
+    def __init__(self, name, varriants):
+        self.name = name
+        self.varriants = varriants
 
 categories = []
+enums = []
+
+PartKind = Enum("PartKind", [
+    "Core",
+    "Cargo",
+    "LandingThruster",
+    "Hub",
+])
+enums.append(PartKind)
+TypePartKind = EnumType("PartKind")
+
 
 ToServerMsg = MessageCategory("ToServerMsg")
 categories.append(ToServerMsg)
@@ -82,11 +117,32 @@ AddCelestialObject.fields.append(Field("id", TypeUShort))
 AddCelestialObject.fields.append(Field("position", TypeFloatPair))
 ToClientMsg.messages.append(AddCelestialObject)
 
+AddPart = Message("AddPart")
+AddPart.fields.append(Field("id", TypeUShort))
+AddPart.fields.append(Field("kind", TypePartKind))
+ToClientMsg.messages.append(AddPart)
+
+MovePart = Message("MovePart")
+MovePart.fields.append(Field("id", TypeUShort))
+MovePart.fields.append(Field("x", TypeFloat))
+MovePart.fields.append(Field("y", TypeFloat))
+MovePart.fields.append(Field("radians", TypeFloat))
+ToClientMsg.messages.append(MovePart)
+
+RemovePart = Message("RemovePart")
+RemovePart.fields.append(Field("id", TypeUShort))
+ToClientMsg.messages.append(RemovePart)
+
 rust_header = open("codec_header.rs", "r")
 rust_out = open("codec.rs", "w")
 rust_out.write(rust_header.read())
 rust_out.write("\n\n")
 rust_header.close()
+for enum in enums:
+    rust_out.write("pub enum %s {\n\t%s\n}\n" % (enum.name, ", ".join(enum.varriants)))
+    rust_out.write("impl %s {\n\tpub fn serialize(&self, buf: &mut Vec<u8>) {\n\t\tbuf.push(match self {\n\t\t\t%s\n\t\t});\n\t}\n" % (enum.name, ", ".join(map(lambda varriant: "Self::%s => %s" % (varriant[1], varriant[0]), enumerate(enum.varriants)))))
+    rust_out.write("\tpub fn deserialize(buf: &[u8], index: &mut usize) -> Result<Self, ()> {\n\t\tlet me = buf[*index]; *index += 1;\n\t\tmatch me {\n\t\t\t%s,\n\t\t\t_ => Err(())\n\t\t}\n\t}\n}\n" % ", ".join(map(lambda varriant: "%s => Ok(Self::%s)" % (varriant[0], varriant[1]), enumerate(enum.varriants))))
+rust_out.write("\n")
 for category in categories:
     rust_out.write("pub enum %s {\n" % category.name)
     for message in category.messages:
@@ -117,6 +173,12 @@ typescript_out = open("codec.ts", "w")
 typescript_out.write(typescript_header.read())
 typescript_out.write("\n\n")
 typescript_header.close()
+for enum in enums:
+    typescript_out.write("export enum %s {\n\t%s\n}\n" % (enum.name, ", ".join(enum.varriants)))
+    typescript_out.write("function enum_%s_serialize(buf: number[], val: %s) { buf.push(val as number); }" % (enum.name, enum.name));
+    typescript_out.write("function enum_%s_deserialize(buf: Uint8Array, index: Box<number>): %s {\n\tconst me = buf[index.v++];\n\tif (me < %s) return me as %s;\n\telse throw new Error('Bad %s deserialize');\n}\n" % (enum.name, enum.name, len(enum.varriants), enum.name, enum.name))
+    #typescript_out.write("function enum_%s_deserialize(buf: Uint8Array, index: Box<number>): %s {\n\tswitch (buf[index.v++]) {\n\t\t%s\n\t\tdefault: throw new Error('Bad %s varriant');\n\t}\n}\n" % (enum.name, enum.name, " ".join(map(lambda varriant: "case %s: return %s.%s;" % (varriant[0], enum.name, varriant[1]), enumerate(enum.varriants))), enum.name))
+typescript_out.write("\n")
 for category in categories:
     for i, message in enumerate(category.messages):
         typescript_out.write("class %s_%s {\n\tstatic readonly id = %s;\n" % (category.name, message.name, i))

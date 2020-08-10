@@ -30,12 +30,7 @@ impl Part {
     }
 }
 
-pub enum PartKind {
-    Core,
-    Cargo,
-    LandingThruster,
-    Hub
-}
+pub use crate::codec::PartKind;
 impl PartKind {
     pub fn initialize(&self, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> MyHandle {
         match self {
