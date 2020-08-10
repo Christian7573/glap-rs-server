@@ -179,7 +179,7 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
         let ptr = match handle {
             MyHandle::CelestialObject(id) => self.celestial_objects.get(&id),
             MyHandle::Part(Some(player), id) => self.player_parts.get(&player).map(|player| player.get(&id)).flatten(),
-            MyHandle::Part(None, id) => self.celestial_objects.get(&id),
+            MyHandle::Part(None, id) => self.free_parts.get(&id),
         };
         if let Some(ptr) = ptr { Some(ptr) }
         else { None }
@@ -189,7 +189,7 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
         let ptr = match handle {
             MyHandle::CelestialObject(id) => self.celestial_objects.get_mut(&id),
             MyHandle::Part(Some(player), id) => self.player_parts.get_mut(&player).map(|player| player.get_mut(&id)).flatten(),
-            MyHandle::Part(None, id) => self.celestial_objects.get_mut(&id),
+            MyHandle::Part(None, id) => self.free_parts.get_mut(&id),
         };
         if let Some(ptr) = ptr { Some(ptr) }
         else { None }
