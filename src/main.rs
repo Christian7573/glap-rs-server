@@ -94,6 +94,7 @@ async fn main() {
                         for part in &part.attachments { send_part(part.body_id, part, simulation, socket); }
                     }
                     for (id, part) in &free_parts { send_part(*id, part, &mut simulation, socket); };
+                    send_part(core.body_id, &core, &simulation, socket);
                     for (other_id, core) in &player_parts { send_part(core.body_id, core, &mut simulation, socket); }
                     
                 } else { panic!() }
