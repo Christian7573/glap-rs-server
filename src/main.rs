@@ -4,6 +4,7 @@ use async_std::net::TcpStream;
 use std::pin::Pin;
 use std::collections::BTreeMap;
 use std::task::Poll;
+use rand::Rng;
 
 pub mod world;
 pub mod codec;
@@ -24,6 +25,7 @@ async fn main() {
 
     let mut free_parts: BTreeMap<u16, world::parts::Part> = BTreeMap::new();
     let mut player_parts: BTreeMap<u16, world::parts::Part> = BTreeMap::new();
+    let mut rand = rand::thread_rng();
 
     struct EventSource {
         pub inbound: async_std::net::TcpListener,
@@ -68,10 +70,17 @@ async fn main() {
             
             SessionEvent(id, ReadyToSpawn) => {
                 use world::MyHandle; use world::parts::Part; use codec::*; use async_tungstenite::tungstenite::Message; use session::MyWebSocket;
+                use nphysics2d::object::Body; use nphysics2d::math::Isometry; use nalgebra::Vector2; use nalgebra::geometry::UnitComplex;
                 if let Session::AwaitingHandshake(socket) = event_source.sessions.get_mut(&id).unwrap() {
                     //Graduate session to being existant
                     simulation.world.add_player(id);
                     let core = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+                    let earth_position = *simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
+                    let core_body = simulation.world.get_rigid_mut(MyHandle::Part(Some(id), core.body_id)).unwrap();                    
+                    let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
+                    let spawn_radius = simulation.planets.earth.radius * 1.25;
+                    core_body.set_position(Isometry::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), spawn_degrees + std::f32::consts::FRAC_PI_2));
+
                     socket.queue_send(Message::Binary(ToClientMsg::HandshakeAccepted{id, core_id: core.body_id}.serialize()));
                     //Send over celestial object locations
                     for planet in simulation.planets.celestial_objects().iter() {

@@ -5,7 +5,7 @@ use ncollide2d::shape::{Ball, ShapeHandle};
 use nalgebra::Vector2;
 
 pub struct Planets {
-    earth: CelestialObject
+    pub earth: CelestialObject
 }
 impl Planets {
     pub fn new(colliders: &mut super::MyColliderSet, bodies: &mut super::World) -> Planets {

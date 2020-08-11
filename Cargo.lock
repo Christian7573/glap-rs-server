@@ -435,6 +435,7 @@ dependencies = [
  "ncollide2d",
  "nphysics2d",
  "num-traits",
+ "rand",
 ]
 
 [[package]]
