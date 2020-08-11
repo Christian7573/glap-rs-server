@@ -78,8 +78,8 @@ async fn main() {
                     let earth_position = *simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
                     let core_body = simulation.world.get_rigid_mut(MyHandle::Part(Some(id), core.body_id)).unwrap();                    
                     let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
-                    let spawn_radius = simulation.planets.earth.radius * 1.25;
-                    core_body.set_position(Isometry::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), spawn_degrees + std::f32::consts::FRAC_PI_2));
+                    let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
+                    core_body.set_position(Isometry::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), spawn_degrees - std::f32::consts::FRAC_PI_2));
 
                     socket.queue_send(Message::Binary(ToClientMsg::HandshakeAccepted{id, core_id: core.body_id}.serialize()));
                     //Send over celestial object locations

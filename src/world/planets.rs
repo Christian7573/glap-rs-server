@@ -17,7 +17,7 @@ impl Planets {
                 .mass(100.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = 50.0;
+            const RADIUS: f32 = 25.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 //.margin()

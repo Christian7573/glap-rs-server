@@ -28,6 +28,7 @@ function type_float_serialize(out: number[], float: number) {
 function type_float_deserialize(buf: Uint8Array, index: Box<number>): number {
     const arr = new Uint8Array([buf[index.v+3], buf[index.v+2], buf[index.v+1], buf[index.v]]);
     const view = new Float32Array(arr.buffer);
+    index.v += 4;
     return view[0];
 }
 
@@ -39,6 +40,7 @@ function type_ushort_serialize(out: number[], ushort: number) {
 function type_ushort_deserialize(buf: Uint8Array, index: Box<number>): number {
     const arr = new Uint8Array([buf[index.v+1], buf[index.v]]);
     const view = new Uint16Array(arr);
+    index.v += 2;
     return view[0];
 }
 
