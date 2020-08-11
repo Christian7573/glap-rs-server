@@ -82,17 +82,36 @@ async fn main() {
                 let move_messages = session::PartMoveMessage::new_all(simulation.world.get_parts());
                 for (id, session) in &mut event_source.sessions { session.update_world(&move_messages); }
             },
-            SessionDisconnect(id) => { event_source.sessions.remove(&id); },
+            SessionDisconnect(id) => {
+                match event_source.sessions.remove(&id) {
+                    Some(Session::Spawned(_, _)) => {
+                        let mut nuke_messages = Vec::new();
+                        fn nuke_part(part: &world::parts::Part, simulation: &mut world::Simulation, nuke_messages: &mut Vec<Vec<u8>>) {
+                            simulation.world.remove_part(world::MyHandle::Part(part.body_id));
+                            nuke_messages.push(codec::ToClientMsg::RemovePart{id: part.body_id}.serialize());
+                            for part in &part.attachments { nuke_part(part, simulation, nuke_messages); }
+                        }
+                        if let Some(part) = player_parts.remove(&id) {
+                            nuke_part(&part, &mut simulation, &mut nuke_messages);
+                            for (_session_id, session) in &mut event_source.sessions {
+                                if let Session::Spawned(socket, _) = session {
+                                    for msg in &nuke_messages { socket.queue_send(async_tungstenite::tungstenite::Message::Binary(msg.clone())); }
+                                }
+                            };
+                        };
+                    },
+                    _ => ()
+                };
+            },
             
             SessionEvent(id, ReadyToSpawn) => {
                 use world::MyHandle; use world::parts::Part; use codec::*; use async_tungstenite::tungstenite::Message; use session::MyWebSocket;
                 use nphysics2d::math::Isometry; use nalgebra::Vector2;
                 if let Session::AwaitingHandshake(mut socket) = event_source.sessions.remove(&id).unwrap() {
                     //Graduate session to being existant
-                    simulation.world.add_player(id);
                     let core = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
                     let earth_position = *simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
-                    let core_body = simulation.world.get_rigid_mut(MyHandle::Part(Some(id), core.body_id)).unwrap();                    
+                    let core_body = simulation.world.get_rigid_mut(MyHandle::Part(core.body_id)).unwrap();                    
                     let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                     let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
                     core_body.set_position(Isometry::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), spawn_degrees - std::f32::consts::FRAC_PI_2));
@@ -109,7 +128,7 @@ async fn main() {
                     //Send over all parts
                     fn send_part(part: &Part, simulation: &crate::world::Simulation, socket: &mut MyWebSocket) {
                         let id = part.body_id;
-                        let body = simulation.world.get_rigid(MyHandle::Part(None, id)).unwrap();
+                        let body = simulation.world.get_rigid(MyHandle::Part(id)).unwrap();
                         let position = body.position();
                         socket.queue_send(Message::Binary(ToClientMsg::AddPart{ id: id, kind: part.kind }.serialize()));
                         socket.queue_send(Message::Binary(ToClientMsg::MovePart{

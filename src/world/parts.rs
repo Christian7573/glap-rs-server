@@ -36,11 +36,11 @@ impl PartKind {
         match self {
             PartKind::Core | PartKind::Hub => {
                 let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).mass(1.0).build();
-                let id = bodies.add_part(body, None);
+                let id = bodies.add_part(body);
                 let translation = if let PartKind::Hub = self { Vector2::new(0.0, 0.5) } else { Vector2::zero() };
                 let collider = ColliderDesc::new(part_static.unit_cuboid.clone())
                     .translation(translation)
-                    .build(BodyPartHandle (MyHandle::Part(None, id), 0));
+                    .build(BodyPartHandle (MyHandle::Part(id), 0));
                 colliders.insert(collider);
                 id
             },
