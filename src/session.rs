@@ -8,6 +8,7 @@ use futures::{Sink, SinkExt, Stream, StreamExt};
 use nphysics2d::object::{Body, BodySet, RigidBody};
 use super::world::MyHandle;
 use super::world::parts::{Part, PartKind};
+use std::collections::BTreeMap;
 
 use crate::codec::*;
 
@@ -20,7 +21,6 @@ pub enum SessionEvent {
     ReadyToSpawn
 }
 pub struct SpawnedPlayer {
-    pub core: crate::world::parts::Part,
     pub thrust_forwards: bool,
     pub thrust_backwards: bool,
     pub thrust_clockwise: bool,
@@ -35,20 +35,6 @@ impl Session {
         let pinbox;
         unsafe { pinbox = Pin::new_unchecked(Box::new(future)); }
         Session::AcceptingWebSocket(pinbox)
-    }
-
-    pub fn spawn(&mut self, id: u16, simulation: &crate::world::Simulation, core: super::world::parts::Part) {
-        if let Session::AwaitingHandshake(socket) = self {
-                socket.queue_send(Message::Binary(ToClientMsg::HandshakeAccepted{id}.serialize()));
-                //Send over celestial object locations
-                for planet in simulation.planets.celestial_objects().iter() {
-                    let position = simulation.world.get_rigid(planet.body).unwrap().position().translation;
-                    socket.queue_send(Message::Binary(ToClientMsg::AddCelestialObject {
-                        name: planet.name.clone(), display_name: planet.name.clone(),
-                        id: planet.id, radius: planet.radius, position: (position.x, position.y)
-                    }.serialize()));
-                }
-        } else { panic!() }
     }
 }
 impl Stream for Session {

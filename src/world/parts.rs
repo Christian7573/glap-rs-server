@@ -18,13 +18,13 @@ impl Default for PartStatic {
 pub struct Part {
     pub kind: PartKind,
     pub attachments: Vec<Part>,
-    pub body: MyHandle,
+    pub body_id: u16,
 }
 impl Part {
     pub fn new(kind: PartKind, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> Part {
-        let body = kind.initialize(bodies, colliders, part_static);
+        let body_id = kind.initialize(bodies, colliders, part_static);
         Part {
-            kind, body,
+            kind, body_id,
             attachments: Vec::with_capacity(5),
         }
     }
@@ -32,17 +32,17 @@ impl Part {
 
 pub use crate::codec::PartKind;
 impl PartKind {
-    pub fn initialize(&self, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> MyHandle {
+    pub fn initialize(&self, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> u16 {
         match self {
             PartKind::Core | PartKind::Hub => {
                 let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).mass(1.0).build();
-                let handle = bodies.add_part(body, None);
+                let id = bodies.add_part(body, None);
                 let translation = if let PartKind::Hub = self { Vector2::new(0.0, 0.5) } else { Vector2::zero() };
                 let collider = ColliderDesc::new(part_static.unit_cuboid.clone())
                     .translation(translation)
-                    .build(BodyPartHandle (handle, 0));
+                    .build(BodyPartHandle (MyHandle::Part(None, id), 0));
                 colliders.insert(collider);
-                handle
+                id
             },
             PartKind::Cargo | PartKind::LandingThruster => todo!()
         }

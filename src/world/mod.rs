@@ -122,7 +122,7 @@ impl World {
         self.celestial_objects.insert(id, body);
         handle
     }
-    pub fn add_part(&mut self, body: RigidBody<MyUnits>, player: Option<u16>) -> MyHandle {
+    pub fn add_part(&mut self, body: RigidBody<MyUnits>, player: Option<u16>) -> u16 {
         let id = self.next_part;
         self.next_part += 1;
         let handle = MyHandle::Part(player, id);
@@ -135,7 +135,7 @@ impl World {
             self.free_parts.insert(id);
             self.parts.insert(id, body);
         };
-        handle
+        id
     }
     pub fn get_rigid(&self, handle: MyHandle) -> Option<&RigidBody<MyUnits>> {
         match handle {
@@ -159,6 +159,7 @@ impl World {
             self.removal_events.extend(player.iter().map(|key| MyHandle::Part(Some(id), *key)));
         }
     }
+    pub fn get_parts(&self) -> &BTreeMap<u16, RigidBody<MyUnits>> { &self.parts }
 }
 impl Default for World {
     fn default() -> World { World {

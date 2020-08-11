@@ -22,6 +22,9 @@ async fn main() {
     let ticker = async_std::stream::interval(std::time::Duration::from_secs_f32(TIMESTEP));
     let mut simulation = world::Simulation::new(TIMESTEP);
 
+    let mut free_parts: BTreeMap<u16, world::parts::Part> = BTreeMap::new();
+    let mut player_parts: BTreeMap<u16, world::parts::Part> = BTreeMap::new();
+
     struct EventSource {
         pub inbound: async_std::net::TcpListener,
         pub sessions: BTreeMap<u16, Session>,
@@ -64,10 +67,36 @@ async fn main() {
             SessionDisconnect(id) => { event_source.sessions.remove(&id); },
             
             SessionEvent(id, ReadyToSpawn) => {
-                //Graduate session to being existant
-                simulation.world.add_player(id);
-                let part = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
-                event_source.sessions.get_mut(&id).unwrap().spawn(id, &simulation, part);
+                use world::MyHandle; use world::parts::Part; use codec::*; use async_tungstenite::tungstenite::Message; use session::MyWebSocket;
+                if let Session::AwaitingHandshake(socket) = event_source.sessions.get_mut(&id).unwrap() {
+                    //Graduate session to being existant
+                    simulation.world.add_player(id);
+                    let core = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+                    socket.queue_send(Message::Binary(ToClientMsg::HandshakeAccepted{id, core_id: core.body_id}.serialize()));
+                    //Send over celestial object locations
+                    for planet in simulation.planets.celestial_objects().iter() {
+                        let position = simulation.world.get_rigid(planet.body).unwrap().position().translation;
+                        socket.queue_send(Message::Binary(ToClientMsg::AddCelestialObject {
+                            name: planet.name.clone(), display_name: planet.name.clone(),
+                            id: planet.id, radius: planet.radius, position: (position.x, position.y)
+                        }.serialize()));
+                    }
+                    //Send over all parts
+                    fn send_part(id: u16, part: &Part, simulation: &crate::world::Simulation, socket: &mut MyWebSocket) {
+                        let body = simulation.world.get_rigid(MyHandle::Part(None, id)).unwrap();
+                        let position = body.position();
+                        socket.queue_send(Message::Binary(ToClientMsg::AddPart{ id: id, kind: part.kind }.serialize()));
+                        socket.queue_send(Message::Binary(ToClientMsg::MovePart{
+                            id,
+                            x: position.translation.x, y: position.translation.y,
+                            rotation_n: position.rotation.re, rotation_i: position.rotation.im,
+                        }.serialize()));
+                        for part in &part.attachments { send_part(part.body_id, part, simulation, socket); }
+                    }
+                    for (id, part) in &free_parts { send_part(*id, part, &mut simulation, socket); };
+                    for (other_id, core) in &player_parts { send_part(core.body_id, core, &mut simulation, socket); }
+                    
+                } else { panic!() }
             },
 
             _ => todo!()
