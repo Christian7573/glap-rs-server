@@ -6,11 +6,31 @@ use async_tungstenite::WebSocketStream;
 use async_tungstenite::tungstenite::{Error as WsError, Message};
 use futures::{Sink, SinkExt, Stream, StreamExt};
 use nphysics2d::object::{Body, BodySet, RigidBody};
-use super::world::MyHandle;
+use super::world::{MyHandle, MyUnits};
 use super::world::parts::{Part, PartKind};
 use std::collections::BTreeMap;
 
 use crate::codec::*;
+
+pub struct PartMoveMessage {
+    msg: Vec<u8>,
+    x: f32, y: f32
+}
+impl PartMoveMessage {
+    pub fn new(id: u16, body: &RigidBody<MyUnits>) -> PartMoveMessage {
+        PartMoveMessage {
+            x: body.position().translation.x, y: body.position().translation.y,
+            msg: ToClientMsg::MovePart{ 
+                id,
+                x: body.position().translation.x, y: body.position().translation.y,
+                rotation_n: body.position().rotation.re, rotation_i: body.position().rotation.im
+            }.serialize()
+        }
+    }
+    pub fn new_all(parts: &BTreeMap<u16, RigidBody<MyUnits>>) -> Vec<PartMoveMessage> {
+        parts.iter().map(|(id, body)| Self::new(*id, body)).collect()
+    }
+}
 
 pub enum Session {
     AcceptingWebSocket(Pin<Box<dyn Future<Output = Result<WebSocketStream<TcpStream>, async_tungstenite::tungstenite::Error>>>>),
@@ -35,6 +55,14 @@ impl Session {
         let pinbox;
         unsafe { pinbox = Pin::new_unchecked(Box::new(future)); }
         Session::AcceptingWebSocket(pinbox)
+    }
+    pub fn update_world(&mut self, move_messages: &Vec<PartMoveMessage>) {
+        if let Session::Spawned(socket, myself) = self {
+            for msg in move_messages {
+                //Do some check here in the future, don't need to send messages about things that are really far away
+                socket.queue_send(Message::Binary(msg.msg.clone()));
+            }
+        }
     }
 }
 impl Stream for Session {

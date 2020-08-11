@@ -8,13 +8,13 @@ use nphysics2d::algebra::{Force2, ForceType};
 pub mod planets;
 pub mod parts;
 
-type MyUnits = f32;
-type MyColliderHandle = nphysics2d::object::DefaultColliderHandle;
-type MyMechanicalWorld = nphysics2d::world::MechanicalWorld<MyUnits, MyHandle, MyColliderHandle>;
-type MyGeometricalWorld = nphysics2d::world::GeometricalWorld<MyUnits, MyHandle, MyColliderHandle>;
-type MyColliderSet = nphysics2d::object::DefaultColliderSet<MyUnits, MyHandle>;
-type MyJointSet = nphysics2d::joint::DefaultJointConstraintSet<MyUnits, MyHandle>;
-type MyForceSet = nphysics2d::force_generator::DefaultForceGeneratorSet<MyUnits, MyHandle>;
+pub type MyUnits = f32;
+pub type MyColliderHandle = nphysics2d::object::DefaultColliderHandle;
+pub type MyMechanicalWorld = nphysics2d::world::MechanicalWorld<MyUnits, MyHandle, MyColliderHandle>;
+pub type MyGeometricalWorld = nphysics2d::world::GeometricalWorld<MyUnits, MyHandle, MyColliderHandle>;
+pub type MyColliderSet = nphysics2d::object::DefaultColliderSet<MyUnits, MyHandle>;
+pub type MyJointSet = nphysics2d::joint::DefaultJointConstraintSet<MyUnits, MyHandle>;
+pub type MyForceSet = nphysics2d::force_generator::DefaultForceGeneratorSet<MyUnits, MyHandle>;
 
 pub struct Simulation {
     pub world: World,

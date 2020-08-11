@@ -65,7 +65,16 @@ async fn main() {
                 next_session += 1;
                 event_source.sessions.insert(id, Session::new(socket));
             },
-            Simulate => { simulation.simulate(); },
+            Simulate => {
+                for (id, session) in &mut event_source.sessions {
+                    if let Session::Spawned(_, player) = session {
+                        //TODO: Apply part thrust
+                    }
+                }
+                simulation.simulate();
+                let move_messages = session::PartMoveMessage::new_all(simulation.world.get_parts());
+                for (id, session) in &mut event_source.sessions { session.update_world(&move_messages); }
+            },
             SessionDisconnect(id) => { event_source.sessions.remove(&id); },
             
             SessionEvent(id, ReadyToSpawn) => {
