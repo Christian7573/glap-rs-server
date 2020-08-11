@@ -87,7 +87,7 @@ async fn main() {
             SessionEvent(id, ReadyToSpawn) => {
                 use world::MyHandle; use world::parts::Part; use codec::*; use async_tungstenite::tungstenite::Message; use session::MyWebSocket;
                 use nphysics2d::math::Isometry; use nalgebra::Vector2;
-                if let Session::AwaitingHandshake(socket) = event_source.sessions.get_mut(&id).unwrap() {
+                if let Session::AwaitingHandshake(mut socket) = event_source.sessions.remove(&id).unwrap() {
                     //Graduate session to being existant
                     simulation.world.add_player(id);
                     let core = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
@@ -107,7 +107,8 @@ async fn main() {
                         }.serialize()));
                     }
                     //Send over all parts
-                    fn send_part(id: u16, part: &Part, simulation: &crate::world::Simulation, socket: &mut MyWebSocket) {
+                    fn send_part(part: &Part, simulation: &crate::world::Simulation, socket: &mut MyWebSocket) {
+                        let id = part.body_id;
                         let body = simulation.world.get_rigid(MyHandle::Part(None, id)).unwrap();
                         let position = body.position();
                         socket.queue_send(Message::Binary(ToClientMsg::AddPart{ id: id, kind: part.kind }.serialize()));
@@ -116,14 +117,16 @@ async fn main() {
                             x: position.translation.x, y: position.translation.y,
                             rotation_n: position.rotation.re, rotation_i: position.rotation.im,
                         }.serialize()));
-                        for part in &part.attachments { send_part(part.body_id, part, simulation, socket); }
+                        for part in &part.attachments { send_part(part, simulation, socket); }
                     }
-                    for (id, part) in &free_parts { send_part(*id, part, &mut simulation, socket); };
-                    send_part(core.body_id, &core, &simulation, socket);
-                    for (other_id, core) in &player_parts { send_part(core.body_id, core, &mut simulation, socket); }
+                    for (id, part) in &free_parts { send_part(part, &mut simulation, &mut socket); };
+                    send_part(&core, &simulation, &mut socket);
+                    for (other_id, other_core) in &player_parts {
+                        send_part(other_core, &mut simulation, &mut socket);
+                        if let Some(Session::Spawned(socket, _)) = event_source.sessions.get_mut(other_id) { send_part(&core, &mut simulation, socket); }
+                    }
                     
                     //Graduate to spawned player
-                    let socket = if let Some(Session::AwaitingHandshake(socket)) = event_source.sessions.remove(&id) { socket } else { panic!() };
                     player_parts.insert(id, core);
                     event_source.sessions.insert(id, Session::Spawned(socket, session::SpawnedPlayer::default()));
                 } else { panic!() }
