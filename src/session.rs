@@ -48,6 +48,12 @@ pub struct SpawnedPlayer {
     pub fuel: u16,
     pub max_fuel: u16
 }
+impl Default for SpawnedPlayer {
+    fn default() -> SpawnedPlayer { SpawnedPlayer {
+        thrust_backwards: false, thrust_clockwise: false, thrust_counterclockwise: false, thrust_forwards: false,
+        fuel: 100, max_fuel: 100
+    } }
+}
 
 impl Session {
     pub fn new(socket: TcpStream) -> Session {

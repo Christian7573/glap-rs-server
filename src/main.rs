@@ -30,7 +30,8 @@ async fn main() {
     struct EventSource {
         pub inbound: async_std::net::TcpListener,
         pub sessions: BTreeMap<u16, Session>,
-        pub ticker: async_std::stream::Interval
+        pub ticker: async_std::stream::Interval,
+        should_simulate: bool
     }
     enum Event {
         NewSession(TcpStream),
@@ -41,7 +42,12 @@ async fn main() {
     impl Stream for EventSource {
         type Item = Event;
         fn poll_next(mut self: Pin<&mut Self>, ctx: &mut std::task::Context) -> Poll<Option<Event>> {
-            if let Poll::Ready(Some(_)) = Pin::new(&mut self.ticker.next() ).poll(ctx) { return Poll::Ready(Some(Event::Simulate)); }
+            if let Poll::Ready(Some(_)) = Pin::new(&mut self.ticker.next() ).poll(ctx) {
+                if self.should_simulate {
+                    self.should_simulate = false;
+                    return Poll::Ready(Some(Event::Simulate));
+                }
+            }
 
             for (id, session) in &mut self.sessions {
                 if let Poll::Ready(result) = Pin::new(&mut session.next()).poll(ctx) {
@@ -51,10 +57,11 @@ async fn main() {
             }
             
             if let Poll::Ready(Ok((socket, _addr))) = unsafe { Pin::new_unchecked(&mut self.inbound.accept()).poll(ctx) } { return Poll::Ready(Some(Event::NewSession(socket))); }
+            self.should_simulate = true;
             Poll::Pending
         }
     }
-    let mut event_source = EventSource { inbound, ticker, sessions };
+    let mut event_source = EventSource { inbound, ticker, sessions, should_simulate: true };
 
     while let Some(event) = event_source.next().await {
         use session::SessionEvent::*;
@@ -79,7 +86,7 @@ async fn main() {
             
             SessionEvent(id, ReadyToSpawn) => {
                 use world::MyHandle; use world::parts::Part; use codec::*; use async_tungstenite::tungstenite::Message; use session::MyWebSocket;
-                use nphysics2d::object::Body; use nphysics2d::math::Isometry; use nalgebra::Vector2; use nalgebra::geometry::UnitComplex;
+                use nphysics2d::math::Isometry; use nalgebra::Vector2;
                 if let Session::AwaitingHandshake(socket) = event_source.sessions.get_mut(&id).unwrap() {
                     //Graduate session to being existant
                     simulation.world.add_player(id);
@@ -115,6 +122,10 @@ async fn main() {
                     send_part(core.body_id, &core, &simulation, socket);
                     for (other_id, core) in &player_parts { send_part(core.body_id, core, &mut simulation, socket); }
                     
+                    //Graduate to spawned player
+                    let socket = if let Some(Session::AwaitingHandshake(socket)) = event_source.sessions.remove(&id) { socket } else { panic!() };
+                    player_parts.insert(id, core);
+                    event_source.sessions.insert(id, Session::Spawned(socket, session::SpawnedPlayer::default()));
                 } else { panic!() }
             },
 
