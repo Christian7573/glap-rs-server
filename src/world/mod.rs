@@ -49,17 +49,17 @@ impl Simulation {
 
     fn celestial_gravity(&mut self) {
         fn do_gravity_for_part(part: &mut RigidBody<MyUnits>, celestial_bodies: &BTreeMap<u16, RigidBody<MyUnits>>) {
-            const GRAVITATION_CONSTANT: f32 = 0.00000001; //Lolrandom
+            const GRAVITATION_CONSTANT: f32 = 5.0; //Lolrandom
             for body in celestial_bodies.values() {
-                let distance: (f32, f32) = ((part.position().translation.x - body.position().translation.x).abs(),
-                                            (part.position().translation.y - body.position().translation.y).abs());
+                let distance: (f32, f32) = ((body.position().translation.x - part.position().translation.x),
+                                            (body.position().translation.y - part.position().translation.y));
                 let magnitude: f32 = part.augmented_mass().linear * body.augmented_mass().linear 
                                      / (distance.0.pow(2f32) + distance.1.pow(2f32))
                                      * GRAVITATION_CONSTANT;
-                if distance.0 > distance.1 {
-                    part.apply_force(0, &Force2::linear(Vector2::new(magnitude, distance.1 / distance.0 * magnitude)), ForceType::Force, false);
+                if distance.0.abs() > distance.1.abs() {
+                    part.apply_force(0, &Force2::linear(Vector2::new(if distance.0 >= 0.0 { magnitude } else { -magnitude }, distance.1 / distance.0 * magnitude)), ForceType::Force, false);
                 } else {
-                    part.apply_force(0, &Force2::linear(Vector2::new(distance.0 / distance.1 * magnitude, magnitude)), ForceType::Force, false);
+                    part.apply_force(0, &Force2::linear(Vector2::new(distance.0 / distance.1 * magnitude, if distance.1 >= 0.0 { magnitude } else { -magnitude })), ForceType::Force, false);
                 }
                 
             }
