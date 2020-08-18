@@ -76,18 +76,24 @@ impl CompactThrustMode {
         CompactThrustMode (horizontal | vertical)
     }
     pub fn get_horizontal(&self) -> HorizontalThrustMode { 
-        match self.0 & 3 {
+        match self.0 & 0b00000011 {
             1 => HorizontalThrustMode::Clockwise,
             0 => HorizontalThrustMode::CounterClockwise,
             2 => HorizontalThrustMode::Either,
             _ => panic!()
         }
     }
-    pub fn get_vertical(&self) -> VerticalThrustMode { if self.0 & 4 > 0 { VerticalThrustMode::Forwards } else { VerticalThrustMode::Backwards } }
+    pub fn get_vertical(&self) -> VerticalThrustMode { if self.0 & 0b00001100 > 0 { VerticalThrustMode::Forwards } else { VerticalThrustMode::Backwards } }
     pub fn get(&self) -> (HorizontalThrustMode, VerticalThrustMode) { (self.get_horizontal(), self.get_vertical()) }
     pub fn set_horizontal(&mut self, horizontal: HorizontalThrustMode) { std::mem::replace::<CompactThrustMode>(self, CompactThrustMode::new(horizontal, self.get_vertical())); }
     pub fn set_vertical(&mut self, vertical: VerticalThrustMode) { std::mem::replace::<CompactThrustMode>(self, CompactThrustMode::new(self.get_horizontal(), vertical)); }
     pub fn set(&mut self, horizontal: HorizontalThrustMode, vertical: VerticalThrustMode) { std::mem::replace::<CompactThrustMode>(self, CompactThrustMode::new(horizontal, vertical)); }
+}
+impl From<u8> for CompactThrustMode {
+    fn from(byte: u8) -> CompactThrustMode { CompactThrustMode( byte ) }
+}
+impl Into<u8> for CompactThrustMode {
+    fn into(self) -> u8 { self.0 }
 }
 // enum FireDirection {
     

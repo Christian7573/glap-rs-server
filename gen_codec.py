@@ -62,6 +62,8 @@ TypeString = BasicType("String", "string", "string", "string")
 TypeFloat = BasicType("f32", "float", "number", "float")
 TypeUShort = BasicType("u16", "u16", "number", "ushort")
 TypeFloatPair = BasicType("(f32,f32)", "float_pair", "[number, number]", "float_pair")
+TypeUByte = BasicType("u8", "u8", "number", "ubyte")
+TypeBoolean = BasicType("bool","bool","boolean","boolean")
 
 class MessageCategory:
     def __init__(self, name):
@@ -101,6 +103,12 @@ Handshake.fields.append(Field("client", TypeString))
 Handshake.fields.append(Field("session", OptionType(TypeString)))
 ToServerMsg.messages.append(Handshake)
 
+SetThrusters = Message("SetThrusters")
+SetThrusters.fields.append(Field("forward", TypeBoolean))
+SetThrusters.fields.append(Field("backward", TypeBoolean))
+SetThrusters.fields.append(Field("clockwise", TypeBoolean))
+SetThrusters.fields.append(Field("counter_cloockwise", TypeBoolean))
+ToServerMsg.messages.append(SetThrusters)
 
 ToClientMsg = MessageCategory("ToClientMsg")
 categories.append(ToClientMsg)

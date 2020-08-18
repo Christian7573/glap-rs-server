@@ -41,3 +41,17 @@ fn type_float_pair_serialize(out: &mut Vec<u8>, pair: &(f32, f32)) {
 fn type_float_pair_deserialize(buf: &[u8], index: &mut usize) -> Result<(f32,f32),()> {
     Ok((type_float_deserialize(buf, index)?, type_float_deserialize(buf, index)?))
 }
+
+fn type_u8_serialize(out: &mut Vec<u8>, ubyte: &u8) { out.push(*ubyte); }
+fn type_u8_deserialize(buf: &[u8], index: &mut usize) -> Result<u8, ()> {
+    let i = *index;
+    *index += 1;
+    buf.get(i).map(|val| *val).ok_or(())
+}
+
+fn type_bool_serialize(out: &mut Vec<u8>, boolean: &bool) { out.push(if *boolean { 1 } else { 0 }); }
+fn type_bool_deserialize(buf: &[u8], index: &mut usize) -> Result<bool, ()> {
+    let i = *index;
+    *index += 1;
+    buf.get(i).map(|val| *val > 1).ok_or(())
+}

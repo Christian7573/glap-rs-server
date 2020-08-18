@@ -51,3 +51,9 @@ function type_float_pair_serialize(out: number[], pair: [number, number]) {
 function type_float_pair_deserialize(buf: Uint8Array, index: Box<number>): [number, number] {
     return [type_float_deserialize(buf, index), type_float_deserialize(buf, index)];
 }
+
+function type_ubyte_serialize(out: number[], ubyte: number) { out.push(ubyte); }
+function type_ubyte_deserialize(buf: Uint8Array, index: Box<number>): number { return buf[index.v++]; }
+
+function type_boolean_serialize(out: number[], bool: boolean) { out.push(bool ? 1 : 0); }
+function type_boolean_deserialize(buf: Uint8Array, index: Box<number>): boolean { return buf[index.v++] > 0; }

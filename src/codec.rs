@@ -42,6 +42,20 @@ fn type_float_pair_deserialize(buf: &[u8], index: &mut usize) -> Result<(f32,f32
     Ok((type_float_deserialize(buf, index)?, type_float_deserialize(buf, index)?))
 }
 
+fn type_u8_serialize(out: &mut Vec<u8>, ubyte: &u8) { out.push(*ubyte); }
+fn type_u8_deserialize(buf: &[u8], index: &mut usize) -> Result<u8, ()> {
+    let i = *index;
+    *index += 1;
+    buf.get(i).map(|val| *val).ok_or(())
+}
+
+fn type_bool_serialize(out: &mut Vec<u8>, boolean: &bool) { out.push(if *boolean { 1 } else { 0 }); }
+fn type_bool_deserialize(buf: &[u8], index: &mut usize) -> Result<bool, ()> {
+    let i = *index;
+    *index += 1;
+    buf.get(i).map(|val| *val > 1).ok_or(())
+}
+
 #[derive(Copy, Clone)] pub enum PartKind {
 	Core, Cargo, LandingThruster, Hub
 }
@@ -62,6 +76,7 @@ impl PartKind {
 
 pub enum ToServerMsg {
 	Handshake { client: String, session: Option<String>, },
+	SetThrusters { forward: bool, backward: bool, clockwise: bool, counter_cloockwise: bool, },
 }
 impl ToServerMsg {
 	pub fn serialize(&self) -> Vec<u8> {
@@ -71,6 +86,13 @@ impl ToServerMsg {
 				out.push(0);
 				type_string_serialize(&mut out, client);
 				if let Some(tmp) = session {out.push(1); type_string_serialize(&mut out, tmp);} else {out.push(0);}
+			},
+			Self::SetThrusters { forward, backward, clockwise, counter_cloockwise} => {
+				out.push(1);
+				type_bool_serialize(&mut out, forward);
+				type_bool_serialize(&mut out, backward);
+				type_bool_serialize(&mut out, clockwise);
+				type_bool_serialize(&mut out, counter_cloockwise);
 			},
 		};
 		out
@@ -84,6 +106,14 @@ impl ToServerMsg {
 				client = type_string_deserialize(&buf, index)?;
 				session = {if buf[*index] > 0 {*index += 1; let tmp; tmp = type_string_deserialize(&buf, index)?; Some(tmp)} else {*index += 1; None}};
 				Ok(ToServerMsg::Handshake { client, session})
+			},
+			1 => {
+				let forward; let backward; let clockwise; let counter_cloockwise;
+				forward = type_bool_deserialize(&buf, index)?;
+				backward = type_bool_deserialize(&buf, index)?;
+				clockwise = type_bool_deserialize(&buf, index)?;
+				counter_cloockwise = type_bool_deserialize(&buf, index)?;
+				Ok(ToServerMsg::SetThrusters { forward, backward, clockwise, counter_cloockwise})
 			},
 			_ => Err(())
 		}
