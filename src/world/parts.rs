@@ -19,6 +19,7 @@ pub struct Part {
     pub kind: PartKind,
     pub attachments: Vec<Part>,
     pub body_id: u16,
+    pub thrust_mode: CompactThrustMode
 }
 impl Part {
     pub fn new(kind: PartKind, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> Part {
@@ -26,6 +27,30 @@ impl Part {
         Part {
             kind, body_id,
             attachments: Vec::with_capacity(5),
+            thrust_mode: CompactThrustMode::default()
+        }
+    }
+    pub fn thrust(&self, bodies: &mut super::World, fuel: &mut u16, forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool) {
+        match self.kind {
+            PartKind::Core => {
+
+            },
+            _ => {
+                if let Some(ThrustDetails{ fuel_cost, force }) = self.kind.thrust() {
+                    let should_fire = match self.thrust_mode.get_horizontal() {
+                        HorizontalThrustMode::Clockwise => clockwise,
+                        HorizontalThrustMode::CounterClockwise => counter_clockwise,
+                        HorizontalThrustMode::Either => clockwise | counter_clockwise
+                    } || match self.thrust_mode.get_vertical() {
+                        VerticalThrustMode::Forwards => forward,
+                        VerticalThrustMode::Backwards => backward
+                    };
+                    if *fuel >= fuel_cost && should_fire  {
+                        *fuel -= fuel_cost;
+                        bodies.get_rigid_mut(MyHandle::Part(self.body_id)).unwrap().apply_force(0, &force, ForceType::Force, true)
+                    }
+                }
+            }
         }
     }
 }
@@ -47,13 +72,15 @@ impl PartKind {
             PartKind::Cargo | PartKind::LandingThruster => todo!()
         }
     }
-    // pub fn thrust(&self, body: &mut RigidBody<super::MyUnits>) {
-    //     match self {
-    //         PartKind::Core => (), //This one is fired elsewhere
-    //         PartKind::Cargo | PartKind::Hub => (),
-    //         PartKind::LandingThruster => { body.apply_force_at_local_point(0, &Vector2::new(0.0, 5.0), &Point2::new(0.0,0.5), ForceType::Force, true); }
-    //     };
-    // }
+    fn thrust(&self) -> Option<ThrustDetails> {
+        match self {
+            PartKind::Core => panic!("PartKind thrust called on core"),
+            PartKind::Hub => None,
+            PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 3, force: Force2::linear_at_point(Vector2::new(0.0, 5.0), &Point2::new(0.0, 0.8)) }),
+            PartKind::Cargo => None
+        }
+    }
+    
     // pub fn get_attachable_positions(&self) -> [(Isometry<super::MyUnits>, )] {
         
     // }
@@ -95,6 +122,11 @@ impl From<u8> for CompactThrustMode {
 impl Into<u8> for CompactThrustMode {
     fn into(self) -> u8 { self.0 }
 }
+impl Default for CompactThrustMode {
+    fn default() -> Self { 0.into() }
+}
 // enum FireDirection {
     
 // }
+
+struct ThrustDetails { fuel_cost: u16, force: Force2<MyUnits> }

@@ -75,7 +75,7 @@ async fn main() {
             Simulate => {
                 for (id, session) in &mut event_source.sessions {
                     if let Session::Spawned(_, player) = session {
-                        //TODO: Apply part thrust
+                        
                     }
                 }
                 simulation.simulate();
@@ -91,6 +91,7 @@ async fn main() {
                             nuke_messages.push(codec::ToClientMsg::RemovePart{id: part.body_id}.serialize());
                             for part in &part.attachments { nuke_part(part, simulation, nuke_messages); }
                         }
+                        nuke_messages.push(codec::ToClientMsg::RemovePlayer{ id }.serialize());
                         if let Some(part) = player_parts.remove(&id) {
                             nuke_part(&part, &mut simulation, &mut nuke_messages);
                             for (_session_id, session) in &mut event_source.sessions {
@@ -115,6 +116,8 @@ async fn main() {
                     let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                     let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
                     core_body.set_position(Isometry::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), spawn_degrees - std::f32::consts::FRAC_PI_2));
+
+                    let add_player_msg = codec::ToClientMsg::AddPlayer { id, name: String::default() }.serialize();
 
                     socket.queue_send(Message::Binary(ToClientMsg::HandshakeAccepted{id, core_id: core.body_id}.serialize()));
                     //Send over celestial object locations
@@ -141,17 +144,30 @@ async fn main() {
                     for (id, part) in &free_parts { send_part(part, &mut simulation, &mut socket); };
                     send_part(&core, &simulation, &mut socket);
                     for (other_id, other_core) in &player_parts {
+                        socket.queue_send(async_tungstenite::tungstenite::Message::Binary(codec::ToClientMsg::AddPlayer{ id: *other_id, name: String::default() }.serialize()));
                         send_part(other_core, &mut simulation, &mut socket);
-                        if let Some(Session::Spawned(socket, _)) = event_source.sessions.get_mut(other_id) { send_part(&core, &mut simulation, socket); }
+                        if let Some(Session::Spawned(socket, _)) = event_source.sessions.get_mut(other_id) {
+                            socket.queue_send(async_tungstenite::tungstenite::Message::Binary(add_player_msg.clone()));
+                            send_part(&core, &mut simulation, socket);
+                        }
                     }
                     
                     //Graduate to spawned player
                     player_parts.insert(id, core);
-                    event_source.sessions.insert(id, Session::Spawned(socket, session::SpawnedPlayer::default()));
+                    event_source.sessions.insert(id, Session::Spawned(socket, session::PlayerMeta::default()));
                 } else { panic!() }
             },
 
-            _ => todo!()
+            SessionEvent(id, ThrusterUpdate { forward, backward, clockwise, counter_clockwise }) => {
+                let msg = codec::ToClientMsg::UpdatePlayer {
+                    id, thrust_forward: forward, thrust_backward: backward, thrust_clockwise: clockwise, thrust_counter_clockwise: counter_clockwise
+                }.serialize();
+                for (_other_id, session) in &mut event_source.sessions {
+                    if let Session::Spawned(socket, _) = session {
+                        socket.queue_send(async_tungstenite::tungstenite::Message::Binary(msg.clone()));
+                    }
+                }
+            }
         }
     }
     

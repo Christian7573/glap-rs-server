@@ -35,12 +35,14 @@ impl PartMoveMessage {
 pub enum Session {
     AcceptingWebSocket(Pin<Box<dyn Future<Output = Result<WebSocketStream<TcpStream>, async_tungstenite::tungstenite::Error>>>>),
     AwaitingHandshake(MyWebSocket),
-    Spawned(MyWebSocket, SpawnedPlayer)
+    Spawned(MyWebSocket, PlayerMeta)
 }
 pub enum SessionEvent {
-    ReadyToSpawn
+    ReadyToSpawn,
+    ThrusterUpdate{ forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool }
 }
-pub struct SpawnedPlayer {
+#[derive(Clone)]
+pub struct PlayerMeta {
     pub thrust_forwards: bool,
     pub thrust_backwards: bool,
     pub thrust_clockwise: bool,
@@ -48,8 +50,8 @@ pub struct SpawnedPlayer {
     pub fuel: u16,
     pub max_fuel: u16
 }
-impl Default for SpawnedPlayer {
-    fn default() -> SpawnedPlayer { SpawnedPlayer {
+impl Default for PlayerMeta {
+    fn default() -> PlayerMeta { PlayerMeta {
         thrust_backwards: false, thrust_clockwise: false, thrust_counterclockwise: false, thrust_forwards: false,
         fuel: 100, max_fuel: 100
     } }
@@ -113,7 +115,17 @@ impl Stream for Session {
                 if let Poll::Ready(result) = socket.poll_next_unpin(ctx) {
                     match result {
                         Some(Message::Binary(dat)) => {
-                            todo!()
+                            match ToServerMsg::deserialize(dat.as_slice(), &mut 0) {
+                                Ok(ToServerMsg::SetThrusters { forward, backward, clockwise, counter_clockwise }) => {
+                                    player.thrust_forwards = forward;
+                                    player.thrust_backwards = backward;
+                                    player.thrust_clockwise = clockwise;
+                                    player.thrust_counterclockwise = counter_clockwise;
+                                    Poll::Ready(Some(SessionEvent::ThrusterUpdate { forward, backward, clockwise, counter_clockwise }))
+                                },
+                                Err(_) => { todo!() },
+                                Ok(ToServerMsg::Handshake { client, session }) => { todo!() }
+                            }
                         },
                         Some(Message::Ping(_)) => Poll::Pending,
                         _ => Poll::Ready(None)

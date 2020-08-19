@@ -76,7 +76,7 @@ impl PartKind {
 
 pub enum ToServerMsg {
 	Handshake { client: String, session: Option<String>, },
-	SetThrusters { forward: bool, backward: bool, clockwise: bool, counter_cloockwise: bool, },
+	SetThrusters { forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool, },
 }
 impl ToServerMsg {
 	pub fn serialize(&self) -> Vec<u8> {
@@ -87,12 +87,12 @@ impl ToServerMsg {
 				type_string_serialize(&mut out, client);
 				if let Some(tmp) = session {out.push(1); type_string_serialize(&mut out, tmp);} else {out.push(0);}
 			},
-			Self::SetThrusters { forward, backward, clockwise, counter_cloockwise} => {
+			Self::SetThrusters { forward, backward, clockwise, counter_clockwise} => {
 				out.push(1);
 				type_bool_serialize(&mut out, forward);
 				type_bool_serialize(&mut out, backward);
 				type_bool_serialize(&mut out, clockwise);
-				type_bool_serialize(&mut out, counter_cloockwise);
+				type_bool_serialize(&mut out, counter_clockwise);
 			},
 		};
 		out
@@ -108,12 +108,12 @@ impl ToServerMsg {
 				Ok(ToServerMsg::Handshake { client, session})
 			},
 			1 => {
-				let forward; let backward; let clockwise; let counter_cloockwise;
+				let forward; let backward; let clockwise; let counter_clockwise;
 				forward = type_bool_deserialize(&buf, index)?;
 				backward = type_bool_deserialize(&buf, index)?;
 				clockwise = type_bool_deserialize(&buf, index)?;
-				counter_cloockwise = type_bool_deserialize(&buf, index)?;
-				Ok(ToServerMsg::SetThrusters { forward, backward, clockwise, counter_cloockwise})
+				counter_clockwise = type_bool_deserialize(&buf, index)?;
+				Ok(ToServerMsg::SetThrusters { forward, backward, clockwise, counter_clockwise})
 			},
 			_ => Err(())
 		}
@@ -125,7 +125,11 @@ pub enum ToClientMsg {
 	AddCelestialObject { name: String, display_name: String, radius: f32, id: u16, position: (f32,f32), },
 	AddPart { id: u16, kind: PartKind, },
 	MovePart { id: u16, x: f32, y: f32, rotation_n: f32, rotation_i: f32, },
+	UpdatePartMeta { id: u16, owning_player: Option<u16>, thrust_mode: u8, },
 	RemovePart { id: u16, },
+	AddPlayer { id: u16, name: String, },
+	UpdatePlayer { id: u16, thrust_forward: bool, thrust_backward: bool, thrust_clockwise: bool, thrust_counter_clockwise: bool, },
+	RemovePlayer { id: u16, },
 }
 impl ToClientMsg {
 	pub fn serialize(&self) -> Vec<u8> {
@@ -157,8 +161,31 @@ impl ToClientMsg {
 				type_float_serialize(&mut out, rotation_n);
 				type_float_serialize(&mut out, rotation_i);
 			},
-			Self::RemovePart { id} => {
+			Self::UpdatePartMeta { id, owning_player, thrust_mode} => {
 				out.push(4);
+				type_u16_serialize(&mut out, id);
+				if let Some(tmp) = owning_player {out.push(1); type_u16_serialize(&mut out, tmp);} else {out.push(0);}
+				type_u8_serialize(&mut out, thrust_mode);
+			},
+			Self::RemovePart { id} => {
+				out.push(5);
+				type_u16_serialize(&mut out, id);
+			},
+			Self::AddPlayer { id, name} => {
+				out.push(6);
+				type_u16_serialize(&mut out, id);
+				type_string_serialize(&mut out, name);
+			},
+			Self::UpdatePlayer { id, thrust_forward, thrust_backward, thrust_clockwise, thrust_counter_clockwise} => {
+				out.push(7);
+				type_u16_serialize(&mut out, id);
+				type_bool_serialize(&mut out, thrust_forward);
+				type_bool_serialize(&mut out, thrust_backward);
+				type_bool_serialize(&mut out, thrust_clockwise);
+				type_bool_serialize(&mut out, thrust_counter_clockwise);
+			},
+			Self::RemovePlayer { id} => {
+				out.push(8);
 				type_u16_serialize(&mut out, id);
 			},
 		};
@@ -199,9 +226,36 @@ impl ToClientMsg {
 				Ok(ToClientMsg::MovePart { id, x, y, rotation_n, rotation_i})
 			},
 			4 => {
+				let id; let owning_player; let thrust_mode;
+				id = type_u16_deserialize(&buf, index)?;
+				owning_player = {if buf[*index] > 0 {*index += 1; let tmp; tmp = type_u16_deserialize(&buf, index)?; Some(tmp)} else {*index += 1; None}};
+				thrust_mode = type_u8_deserialize(&buf, index)?;
+				Ok(ToClientMsg::UpdatePartMeta { id, owning_player, thrust_mode})
+			},
+			5 => {
 				let id;
 				id = type_u16_deserialize(&buf, index)?;
 				Ok(ToClientMsg::RemovePart { id})
+			},
+			6 => {
+				let id; let name;
+				id = type_u16_deserialize(&buf, index)?;
+				name = type_string_deserialize(&buf, index)?;
+				Ok(ToClientMsg::AddPlayer { id, name})
+			},
+			7 => {
+				let id; let thrust_forward; let thrust_backward; let thrust_clockwise; let thrust_counter_clockwise;
+				id = type_u16_deserialize(&buf, index)?;
+				thrust_forward = type_bool_deserialize(&buf, index)?;
+				thrust_backward = type_bool_deserialize(&buf, index)?;
+				thrust_clockwise = type_bool_deserialize(&buf, index)?;
+				thrust_counter_clockwise = type_bool_deserialize(&buf, index)?;
+				Ok(ToClientMsg::UpdatePlayer { id, thrust_forward, thrust_backward, thrust_clockwise, thrust_counter_clockwise})
+			},
+			8 => {
+				let id;
+				id = type_u16_deserialize(&buf, index)?;
+				Ok(ToClientMsg::RemovePlayer { id})
 			},
 			_ => Err(())
 		}
