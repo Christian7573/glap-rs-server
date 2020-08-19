@@ -53,7 +53,7 @@ fn type_bool_serialize(out: &mut Vec<u8>, boolean: &bool) { out.push(if *boolean
 fn type_bool_deserialize(buf: &[u8], index: &mut usize) -> Result<bool, ()> {
     let i = *index;
     *index += 1;
-    buf.get(i).map(|val| *val > 1).ok_or(())
+    buf.get(i).map(|val| *val > 0).ok_or(())
 }
 
 #[derive(Copy, Clone)] pub enum PartKind {
@@ -128,7 +128,7 @@ pub enum ToClientMsg {
 	UpdatePartMeta { id: u16, owning_player: Option<u16>, thrust_mode: u8, },
 	RemovePart { id: u16, },
 	AddPlayer { id: u16, name: String, },
-	UpdatePlayer { id: u16, thrust_forward: bool, thrust_backward: bool, thrust_clockwise: bool, thrust_counter_clockwise: bool, },
+	UpdatePlayerMeta { id: u16, thrust_forward: bool, thrust_backward: bool, thrust_clockwise: bool, thrust_counter_clockwise: bool, },
 	RemovePlayer { id: u16, },
 }
 impl ToClientMsg {
@@ -176,7 +176,7 @@ impl ToClientMsg {
 				type_u16_serialize(&mut out, id);
 				type_string_serialize(&mut out, name);
 			},
-			Self::UpdatePlayer { id, thrust_forward, thrust_backward, thrust_clockwise, thrust_counter_clockwise} => {
+			Self::UpdatePlayerMeta { id, thrust_forward, thrust_backward, thrust_clockwise, thrust_counter_clockwise} => {
 				out.push(7);
 				type_u16_serialize(&mut out, id);
 				type_bool_serialize(&mut out, thrust_forward);
@@ -250,7 +250,7 @@ impl ToClientMsg {
 				thrust_backward = type_bool_deserialize(&buf, index)?;
 				thrust_clockwise = type_bool_deserialize(&buf, index)?;
 				thrust_counter_clockwise = type_bool_deserialize(&buf, index)?;
-				Ok(ToClientMsg::UpdatePlayer { id, thrust_forward, thrust_backward, thrust_clockwise, thrust_counter_clockwise})
+				Ok(ToClientMsg::UpdatePlayerMeta { id, thrust_forward, thrust_backward, thrust_clockwise, thrust_counter_clockwise})
 			},
 			8 => {
 				let id;

@@ -53,5 +53,5 @@ fn type_bool_serialize(out: &mut Vec<u8>, boolean: &bool) { out.push(if *boolean
 fn type_bool_deserialize(buf: &[u8], index: &mut usize) -> Result<bool, ()> {
     let i = *index;
     *index += 1;
-    buf.get(i).map(|val| *val > 1).ok_or(())
+    buf.get(i).map(|val| *val > 0).ok_or(())
 }
