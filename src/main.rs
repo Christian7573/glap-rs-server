@@ -75,7 +75,7 @@ async fn main() {
             Simulate => {
                 for (id, session) in &mut event_source.sessions {
                     if let Session::Spawned(_, player) = session {
-                        
+                        player_parts.get(id).unwrap().thrust(&mut simulation.world, &mut player.fuel, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise);
                     }
                 }
                 simulation.simulate();
@@ -159,7 +159,7 @@ async fn main() {
             },
 
             SessionEvent(id, ThrusterUpdate { forward, backward, clockwise, counter_clockwise }) => {
-                let msg = codec::ToClientMsg::UpdatePlayer {
+                let msg = codec::ToClientMsg::UpdatePlayerMeta {
                     id, thrust_forward: forward, thrust_backward: backward, thrust_clockwise: clockwise, thrust_counter_clockwise: counter_clockwise
                 }.serialize();
                 for (_other_id, session) in &mut event_source.sessions {
