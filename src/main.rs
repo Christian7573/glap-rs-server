@@ -131,7 +131,7 @@ async fn main() {
                         }.serialize()));
                     }
                     //Send over all parts
-                    fn send_part(part: &Part, simulation: &crate::world::Simulation, socket: &mut MyWebSocket) {
+                    fn send_part(part: &Part, owning_player: &Option<u16>, simulation: &crate::world::Simulation, socket: &mut MyWebSocket) {
                         let id = part.body_id;
                         let body = simulation.world.get_rigid(MyHandle::Part(id)).unwrap();
                         let position = body.position();
@@ -141,16 +141,19 @@ async fn main() {
                             x: position.translation.x, y: position.translation.y,
                             rotation_n: position.rotation.re, rotation_i: position.rotation.im,
                         }.serialize()));
-                        for part in &part.attachments { send_part(part, simulation, socket); }
+                        socket.queue_send(Message::Binary(ToClientMsg::UpdatePartMeta{
+                            id, owning_player: *owning_player, thrust_mode: part.thrust_mode.into()
+                        }.serialize()));
+                        for part in &part.attachments { send_part(part, owning_player, simulation, socket); }
                     }
-                    for (id, part) in &free_parts { send_part(part, &mut simulation, &mut socket); };
-                    send_part(&core, &simulation, &mut socket);
+                    for (id, part) in &free_parts { send_part(part, &None, &mut simulation, &mut socket); };
+                    send_part(&core, &Some(id), &simulation, &mut socket);
                     for (other_id, other_core) in &player_parts {
                         socket.queue_send(async_tungstenite::tungstenite::Message::Binary(codec::ToClientMsg::AddPlayer{ id: *other_id, name: String::default() }.serialize()));
-                        send_part(other_core, &mut simulation, &mut socket);
+                        send_part(other_core, &Some(*other_id), &mut simulation, &mut socket);
                         if let Some(Session::Spawned(socket, _)) = event_source.sessions.get_mut(other_id) {
                             socket.queue_send(async_tungstenite::tungstenite::Message::Binary(add_player_msg.clone()));
-                            send_part(&core, &mut simulation, socket);
+                            send_part(&core, &Some(id), &mut simulation, socket);
                         }
                     }
                     

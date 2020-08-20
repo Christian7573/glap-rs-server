@@ -49,7 +49,7 @@ impl Simulation {
 
     fn celestial_gravity(&mut self) {
         fn do_gravity_for_part(part: &mut RigidBody<MyUnits>, celestial_bodies: &BTreeMap<u16, RigidBody<MyUnits>>) {
-            const GRAVITATION_CONSTANT: f32 = 5.0; //Lolrandom
+            const GRAVITATION_CONSTANT: f32 = 1.0; //Lolrandom
             for body in celestial_bodies.values() {
                 let distance: (f32, f32) = ((body.position().translation.x - part.position().translation.x),
                                             (body.position().translation.y - part.position().translation.y));
