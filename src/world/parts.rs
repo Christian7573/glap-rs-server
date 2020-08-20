@@ -1,5 +1,5 @@
 use nphysics2d::object::{RigidBody, Body, RigidBodyDesc, Collider, ColliderDesc, BodyPartHandle, BodyStatus};
-use nphysics2d::algebra::{Force2, ForceType};
+use nphysics2d::algebra::{Force2, ForceType, Inertia2};
 use nphysics2d::math::Isometry;
 use nalgebra::{Vector2, Point2};
 use ncollide2d::shape::{Cuboid, ShapeHandle};
@@ -34,10 +34,13 @@ impl Part {
         match self.kind {
             PartKind::Core => {
                 let body = bodies.get_rigid_mut(MyHandle::Part(self.body_id)).unwrap();
-                if forward || clockwise { body.apply_force_at_local_point(0, &Vector2::new(0.0,1.0), &Point2::new(-0.5,-0.5), ForceType::Force, true); }
-                if forward || counter_clockwise { body.apply_force_at_local_point(0, &Vector2::new(0.0,1.0), &Point2::new(0.5,-0.5), ForceType::Force, true); }
-                if backward || counter_clockwise { body.apply_force_at_local_point(0, &Vector2::new(-0.5,-1.0), &Point2::new(-0.5,0.5), ForceType::Force, true); }
-                if backward || clockwise { body.apply_force_at_local_point(0, &Vector2::new(0.0,-1.0), &Point2::new(0.5,0.5), ForceType::Force, true); }
+                let rotation_i = body.position().rotation.im;
+                let rotation_r = body.position().rotation.re;
+                let force = Vector2::new(-rotation_r, -rotation_i);
+                if forward || clockwise { body.apply_force_at_local_point(0, &force, &Point2::new(-0.5,-0.5), ForceType::Force, true); }
+                if forward || counter_clockwise { body.apply_force_at_local_point(0, &force, &Point2::new(0.5,-0.5), ForceType::Force, true); }
+                if backward || counter_clockwise { body.apply_force_at_local_point(0, &(force * -1.0), &Point2::new(-0.5,0.5), ForceType::Force, true); }
+                if backward || clockwise { body.apply_force_at_local_point(0, &(force * -1.0), &Point2::new(0.5,0.5), ForceType::Force, true); }
             },
             _ => {
                 if let Some(ThrustDetails{ fuel_cost, force }) = self.kind.thrust() {
@@ -64,7 +67,7 @@ impl PartKind {
     pub fn initialize(&self, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> u16 {
         match self {
             PartKind::Core | PartKind::Hub => {
-                let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).mass(1.0).build();
+                let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(Inertia2::new(1.0,1.0)).build();
                 let id = bodies.add_part(body);
                 let translation = if let PartKind::Hub = self { Vector2::new(0.0, 0.5) } else { Vector2::zero() };
                 let collider = ColliderDesc::new(part_static.unit_cuboid.clone())
