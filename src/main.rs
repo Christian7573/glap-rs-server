@@ -107,7 +107,7 @@ async fn main() {
             
             SessionEvent(id, ReadyToSpawn) => {
                 use world::MyHandle; use world::parts::Part; use codec::*; use async_tungstenite::tungstenite::Message; use session::MyWebSocket;
-                use nphysics2d::math::Isometry; use nalgebra::Vector2;
+                use nalgebra::Vector2; use nalgebra::geometry::{Isometry2, UnitComplex};
                 if let Session::AwaitingHandshake(mut socket) = event_source.sessions.remove(&id).unwrap() {
                     //Graduate session to being existant
                     let core = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
@@ -117,7 +117,7 @@ async fn main() {
                     //core_body.apply_force(0, &nphysics2d::algebra::Force2::torque(std::f32::consts::PI), nphysics2d::algebra::ForceType::VelocityChange, true);
                     let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                     let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
-                    core_body.set_position(Isometry::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), spawn_degrees - std::f32::consts::FRAC_PI_2));
+                    core_body.set_position(Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), spawn_degrees));
 
                     let add_player_msg = codec::ToClientMsg::AddPlayer { id, name: String::default() }.serialize();
 
