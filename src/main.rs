@@ -112,7 +112,9 @@ async fn main() {
                     //Graduate session to being existant
                     let core = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
                     let earth_position = *simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
-                    let core_body = simulation.world.get_rigid_mut(MyHandle::Part(core.body_id)).unwrap();                    
+                    let core_body = simulation.world.get_rigid_mut(MyHandle::Part(core.body_id)).unwrap();
+                    use nphysics2d::object::Body;
+                    core_body.apply_force(0, &nphysics2d::algebra::Force2::torque(std::f32::consts::PI), nphysics2d::algebra::ForceType::VelocityChange, true);
                     let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                     let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
                     core_body.set_position(Isometry::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), spawn_degrees - std::f32::consts::FRAC_PI_2));
