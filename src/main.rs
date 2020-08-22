@@ -2,9 +2,13 @@ use async_std::prelude::*;
 use std::net::SocketAddr;
 use async_std::net::TcpStream;
 use std::pin::Pin;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap};
 use std::task::Poll;
 use rand::Rng;
+use world::MyHandle;
+use world::parts::Part;
+use async_tungstenite::tungstenite::Message; use session::MyWebSocket;
+use nalgebra::Vector2; use nalgebra::geometry::{Isometry2, UnitComplex};
 
 pub mod world;
 pub mod codec;
@@ -12,18 +16,22 @@ pub mod session;
 
 use session::{Session, SessionEvent};
 
+const TICKS_PER_SECOND: u8 = 20;
+
 #[async_std::main]
 async fn main() {
     let server_port = if let Ok(port) = std::env::var("PORT") { port.parse::<u16>().unwrap_or(8081) } else { 8081 };
     let inbound = async_std::net::TcpListener::bind(SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED), server_port)).await.expect(&format!("Failed to bind to port {}", server_port));
     let sessions: BTreeMap<u16, Session> = BTreeMap::new();
     let mut next_session: u16 = 1;
-    
-    const TIMESTEP: f32 = 1.0/60.0;
+
+    const TIMESTEP: f32 = 1.0/(TICKS_PER_SECOND as f32);
     let ticker = async_std::stream::interval(std::time::Duration::from_secs_f32(TIMESTEP));
     let mut simulation = world::Simulation::new(TIMESTEP);
 
-    let mut free_parts: BTreeMap<u16, world::parts::Part> = BTreeMap::new();
+    let mut free_parts: BTreeMap<u16, FreePart> = BTreeMap::new();
+    const MAX_EARTH_CARGOS: u8 = 20; const TICKS_PER_EARTH_CARGO_SPAWN: u8 = TICKS_PER_SECOND * 4;
+    let mut earth_cargos: u8 = 0; let mut ticks_til_earth_cargo_spawn: u8 = TICKS_PER_EARTH_CARGO_SPAWN;
     let mut player_parts: BTreeMap<u16, world::parts::Part> = BTreeMap::new();
     let mut rand = rand::thread_rng();
 
@@ -73,6 +81,20 @@ async fn main() {
                 event_source.sessions.insert(id, Session::new(socket));
             },
             Simulate => {
+                if earth_cargos < MAX_EARTH_CARGOS {
+                    ticks_til_earth_cargo_spawn -= 1;
+                    if ticks_til_earth_cargo_spawn == 0 {
+                        ticks_til_earth_cargo_spawn = TICKS_PER_EARTH_CARGO_SPAWN;
+                        earth_cargos += 1;
+                        let earth_position = simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
+                        let part = world::parts::Part::new(world::parts::PartKind::Cargo, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+                        let body = simulation.world.get_rigid_mut(MyHandle::Part(part.body_id)).unwrap();
+                        let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
+                        let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
+                        body.set_position(Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), spawn_degrees));
+                        free_parts.insert(part.body_id, FreePart::EarthCargo(part));
+                    }
+                }
                 for (id, session) in &mut event_source.sessions {
                     if let Session::Spawned(_, player) = session {
                         player_parts.get(id).unwrap().thrust(&mut simulation.world, &mut player.fuel, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise);
@@ -106,14 +128,12 @@ async fn main() {
             },
             
             SessionEvent(id, ReadyToSpawn) => {
-                use world::MyHandle; use world::parts::Part; use codec::*; use async_tungstenite::tungstenite::Message; use session::MyWebSocket;
-                use nalgebra::Vector2; use nalgebra::geometry::{Isometry2, UnitComplex};
+                use codec::*; 
                 if let Session::AwaitingHandshake(mut socket) = event_source.sessions.remove(&id).unwrap() {
                     //Graduate session to being existant
                     let core = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
                     let earth_position = *simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
                     let core_body = simulation.world.get_rigid_mut(MyHandle::Part(core.body_id)).unwrap();
-                    use nphysics2d::object::Body;
                     //core_body.apply_force(0, &nphysics2d::algebra::Force2::torque(std::f32::consts::PI), nphysics2d::algebra::ForceType::VelocityChange, true);
                     let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                     let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
@@ -176,6 +196,28 @@ async fn main() {
         }
     }
     
+}
+
+enum FreePart {
+    Generic{ part: world::parts::Part, despawn_ticks: u16 },
+    EarthCargo(world::parts::Part),
+}
+impl std::ops::Deref for FreePart {
+    type Target = world::parts::Part;
+    fn deref(&self) -> &world::parts::Part {
+        match self {
+            FreePart::Generic{ part, despawn_ticks} => part,
+            FreePart::EarthCargo(part) => part
+        }
+    }
+}
+impl std::ops::DerefMut for FreePart {
+    fn deref_mut(&mut self) -> &mut world::parts::Part {
+        match self {
+            FreePart::Generic{ part, despawn_ticks} => part,
+            FreePart::EarthCargo(part) => part
+        }
+    }
 }
 
 async fn _race_all<O>(futures: Vec<&mut (dyn Future<Output = O> + Unpin)>) -> O {

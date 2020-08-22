@@ -8,10 +8,12 @@ use num_traits::identities::{Zero, One};
 
 pub struct PartStatic {
     unit_cuboid: ShapeHandle<MyUnits>,
+    cargo_cuboid: ShapeHandle<MyUnits>
 }
 impl Default for PartStatic {
     fn default() -> PartStatic { PartStatic {
-        unit_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.5)))
+        unit_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.5))),
+        cargo_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.2714, 0.3563)))
     } }
 }
 
@@ -73,7 +75,16 @@ impl PartKind {
                 colliders.insert(collider);
                 id
             },
-            PartKind::Cargo | PartKind::LandingThruster => todo!()
+            PartKind::Cargo => {
+                let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(Inertia2::new(2.0, 2.0)).build();
+                let id = bodies.add_part(body);
+                let collider = ColliderDesc::new(part_static.cargo_cuboid.clone())
+                    .translation(Vector2::new(0.0, 0.3563))
+                    .build(BodyPartHandle(MyHandle::Part(id), 0));
+                colliders.insert(collider);
+                id
+            },
+            PartKind::LandingThruster => todo!()
         }
     }
     fn thrust(&self) -> Option<ThrustDetails> {
