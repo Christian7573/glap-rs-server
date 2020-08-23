@@ -88,11 +88,21 @@ async fn main() {
                         earth_cargos += 1;
                         let earth_position = simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
                         let part = world::parts::Part::new(world::parts::PartKind::Cargo, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+                        let id = part.body_id;
                         let body = simulation.world.get_rigid_mut(MyHandle::Part(part.body_id)).unwrap();
                         let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                         let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
                         body.set_position(Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), spawn_degrees));
                         free_parts.insert(part.body_id, FreePart::EarthCargo(part));
+
+                        let add_msg = codec::ToClientMsg::AddPart { id, kind: world::parts::PartKind::Cargo }.serialize();
+                        let move_msg = codec::ToClientMsg::MovePart { id, x: body.position().translation.x, y: body.position().translation.y, rotation_i: body.position().rotation.im, rotation_n: body.position().rotation.re }.serialize();
+                        for (_id, session) in &mut event_source.sessions {
+                            if let Session::Spawned(socket, _) = session {
+                                socket.queue_send(Message::Binary(add_msg.clone()));
+                                socket.queue_send(Message::Binary(move_msg.clone()));
+                            }
+                        }
                     }
                 }
                 for (id, session) in &mut event_source.sessions {
