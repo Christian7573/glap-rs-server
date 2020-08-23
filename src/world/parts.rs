@@ -36,10 +36,10 @@ impl Part {
         match self.kind {
             PartKind::Core => {
                 let body = bodies.get_rigid_mut(MyHandle::Part(self.body_id)).unwrap();
-                if backward || counter_clockwise { body.apply_local_force_at_local_point(0, &Vector2::new(0.0,1.0), &Point2::new(-0.5,-0.5), ForceType::Force, true); }
-                if backward || clockwise { body.apply_local_force_at_local_point(0, &Vector2::new(0.0,1.0), &Point2::new(0.5,-0.5), ForceType::Force, true); }
-                if forward || clockwise { body.apply_local_force_at_local_point(0, &Vector2::new(0.0,-1.0), &Point2::new(-0.5,0.5), ForceType::Force, true); }
-                if forward || counter_clockwise { body.apply_local_force_at_local_point(0, &Vector2::new(0.0,-1.0), &Point2::new(0.5,0.5), ForceType::Force, true); }
+                if forward || counter_clockwise { body.apply_local_force_at_local_point(0, &Vector2::new(0.0,1.0), &Point2::new(-0.5,-0.5), ForceType::Force, true); }
+                if forward || clockwise { body.apply_local_force_at_local_point(0, &Vector2::new(0.0,1.0), &Point2::new(0.5,-0.5), ForceType::Force, true); }
+                if backward || clockwise { body.apply_local_force_at_local_point(0, &Vector2::new(0.0,-1.0), &Point2::new(-0.5,0.5), ForceType::Force, true); }
+                if backward || counter_clockwise { body.apply_local_force_at_local_point(0, &Vector2::new(0.0,-1.0), &Point2::new(0.5,0.5), ForceType::Force, true); }
             },
             _ => {
                 if let Some(ThrustDetails{ fuel_cost, force }) = self.kind.thrust() {
