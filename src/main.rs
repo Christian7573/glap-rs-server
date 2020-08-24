@@ -152,6 +152,7 @@ async fn main() {
                     let add_player_msg = codec::ToClientMsg::AddPlayer { id, name: String::default() }.serialize();
 
                     socket.queue_send(Message::Binary(ToClientMsg::HandshakeAccepted{id, core_id: core.body_id}.serialize()));
+                    socket.queue_send(Message::Binary(add_player_msg.clone()));
                     //Send over celestial object locations
                     for planet in simulation.planets.celestial_objects().iter() {
                         let position = simulation.world.get_rigid(planet.body).unwrap().position().translation;
