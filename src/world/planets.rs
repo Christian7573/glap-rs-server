@@ -55,7 +55,7 @@ impl Planets {
             let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
             
             CelestialObject {
-                name: String::from("earth"),
+                name: String::from("moon"),
                 display_name: String::from("Moon"),
                 radius: RADIUS,
                 body: body_handle,
