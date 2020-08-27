@@ -65,7 +65,7 @@ async fn main() {
             }
             
             if let Poll::Ready(Ok((socket, _addr))) = unsafe { Pin::new_unchecked(&mut self.inbound.accept()).poll(ctx) } { return Poll::Ready(Some(Event::NewSession(socket))); }
-            self.should_simulate = true;
+            if !self.should_simulate { self.should_simulate = true; ctx.waker().wake_by_ref(); }
             Poll::Pending
         }
     }
