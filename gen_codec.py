@@ -170,6 +170,10 @@ PostSimulationTick = Message("PostSimulationTick")
 PostSimulationTick.fields.append(Field("your_fuel", TypeUShort))
 ToClientMsg.messages.append(PostSimulationTick)
 
+UpdateMyMeta = Message("UpdateMyMeta")
+UpdateMyMeta.fields.append(Field("max_fuel", TypeUShort))
+ToClientMsg.messages.append(UpdateMyMeta)
+
 rust_header = open("codec_header.rs", "r")
 rust_out = open("codec.rs", "w")
 rust_out.write(rust_header.read())

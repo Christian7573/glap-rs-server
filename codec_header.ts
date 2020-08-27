@@ -39,7 +39,7 @@ function type_ushort_serialize(out: number[], ushort: number) {
 }
 function type_ushort_deserialize(buf: Uint8Array, index: Box<number>): number {
     const arr = new Uint8Array([buf[index.v+1], buf[index.v]]);
-    const view = new Uint16Array(arr);
+    const view = new Uint16Array(arr.buffer);
     index.v += 2;
     return view[0];
 }

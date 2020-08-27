@@ -131,6 +131,7 @@ pub enum ToClientMsg {
 	UpdatePlayerMeta { id: u16, thrust_forward: bool, thrust_backward: bool, thrust_clockwise: bool, thrust_counter_clockwise: bool, },
 	RemovePlayer { id: u16, },
 	PostSimulationTick { your_fuel: u16, },
+	UpdateMyMeta { max_fuel: u16, },
 }
 impl ToClientMsg {
 	pub fn serialize(&self) -> Vec<u8> {
@@ -192,6 +193,10 @@ impl ToClientMsg {
 			Self::PostSimulationTick { your_fuel} => {
 				out.push(9);
 				type_u16_serialize(&mut out, your_fuel);
+			},
+			Self::UpdateMyMeta { max_fuel} => {
+				out.push(10);
+				type_u16_serialize(&mut out, max_fuel);
 			},
 		};
 		out
@@ -266,6 +271,11 @@ impl ToClientMsg {
 				let your_fuel;
 				your_fuel = type_u16_deserialize(&buf, index)?;
 				Ok(ToClientMsg::PostSimulationTick { your_fuel})
+			},
+			10 => {
+				let max_fuel;
+				max_fuel = type_u16_deserialize(&buf, index)?;
+				Ok(ToClientMsg::UpdateMyMeta { max_fuel})
 			},
 			_ => Err(())
 		}

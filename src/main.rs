@@ -203,7 +203,9 @@ async fn main() {
                     
                     //Graduate to spawned player
                     player_parts.insert(id, core);
-                    event_source.sessions.insert(id, Session::Spawned(socket, session::PlayerMeta::default()));
+                    let meta = session::PlayerMeta::default();
+                    socket.queue_send(Message::Binary(codec::ToClientMsg::UpdateMyMeta{ max_fuel: meta.max_fuel }.serialize()));
+                    event_source.sessions.insert(id, Session::Spawned(socket, meta));
                 } else { panic!() }
             },
 
