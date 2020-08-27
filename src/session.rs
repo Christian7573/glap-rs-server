@@ -53,7 +53,7 @@ pub struct PlayerMeta {
 impl Default for PlayerMeta {
     fn default() -> PlayerMeta { PlayerMeta {
         thrust_backwards: false, thrust_clockwise: false, thrust_counterclockwise: false, thrust_forwards: false,
-        fuel: 100, max_fuel: 100
+        fuel: 100 * crate::TICKS_PER_SECOND as u16, max_fuel: 100 * crate::TICKS_PER_SECOND as u16
     } }
 }
 
@@ -64,13 +64,15 @@ impl Session {
         unsafe { pinbox = Pin::new_unchecked(Box::new(future)); }
         Session::AcceptingWebSocket(pinbox)
     }
-    pub fn update_world(&mut self, move_messages: &Vec<PartMoveMessage>) {
+    pub fn update_world(&mut self, move_messages: &Vec<PartMoveMessage>, random_broadcast_messages: &Vec<Vec<u8>>) {
         if let Session::Spawned(socket, myself) = self {
             for msg in move_messages {
                 //Do some check here in the future, don't need to send messages about things that are really far away
                 socket.queue_send(Message::Binary(msg.msg.clone()));
             }
-            socket.queue_send(Message::Binary(ToClientMsg::PostSimulationTick{ your_fuel: myself.fuel }.serialize()))
+            socket.queue_send(Message::Binary(ToClientMsg::PostSimulationTick{ your_fuel: myself.fuel }.serialize()));
+            for msg in random_broadcast_messages { socket.queue_send(Message::Binary(msg.clone())); };
+            //println!("{}", myself.fuel);
         }
     }
 }
@@ -118,11 +120,13 @@ impl Stream for Session {
                         Some(Message::Binary(dat)) => {
                             match ToServerMsg::deserialize(dat.as_slice(), &mut 0) {
                                 Ok(ToServerMsg::SetThrusters { forward, backward, clockwise, counter_clockwise }) => {
-                                    player.thrust_forwards = forward;
-                                    player.thrust_backwards = backward;
-                                    player.thrust_clockwise = clockwise;
-                                    player.thrust_counterclockwise = counter_clockwise;
-                                    Poll::Ready(Some(SessionEvent::ThrusterUpdate { forward, backward, clockwise, counter_clockwise }))
+                                    if player.fuel > 0 {
+                                        player.thrust_forwards = forward;
+                                        player.thrust_backwards = backward;
+                                        player.thrust_clockwise = clockwise;
+                                        player.thrust_counterclockwise = counter_clockwise;
+                                        Poll::Ready(Some(SessionEvent::ThrusterUpdate { forward, backward, clockwise, counter_clockwise }))
+                                    } else { Poll::Pending }
                                 },
                                 Err(_) => { todo!() },
                                 Ok(ToServerMsg::Handshake { client, session }) => { todo!() }

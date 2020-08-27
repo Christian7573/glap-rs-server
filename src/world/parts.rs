@@ -40,7 +40,7 @@ impl Part {
     pub fn thrust(&self, bodies: &mut super::World, fuel: &mut u16, forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool) {
         match self.kind {
             PartKind::Core => {
-                if *fuel > 1 {
+                if *fuel > 0 {
                     let body = bodies.get_rigid_mut(MyHandle::Part(self.body_id)).unwrap();
                     let mut subtract_fuel = false;
                     if forward || counter_clockwise { subtract_fuel = true; body.apply_local_force_at_local_point(0, &Vector2::new(0.0,1.0), &Point2::new(-0.5,-0.5), ForceType::Force, true); }

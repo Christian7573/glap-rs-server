@@ -78,6 +78,10 @@ impl Simulation {
     }
 }
 
+pub enum SimulationEvent {
+    
+}
+
 pub struct World {
     celestial_objects: BTreeMap<u16, RigidBody<MyUnits>>,
     // free_parts: BTreeMap<u16, RigidBody<MyUnits>>,

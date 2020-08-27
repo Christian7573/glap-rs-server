@@ -16,7 +16,7 @@ pub mod session;
 
 use session::{Session, SessionEvent};
 
-const TICKS_PER_SECOND: u8 = 20;
+pub const TICKS_PER_SECOND: u8 = 20;
 
 #[async_std::main]
 async fn main() {
@@ -105,14 +105,23 @@ async fn main() {
                         }
                     }
                 }
+                let mut random_broadcast_messages: Vec<Vec<u8>> = Vec::new();
                 for (id, session) in &mut event_source.sessions {
                     if let Session::Spawned(_, player) = session {
-                        player_parts.get(id).unwrap().thrust(&mut simulation.world, &mut player.fuel, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise);
+                        if player.fuel > 0 {
+                            player_parts.get(id).unwrap().thrust(&mut simulation.world, &mut player.fuel, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise);
+                            if player.fuel < 1 {
+                                player.thrust_backwards = false; player.thrust_forwards = false; player.thrust_clockwise = false; player.thrust_counterclockwise = false;
+                                random_broadcast_messages.push(codec::ToClientMsg::UpdatePlayerMeta {
+                                   id:  *id, thrust_forward: player.thrust_forwards, thrust_backward: player.thrust_backwards, thrust_clockwise: player.thrust_clockwise, thrust_counter_clockwise: player.thrust_counterclockwise
+                                }.serialize());
+                            }
+                        }
                     }
                 }
                 simulation.simulate();
                 let move_messages = session::PartMoveMessage::new_all(simulation.world.get_parts());
-                for (id, session) in &mut event_source.sessions { session.update_world(&move_messages); }
+                for (id, session) in &mut event_source.sessions { session.update_world(&move_messages, &random_broadcast_messages); }
             },
             SessionDisconnect(id) => {
                 match event_source.sessions.remove(&id) {
