@@ -8,38 +8,47 @@ use num_traits::identities::{Zero, One};
 
 pub struct PartStatic {
     unit_cuboid: ShapeHandle<MyUnits>,
-    cargo_cuboid: ShapeHandle<MyUnits>
+    cargo_cuboid: ShapeHandle<MyUnits>,
+    attachment_collider_cuboid: ShapeHandle<MyUnits>,
 }
 impl Default for PartStatic {
     fn default() -> PartStatic { PartStatic {
         unit_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.5))),
-        cargo_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.2714, 0.3563)))
+        cargo_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.2714, 0.3563))),
+        attachment_collider_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.125)))
     } }
 }
 
 pub struct Part {
     pub kind: PartKind,
-    pub attachments: Vec<Part>,
+    pub attachments: Box<[Option<Part>; 4]>,
     pub body_id: u16,
-    pub thrust_mode: CompactThrustMode
+    pub thrust_mode: CompactThrustMode,
+    pub attachment_colliders: Option<[Option<u16>; 4]>
+
 }
 impl Part {
     pub fn new(kind: PartKind, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> Part {
         let body_id = kind.initialize(bodies, colliders, part_static);
         Part {
             kind, body_id,
-            attachments: Vec::with_capacity(5),
-            thrust_mode: CompactThrustMode::default()
+            attachments: Box::new([None, None, None, None]),
+            thrust_mode: CompactThrustMode::default(),
+            attachment_colliders: None
         }
     }
     pub fn thrust(&self, bodies: &mut super::World, fuel: &mut u16, forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool) {
         match self.kind {
             PartKind::Core => {
-                let body = bodies.get_rigid_mut(MyHandle::Part(self.body_id)).unwrap();
-                if forward || counter_clockwise { body.apply_local_force_at_local_point(0, &Vector2::new(0.0,1.0), &Point2::new(-0.5,-0.5), ForceType::Force, true); }
-                if forward || clockwise { body.apply_local_force_at_local_point(0, &Vector2::new(0.0,1.0), &Point2::new(0.5,-0.5), ForceType::Force, true); }
-                if backward || clockwise { body.apply_local_force_at_local_point(0, &Vector2::new(0.0,-1.0), &Point2::new(-0.5,0.5), ForceType::Force, true); }
-                if backward || counter_clockwise { body.apply_local_force_at_local_point(0, &Vector2::new(0.0,-1.0), &Point2::new(0.5,0.5), ForceType::Force, true); }
+                if *fuel > 1 {
+                    let body = bodies.get_rigid_mut(MyHandle::Part(self.body_id)).unwrap();
+                    let mut subtract_fuel = false;
+                    if forward || counter_clockwise { subtract_fuel = true; body.apply_local_force_at_local_point(0, &Vector2::new(0.0,1.0), &Point2::new(-0.5,-0.5), ForceType::Force, true); }
+                    if forward || clockwise { subtract_fuel = true; body.apply_local_force_at_local_point(0, &Vector2::new(0.0,1.0), &Point2::new(0.5,-0.5), ForceType::Force, true); }
+                    if backward || clockwise { subtract_fuel = true; body.apply_local_force_at_local_point(0, &Vector2::new(0.0,-1.0), &Point2::new(-0.5,0.5), ForceType::Force, true); }
+                    if backward || counter_clockwise { subtract_fuel = true; body.apply_local_force_at_local_point(0, &Vector2::new(0.0,-1.0), &Point2::new(0.5,0.5), ForceType::Force, true); }
+                    if subtract_fuel { *fuel -= 1; };
+                }
             },
             _ => {
                 if let Some(ThrustDetails{ fuel_cost, force }) = self.kind.thrust() {
@@ -58,6 +67,12 @@ impl Part {
                 }
             }
         }
+    }
+    pub fn enable_attachment_colliders() {
+        
+    }
+    pub fn disable_attachment_colliders() {
+        
     }
 }
 

@@ -70,6 +70,7 @@ impl Session {
                 //Do some check here in the future, don't need to send messages about things that are really far away
                 socket.queue_send(Message::Binary(msg.msg.clone()));
             }
+            socket.queue_send(Message::Binary(ToClientMsg::PostSimulationTick{ your_fuel: myself.fuel }.serialize()))
         }
     }
 }

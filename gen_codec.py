@@ -166,6 +166,10 @@ RemovePlayer = Message("RemovePlayer")
 RemovePlayer.fields.append(Field("id", TypeUShort))
 ToClientMsg.messages.append(RemovePlayer)
 
+PostSimulationTick = Message("PostSimulationTick")
+PostSimulationTick.fields.append(Field("your_fuel", TypeUShort))
+ToClientMsg.messages.append(PostSimulationTick)
+
 rust_header = open("codec_header.rs", "r")
 rust_out = open("codec.rs", "w")
 rust_out.write(rust_header.read())

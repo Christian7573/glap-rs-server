@@ -130,6 +130,7 @@ pub enum ToClientMsg {
 	AddPlayer { id: u16, name: String, },
 	UpdatePlayerMeta { id: u16, thrust_forward: bool, thrust_backward: bool, thrust_clockwise: bool, thrust_counter_clockwise: bool, },
 	RemovePlayer { id: u16, },
+	PostSimulationTick { your_fuel: u16, },
 }
 impl ToClientMsg {
 	pub fn serialize(&self) -> Vec<u8> {
@@ -187,6 +188,10 @@ impl ToClientMsg {
 			Self::RemovePlayer { id} => {
 				out.push(8);
 				type_u16_serialize(&mut out, id);
+			},
+			Self::PostSimulationTick { your_fuel} => {
+				out.push(9);
+				type_u16_serialize(&mut out, your_fuel);
 			},
 		};
 		out
@@ -256,6 +261,11 @@ impl ToClientMsg {
 				let id;
 				id = type_u16_deserialize(&buf, index)?;
 				Ok(ToClientMsg::RemovePlayer { id})
+			},
+			9 => {
+				let your_fuel;
+				your_fuel = type_u16_deserialize(&buf, index)?;
+				Ok(ToClientMsg::PostSimulationTick { your_fuel})
 			},
 			_ => Err(())
 		}

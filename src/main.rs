@@ -121,7 +121,9 @@ async fn main() {
                         fn nuke_part(part: &world::parts::Part, simulation: &mut world::Simulation, nuke_messages: &mut Vec<Vec<u8>>) {
                             simulation.world.remove_part(world::MyHandle::Part(part.body_id));
                             nuke_messages.push(codec::ToClientMsg::RemovePart{id: part.body_id}.serialize());
-                            for part in &part.attachments { nuke_part(part, simulation, nuke_messages); }
+                            for part in part.attachments.iter() {
+                                if let Some(part) = part { nuke_part(part, simulation, nuke_messages); }
+                            }
                         }
                         nuke_messages.push(codec::ToClientMsg::RemovePlayer{ id }.serialize());
                         if let Some(part) = player_parts.remove(&id) {
@@ -175,7 +177,9 @@ async fn main() {
                         socket.queue_send(Message::Binary(ToClientMsg::UpdatePartMeta{
                             id, owning_player: *owning_player, thrust_mode: part.thrust_mode.into()
                         }.serialize()));
-                        for part in &part.attachments { send_part(part, owning_player, simulation, socket); }
+                        for part in part.attachments.iter() {
+                            if let Some(part) = part { send_part(part, owning_player, simulation, socket); }
+                        }
                     }
                     for (id, part) in &free_parts { send_part(part, &None, &mut simulation, &mut socket); };
                     send_part(&core, &Some(id), &simulation, &mut socket);
