@@ -79,14 +79,14 @@ impl Simulation {
     pub fn equip_mouse_dragging(&mut self, part_id: u16) -> DefaultJointConstraintHandle {
         let body = self.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
         const INERTIA_BOI: f32 = 0.00000001;
-        body.set_local_inertia(Inertia2::new(INERTIA_BOI, INERTIA_BOI));
+        body.set_local_inertia(Inertia2::new(0.00000001, body.augmented_mass().angular));
         let space = body.position().translation;
         let constraint = MouseConstraint::new(
             BodyPartHandle(MyHandle::Part(part_id), 0),
             BodyPartHandle(MyHandle::ReferencePoint, 0),
             Point::new(0.0,0.0),
             Point::new(space.x, space.y),
-            1000000.0
+            1000.0
         );
         self.joints.insert(constraint)
     }
