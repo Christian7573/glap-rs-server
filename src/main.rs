@@ -158,7 +158,8 @@ async fn main() {
                 use codec::*; 
                 if let Session::AwaitingHandshake(mut socket) = event_source.sessions.remove(&id).unwrap() {
                     //Graduate session to being existant
-                    let core = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+                    let mut core = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+                    core.enable_attachment_colliders(&simulation.part_static, &mut simulation.colliders);
                     let earth_position = *simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
                     let core_body = simulation.world.get_rigid_mut(MyHandle::Part(core.body_id)).unwrap();
                     //core_body.apply_force(0, &nphysics2d::algebra::Force2::torque(std::f32::consts::PI), nphysics2d::algebra::ForceType::VelocityChange, true);

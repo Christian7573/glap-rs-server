@@ -15,10 +15,10 @@ version = "0.8.0"
 features = ["async-std-runtime"]
 
 [dependencies]
-nphysics2d = "0.16.1"
-nalgebra = "0.21.1"
+nphysics2d = "0.17.0"
+nalgebra = "0.22.0"
 futures = "0.3.5"
 num-traits = "0.2.12"
-ncollide2d = "0.23.2"
+ncollide2d = "0.24.0"
 byte = "0.2.4"
 rand = "0.7.3"

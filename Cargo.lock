@@ -563,12 +563,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2f02823cf78b754822df5f7f268fb59822e7296276d3e069d8e8cb26a14bd10"
 
 [[package]]
-name = "libm"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7d73b3f436185384286bd8098d17ec07c9a7d2388a6599f824d8502b529702a"
-
-[[package]]
 name = "log"
 version = "0.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -600,9 +594,9 @@ checksum = "3728d817d99e5ac407411fa471ff9800a778d88a24685968b36824eaf4bee400"
 
 [[package]]
 name = "nalgebra"
-version = "0.21.1"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6b6147c3d50b4f3cdabfe2ecc94a0191fd3d6ad58aefd9664cf396285883486"
+checksum = "4a3f0b89b0a44cb7bb9b62c5e6fd485145ddc6bc14483ab005355e96029b3fbf"
 dependencies = [
  "approx",
  "generic-array 0.13.2",
@@ -618,9 +612,9 @@ dependencies = [
 
 [[package]]
 name = "ncollide2d"
-version = "0.23.2"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8ac5be202a88b303e05a289a86783fa618eb3d7730dda35641fd0db6693d0dc"
+checksum = "483657de63b2b9064e66165eaeb490b782086ac63b6858295a076b21c2fa5cf8"
 dependencies = [
  "approx",
  "bitflags",
@@ -637,9 +631,9 @@ dependencies = [
 
 [[package]]
 name = "nphysics2d"
-version = "0.16.1"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3037cfcf73f9f23863aada202826c09df7ba1da132ffab88f088fc2d224ed1e3"
+checksum = "ed5ab0f984e878ffc329366f23bdee9a9e1bb32eaf1c461d08fbe8798625efcd"
 dependencies = [
  "approx",
  "bitflags",
@@ -695,7 +689,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac267bcc07f48ee5f8935ab0d24f316fb722d7a1292e2913f0cc196b29ffd611"
 dependencies = [
  "autocfg",
- "libm",
 ]
 
 [[package]]
@@ -981,9 +974,9 @@ checksum = "2579985fda508104f7587689507983eadd6a6e84dd35d6d115361f530916fa0d"
 
 [[package]]
 name = "simba"
-version = "0.1.5"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb931b1367faadea6b1ab1c306a860ec17aaa5fa39f367d0c744e69d971a1fb2"
+checksum = "1585d831b5c904e42c4df7a4fcfa03e4b56a8cfa445aff0a04f4effe397ecac9"
 dependencies = [
  "approx",
  "num-complex",

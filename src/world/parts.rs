@@ -1,10 +1,11 @@
-use nphysics2d::object::{RigidBody, Body, RigidBodyDesc, Collider, ColliderDesc, BodyPartHandle, BodyStatus};
+use nphysics2d::object::{RigidBody, Body, RigidBodyDesc, Collider, ColliderDesc, BodyPartHandle, BodyStatus, DefaultColliderHandle};
 use nphysics2d::algebra::{Force2, ForceType, Inertia2};
 use nphysics2d::math::Isometry;
 use nalgebra::{Vector2, Point2};
 use ncollide2d::shape::{Cuboid, ShapeHandle};
 use super::{MyUnits, MyHandle};
 use num_traits::identities::{Zero, One};
+use ncollide2d::pipeline::object::CollisionGroups;
 
 pub struct PartStatic {
     unit_cuboid: ShapeHandle<MyUnits>,
@@ -15,16 +16,18 @@ impl Default for PartStatic {
     fn default() -> PartStatic { PartStatic {
         unit_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.5))),
         cargo_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.2714, 0.3563))),
-        attachment_collider_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.125)))
+        attachment_collider_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.2)))
     } }
 }
+
+pub const ATTACHMENT_COLLIDER_COLLISION_GROUP: [usize; 1] = [5];
 
 pub struct Part {
     pub kind: PartKind,
     pub attachments: Box<[Option<Part>; 4]>,
     pub body_id: u16,
     pub thrust_mode: CompactThrustMode,
-    pub attachment_colliders: Option<[Option<u16>; 4]>
+    pub attachment_colliders: Option<[Option<DefaultColliderHandle>; 4]>
 
 }
 impl Part {
@@ -68,8 +71,39 @@ impl Part {
             }
         }
     }
-    pub fn enable_attachment_colliders() {
-        
+
+    pub fn enable_attachment_colliders(&mut self, part_static: &PartStatic, collider_set: &mut super::MyColliderSet) {
+        if self.attachment_colliders.is_none() {
+            match self.kind {
+                PartKind::Core => {
+                    let colliders = [
+                        Some(collider_set.insert(ColliderDesc::new(part_static.attachment_collider_cuboid.clone())
+                            .position(Isometry::new(Vector2::new(0.0f32,0.5f32), 0f32))
+                            .collision_groups(CollisionGroups::empty().with_membership(&ATTACHMENT_COLLIDER_COLLISION_GROUP))
+                            .sensor(true)
+                            .build(BodyPartHandle(MyHandle::Part(self.body_id), 0)))),
+                        Some(collider_set.insert(ColliderDesc::new(part_static.attachment_collider_cuboid.clone())
+                            .position(Isometry::new(Vector2::new(0.5f32,0f32), -std::f32::consts::FRAC_PI_2))
+                            .sensor(true)
+                            .collision_groups(CollisionGroups::empty().with_membership(&ATTACHMENT_COLLIDER_COLLISION_GROUP))
+                            .sensor(true)
+                            .build(BodyPartHandle(MyHandle::Part(self.body_id), 0)))),
+                        Some(collider_set.insert(ColliderDesc::new(part_static.attachment_collider_cuboid.clone())
+                            .position(Isometry::new(Vector2::new(0.0f32,-0.5f32), -std::f32::consts::PI))
+                            .collision_groups(CollisionGroups::empty().with_membership(&ATTACHMENT_COLLIDER_COLLISION_GROUP))
+                            .sensor(true)
+                            .build(BodyPartHandle(MyHandle::Part(self.body_id), 0)))),
+                        Some(collider_set.insert(ColliderDesc::new(part_static.attachment_collider_cuboid.clone())
+                            .position(Isometry::new(Vector2::new(-0.5f32,0f32), -std::f32::consts::PI - std::f32::consts::FRAC_PI_2))
+                            .collision_groups(CollisionGroups::empty().with_membership(&ATTACHMENT_COLLIDER_COLLISION_GROUP))
+                            .sensor(true)
+                            .build(BodyPartHandle(MyHandle::Part(self.body_id), 0))))
+                    ];
+                    self.attachment_colliders = Some(colliders);
+                },
+                _ => todo!()
+            }
+        } else { println!("Eanble attachment colliders called twice"); }
     }
     pub fn disable_attachment_colliders() {
         
