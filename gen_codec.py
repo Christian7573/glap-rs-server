@@ -110,6 +110,19 @@ SetThrusters.fields.append(Field("clockwise", TypeBoolean))
 SetThrusters.fields.append(Field("counter_clockwise", TypeBoolean))
 ToServerMsg.messages.append(SetThrusters)
 
+CommitGrab = Message("CommitGrab")
+CommitGrab.fields.append(Field("x", TypeFloat))
+CommitGrab.fields.append(Field("y", TypeFloat))
+ToServerMsg.messages.append(CommitGrab)
+
+MoveGrab = Message("MoveGrab")
+MoveGrab.fields.append(Field("x", TypeFloat))
+MoveGrab.fields.append(Field("y", TypeFloat))
+ToServerMsg.messages.append(MoveGrab)
+
+ReleaseGrab = Message("ReleaseGrab")
+ToServerMsg.messages.append(ReleaseGrab)
+
 ToClientMsg = MessageCategory("ToClientMsg")
 categories.append(ToClientMsg)
 

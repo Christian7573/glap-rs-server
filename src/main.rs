@@ -117,6 +117,10 @@ async fn main() {
                                 }.serialize());
                             }
                         }
+                        if let Some((_part_id, constraint, x, y)) = player.grabbed_part {
+                            let position = simulation.world.get_rigid(MyHandle::Part(player_parts.get(&id).unwrap().body_id)).unwrap().position().translation;
+                            simulation.move_mouse_constraint(constraint, x + position.x, y + position.y);
+                        }
                     }
                 }
                 simulation.simulate();
@@ -216,6 +220,39 @@ async fn main() {
                 for (_other_id, session) in &mut event_source.sessions {
                     if let Session::Spawned(socket, _) = session {
                         socket.queue_send(async_tungstenite::tungstenite::Message::Binary(msg.clone()));
+                    }
+                }
+            },
+
+            SessionEvent(id, CommitGrab{ x, y }) => {
+                if let Some(Session::Spawned(socket, player_meta)) = event_source.sessions.get_mut(&id) {
+                    if player_meta.grabbed_part.is_none() {
+                        let core_location = simulation.world.get_rigid(MyHandle::Part(player_parts.get(&id).unwrap().body_id)).unwrap().position().translation;
+                        let point = nphysics2d::math::Point::new(x + core_location.x, y + core_location.y);
+                        let collision_groups = ncollide2d::pipeline::object::CollisionGroups::new();
+                        let mut part_id: Option<u16> = None;
+                        for (_, collider) in simulation.geometrical_world().interferences_with_point(&simulation.colliders, &point, &collision_groups) {
+                            if let MyHandle::Part(id) = collider.body() { part_id = Some(id); break; }
+                        }
+                        if let Some(part_id) = part_id {
+                            if free_parts.contains_key(&part_id) { player_meta.grabbed_part = Some((part_id, simulation.equip_mouse_constraint(part_id), x, y)); }
+                        }
+                    }
+                }
+            },
+            SessionEvent(id, MoveGrab{ x, y }) => {
+                if let Some(Session::Spawned(_socket, player_meta)) = event_source.sessions.get_mut(&id) {
+                    if let Some((part_id, constraint, _, _)) = player_meta.grabbed_part {
+                        //simulation.move_mouse_constraint(constraint, x, y);
+                        player_meta.grabbed_part = Some((part_id, constraint, x, y));
+                    }
+                }
+            },
+            SessionEvent(id, ReleaseGrab) => {
+                if let Some(Session::Spawned(_socket, player_meta)) = event_source.sessions.get_mut(&id) {
+                    if let Some((_part_id, constraint, _x, _y)) = player_meta.grabbed_part {
+                        simulation.release_constraint(constraint);
+                        player_meta.grabbed_part = None;
                     }
                 }
             }

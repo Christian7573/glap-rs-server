@@ -1,9 +1,11 @@
 use nalgebra::Vector2;
-use nphysics2d::object::{RigidBody, Body};
+use nphysics2d::object::{RigidBody, Body, BodyPartHandle};
 use std::collections::{BTreeMap, BTreeSet};
 use nphysics2d::force_generator::DefaultForceGeneratorSet;
 use num_traits::Pow;
 use nphysics2d::algebra::{Force2, ForceType};
+use nphysics2d::joint::{DefaultJointConstraintHandle, MouseConstraint, JointConstraint};
+use nphysics2d::math::Point;
 
 pub mod planets;
 pub mod parts;
@@ -29,21 +31,18 @@ pub struct Simulation {
 impl Simulation {
     pub fn new(step_time: f32) -> Simulation {
         let mut mechanics = MyMechanicalWorld::new(Vector2::new(0.0, 0.0));
-        let mut geometry: MyGeometricalWorld = MyGeometricalWorld::new();
+        mechanics.set_timestep(step_time);
+        let geometry: MyGeometricalWorld = MyGeometricalWorld::new();
         let mut colliders: MyColliderSet = MyColliderSet::new();
         let mut bodies = World::default();
         let planets = planets::Planets::new(&mut colliders, &mut bodies);
-        let mut simulation = Simulation {
+        let simulation = Simulation {
             mechanics, geometry, colliders, world: bodies,
             joints: MyJointSet::new(),
             persistant_forces: MyForceSet::new(),
             planets,
             part_static: Default::default()
         };
-        simulation.mechanics.set_timestep(step_time);
-
-        //Add planets n stuff here
-
         simulation
     }
 
@@ -76,6 +75,28 @@ impl Simulation {
         self.celestial_gravity();
         self.mechanics.step(&mut self.geometry, &mut self.world, &mut self.colliders, &mut self.joints, &mut self.persistant_forces);
     }
+
+    pub fn equip_mouse_constraint(&mut self, part_id: u16) -> DefaultJointConstraintHandle {
+        let space = self.world.get_rigid(MyHandle::Part(part_id)).unwrap().position().translation;
+        let constraint = MouseConstraint::new(
+            BodyPartHandle(MyHandle::Part(part_id), 0),
+            BodyPartHandle(MyHandle::ReferencePoint, 0),
+            Point::new(0.0,0.0),
+            Point::new(space.x, space.y),
+            10.0
+        );
+        self.joints.insert(constraint)
+    }
+    pub fn move_mouse_constraint(&mut self, constraint_id: DefaultJointConstraintHandle, x: f32, y: f32) {
+        if let Some(Some(constraint)) = self.joints.get_mut(constraint_id).map(|c: &mut dyn JointConstraint<MyUnits, MyHandle>| c.downcast_mut::<MouseConstraint<MyUnits, MyHandle>>() ) {
+            constraint.set_anchor_2(Point::new(x, y));
+        }
+    }
+    pub fn release_constraint(&mut self, constraint_id: DefaultJointConstraintHandle) {
+        self.joints.remove(constraint_id);
+    }
+
+    pub fn geometrical_world(&self) -> &MyGeometricalWorld { &self.geometry }
 }
 
 pub enum SimulationEvent {
@@ -89,12 +110,14 @@ pub struct World {
     parts: BTreeMap<u16, RigidBody<MyUnits>>,
     removal_events: std::collections::VecDeque<MyHandle>,
     next_celestial_object: u16,
-    next_part: u16
+    next_part: u16,
+    reference_point_body: RigidBody<MyUnits>
 }
 #[derive(Copy, Eq, Debug)]
 pub enum MyHandle {
     CelestialObject(u16),
     Part(u16),
+    ReferencePoint
 }
 impl Clone for MyHandle {
     fn clone(&self) -> MyHandle { *self }
@@ -103,7 +126,8 @@ impl PartialEq for MyHandle {
     fn eq(&self, other: &Self) -> bool {
         match self {
             MyHandle::CelestialObject(id) => if let MyHandle::CelestialObject(other_id) = other { *id == *other_id } else { false },
-            MyHandle::Part(id) => if let MyHandle::Part(other_id) = other { *id == *other_id } else { false }
+            MyHandle::Part(id) => if let MyHandle::Part(other_id) = other { *id == *other_id } else { false },
+            MyHandle::ReferencePoint => if let MyHandle::ReferencePoint = other { true } else { false }
         }
     }
 }
@@ -111,7 +135,8 @@ impl std::hash::Hash for MyHandle {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         state.write_u16(match self {
             MyHandle::CelestialObject(id) => *id,
-            MyHandle::Part(id) => *id
+            MyHandle::Part(id) => *id,
+            MyHandle::ReferencePoint => 1
         });
     }
 }
@@ -134,12 +159,14 @@ impl World {
         match handle {
             MyHandle::CelestialObject(id) => self.celestial_objects.get(&id),
             MyHandle::Part(id) => self.parts.get(&id),
+            MyHandle::ReferencePoint => Some(&self.reference_point_body)
         }
     }
     pub fn get_rigid_mut(&mut self, handle: MyHandle) -> Option<&mut RigidBody<MyUnits>> {
         match handle {
             MyHandle::CelestialObject(id) => self.celestial_objects.get_mut(&id),
-            MyHandle::Part(id) => self.parts.get_mut(&id)
+            MyHandle::Part(id) => self.parts.get_mut(&id),
+            MyHandle::ReferencePoint => Some(&mut self.reference_point_body)
         }
     }
     pub fn get_parts(&self) -> &BTreeMap<u16, RigidBody<MyUnits>> { &self.parts }
@@ -156,6 +183,7 @@ impl Default for World {
         removal_events: std::collections::VecDeque::new(),
         next_celestial_object: 0,
         next_part: 0,
+        reference_point_body: nphysics2d::object::RigidBodyDesc::new().status(nphysics2d::object::BodyStatus::Static).build()
     } }
 }
 impl nphysics2d::object::BodySet<MyUnits> for World {
@@ -164,6 +192,7 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
         let ptr = match handle {
             MyHandle::CelestialObject(id) => self.celestial_objects.get(&id),
             MyHandle::Part(id) => self.parts.get(&id),
+            MyHandle::ReferencePoint => Some(&self.reference_point_body),
         };
         if let Some(ptr) = ptr { Some(ptr) }
         else { None }
@@ -172,6 +201,7 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
         let ptr = match handle {
             MyHandle::CelestialObject(id) => self.celestial_objects.get_mut(&id),
             MyHandle::Part(id) => self.parts.get_mut(&id),
+            MyHandle::ReferencePoint => Some(&mut self.reference_point_body),
         };
         if let Some(ptr) = ptr { Some(ptr) }
         else { None }
@@ -180,6 +210,7 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
         match handle {
             MyHandle::CelestialObject(id) => self.celestial_objects.contains_key(&id),
             MyHandle::Part(id) => self.parts.contains_key(&id),
+            MyHandle::ReferencePoint => true,
         }
     }
     fn foreach(&self, f: &mut dyn FnMut(Self::Handle, &dyn nphysics2d::object::Body<MyUnits>)) {
@@ -188,6 +219,7 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
         //     for (id, body) in bodies { f(MyHandle::Part(Some(*player), *id), body); }
         // }
         for (id, body) in &self.parts { f(MyHandle::Part(*id), body); }
+        f(MyHandle::ReferencePoint, &self.reference_point_body);
     }
     fn foreach_mut(&mut self, f: &mut dyn FnMut(Self::Handle, &mut dyn nphysics2d::object::Body<MyUnits>)) {
         for (id, body) in &mut self.celestial_objects { f(MyHandle::CelestialObject(*id), body); }
@@ -195,6 +227,7 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
         //     for (id, body) in bodies { f(MyHandle::Part(Some(*player), *id), body); }
         // }
         for (id, body) in &mut self.parts { f(MyHandle::Part(*id), body); }
+        f(MyHandle::ReferencePoint, &mut self.reference_point_body);
     }
     fn pop_removal_event(&mut self) -> Option<Self::Handle> {
         self.removal_events.pop_front()

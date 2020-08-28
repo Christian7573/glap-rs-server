@@ -77,6 +77,9 @@ impl PartKind {
 pub enum ToServerMsg {
 	Handshake { client: String, session: Option<String>, },
 	SetThrusters { forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool, },
+	CommitGrab { x: f32, y: f32, },
+	MoveGrab { x: f32, y: f32, },
+	ReleaseGrab,
 }
 impl ToServerMsg {
 	pub fn serialize(&self) -> Vec<u8> {
@@ -93,6 +96,19 @@ impl ToServerMsg {
 				type_bool_serialize(&mut out, backward);
 				type_bool_serialize(&mut out, clockwise);
 				type_bool_serialize(&mut out, counter_clockwise);
+			},
+			Self::CommitGrab { x, y} => {
+				out.push(2);
+				type_float_serialize(&mut out, x);
+				type_float_serialize(&mut out, y);
+			},
+			Self::MoveGrab { x, y} => {
+				out.push(3);
+				type_float_serialize(&mut out, x);
+				type_float_serialize(&mut out, y);
+			},
+			Self::ReleaseGrab { } => {
+				out.push(4);
 			},
 		};
 		out
@@ -114,6 +130,22 @@ impl ToServerMsg {
 				clockwise = type_bool_deserialize(&buf, index)?;
 				counter_clockwise = type_bool_deserialize(&buf, index)?;
 				Ok(ToServerMsg::SetThrusters { forward, backward, clockwise, counter_clockwise})
+			},
+			2 => {
+				let x; let y;
+				x = type_float_deserialize(&buf, index)?;
+				y = type_float_deserialize(&buf, index)?;
+				Ok(ToServerMsg::CommitGrab { x, y})
+			},
+			3 => {
+				let x; let y;
+				x = type_float_deserialize(&buf, index)?;
+				y = type_float_deserialize(&buf, index)?;
+				Ok(ToServerMsg::MoveGrab { x, y})
+			},
+			4 => {
+				
+				Ok(ToServerMsg::ReleaseGrab { })
 			},
 			_ => Err(())
 		}

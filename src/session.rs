@@ -39,7 +39,10 @@ pub enum Session {
 }
 pub enum SessionEvent {
     ReadyToSpawn,
-    ThrusterUpdate{ forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool }
+    ThrusterUpdate{ forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool },
+    CommitGrab { x: f32, y: f32 },
+    MoveGrab { x: f32, y: f32 },
+    ReleaseGrab
 }
 #[derive(Clone)]
 pub struct PlayerMeta {
@@ -48,12 +51,14 @@ pub struct PlayerMeta {
     pub thrust_clockwise: bool,
     pub thrust_counterclockwise: bool,
     pub fuel: u16,
-    pub max_fuel: u16
+    pub max_fuel: u16,
+    pub grabbed_part: Option<(u16, nphysics2d::joint::DefaultJointConstraintHandle, f32, f32)>
 }
 impl Default for PlayerMeta {
     fn default() -> PlayerMeta { PlayerMeta {
         thrust_backwards: false, thrust_clockwise: false, thrust_counterclockwise: false, thrust_forwards: false,
-        fuel: 100 * crate::TICKS_PER_SECOND as u16, max_fuel: 100 * crate::TICKS_PER_SECOND as u16
+        fuel: 100 * crate::TICKS_PER_SECOND as u16, max_fuel: 100 * crate::TICKS_PER_SECOND as u16,
+        grabbed_part: None
     } }
 }
 
@@ -128,8 +133,17 @@ impl Stream for Session {
                                         Poll::Ready(Some(SessionEvent::ThrusterUpdate { forward, backward, clockwise, counter_clockwise }))
                                     } else { Poll::Pending }
                                 },
-                                Err(_) => { todo!() },
-                                Ok(ToServerMsg::Handshake { client, session }) => { todo!() }
+                                Err(_) => Poll::Ready(None),
+                                Ok(ToServerMsg::Handshake { client, session }) => Poll::Ready(None),
+                                Ok(ToServerMsg::CommitGrab { x, y }) => Poll::Ready(Some(SessionEvent::CommitGrab{ x, y })),
+                                Ok(ToServerMsg::MoveGrab { x, y, }) => {
+                                    if let Some(_) = player.grabbed_part { Poll::Ready(Some(SessionEvent::MoveGrab{ x, y })) }
+                                    else { Poll::Pending }
+                                },
+                                Ok(ToServerMsg::ReleaseGrab) => {
+                                    if let Some(_) = player.grabbed_part { Poll::Ready(Some(SessionEvent::ReleaseGrab)) }
+                                    else { Poll::Pending }
+                                }
                             }
                         },
                         Some(Message::Ping(_)) => Poll::Pending,
