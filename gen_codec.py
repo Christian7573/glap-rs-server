@@ -164,6 +164,7 @@ ToClientMsg.messages.append(RemovePart)
 
 AddPlayer = Message("AddPlayer")
 AddPlayer.fields.append(Field("id", TypeUShort))
+AddPlayer.fields.append(Field("core_id", TypeUShort))
 AddPlayer.fields.append(Field("name", TypeString))
 ToClientMsg.messages.append(AddPlayer)
 
@@ -173,6 +174,7 @@ UpdatePlayerMeta.fields.append(Field("thrust_forward", TypeBoolean))
 UpdatePlayerMeta.fields.append(Field("thrust_backward", TypeBoolean))
 UpdatePlayerMeta.fields.append(Field("thrust_clockwise", TypeBoolean))
 UpdatePlayerMeta.fields.append(Field("thrust_counter_clockwise", TypeBoolean))
+UpdatePlayerMeta.fields.append(Field("grabed_part", OptionType(TypeUShort)))
 ToClientMsg.messages.append(UpdatePlayerMeta)
 
 RemovePlayer = Message("RemovePlayer")

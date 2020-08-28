@@ -39,7 +39,7 @@ pub enum Session {
 }
 pub enum SessionEvent {
     ReadyToSpawn,
-    ThrusterUpdate{ forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool },
+    ThrusterUpdate,
     CommitGrab { x: f32, y: f32 },
     MoveGrab { x: f32, y: f32 },
     ReleaseGrab
@@ -130,7 +130,7 @@ impl Stream for Session {
                                         player.thrust_backwards = backward;
                                         player.thrust_clockwise = clockwise;
                                         player.thrust_counterclockwise = counter_clockwise;
-                                        Poll::Ready(Some(SessionEvent::ThrusterUpdate { forward, backward, clockwise, counter_clockwise }))
+                                        Poll::Ready(Some(SessionEvent::ThrusterUpdate))
                                     } else { Poll::Pending }
                                 },
                                 Err(_) => Poll::Ready(None),

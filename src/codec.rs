@@ -159,8 +159,8 @@ pub enum ToClientMsg {
 	MovePart { id: u16, x: f32, y: f32, rotation_n: f32, rotation_i: f32, },
 	UpdatePartMeta { id: u16, owning_player: Option<u16>, thrust_mode: u8, },
 	RemovePart { id: u16, },
-	AddPlayer { id: u16, name: String, },
-	UpdatePlayerMeta { id: u16, thrust_forward: bool, thrust_backward: bool, thrust_clockwise: bool, thrust_counter_clockwise: bool, },
+	AddPlayer { id: u16, core_id: u16, name: String, },
+	UpdatePlayerMeta { id: u16, thrust_forward: bool, thrust_backward: bool, thrust_clockwise: bool, thrust_counter_clockwise: bool, grabed_part: Option<u16>, },
 	RemovePlayer { id: u16, },
 	PostSimulationTick { your_fuel: u16, },
 	UpdateMyMeta { max_fuel: u16, },
@@ -205,18 +205,20 @@ impl ToClientMsg {
 				out.push(5);
 				type_u16_serialize(&mut out, id);
 			},
-			Self::AddPlayer { id, name} => {
+			Self::AddPlayer { id, core_id, name} => {
 				out.push(6);
 				type_u16_serialize(&mut out, id);
+				type_u16_serialize(&mut out, core_id);
 				type_string_serialize(&mut out, name);
 			},
-			Self::UpdatePlayerMeta { id, thrust_forward, thrust_backward, thrust_clockwise, thrust_counter_clockwise} => {
+			Self::UpdatePlayerMeta { id, thrust_forward, thrust_backward, thrust_clockwise, thrust_counter_clockwise, grabed_part} => {
 				out.push(7);
 				type_u16_serialize(&mut out, id);
 				type_bool_serialize(&mut out, thrust_forward);
 				type_bool_serialize(&mut out, thrust_backward);
 				type_bool_serialize(&mut out, thrust_clockwise);
 				type_bool_serialize(&mut out, thrust_counter_clockwise);
+				if let Some(tmp) = grabed_part {out.push(1); type_u16_serialize(&mut out, tmp);} else {out.push(0);}
 			},
 			Self::RemovePlayer { id} => {
 				out.push(8);
@@ -280,19 +282,21 @@ impl ToClientMsg {
 				Ok(ToClientMsg::RemovePart { id})
 			},
 			6 => {
-				let id; let name;
+				let id; let core_id; let name;
 				id = type_u16_deserialize(&buf, index)?;
+				core_id = type_u16_deserialize(&buf, index)?;
 				name = type_string_deserialize(&buf, index)?;
-				Ok(ToClientMsg::AddPlayer { id, name})
+				Ok(ToClientMsg::AddPlayer { id, core_id, name})
 			},
 			7 => {
-				let id; let thrust_forward; let thrust_backward; let thrust_clockwise; let thrust_counter_clockwise;
+				let id; let thrust_forward; let thrust_backward; let thrust_clockwise; let thrust_counter_clockwise; let grabed_part;
 				id = type_u16_deserialize(&buf, index)?;
 				thrust_forward = type_bool_deserialize(&buf, index)?;
 				thrust_backward = type_bool_deserialize(&buf, index)?;
 				thrust_clockwise = type_bool_deserialize(&buf, index)?;
 				thrust_counter_clockwise = type_bool_deserialize(&buf, index)?;
-				Ok(ToClientMsg::UpdatePlayerMeta { id, thrust_forward, thrust_backward, thrust_clockwise, thrust_counter_clockwise})
+				grabed_part = {if buf[*index] > 0 {*index += 1; let tmp; tmp = type_u16_deserialize(&buf, index)?; Some(tmp)} else {*index += 1; None}};
+				Ok(ToClientMsg::UpdatePlayerMeta { id, thrust_forward, thrust_backward, thrust_clockwise, thrust_counter_clockwise, grabed_part})
 			},
 			8 => {
 				let id;

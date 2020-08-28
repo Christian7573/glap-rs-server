@@ -113,7 +113,9 @@ async fn main() {
                             if player.fuel < 1 {
                                 player.thrust_backwards = false; player.thrust_forwards = false; player.thrust_clockwise = false; player.thrust_counterclockwise = false;
                                 random_broadcast_messages.push(codec::ToClientMsg::UpdatePlayerMeta {
-                                   id:  *id, thrust_forward: player.thrust_forwards, thrust_backward: player.thrust_backwards, thrust_clockwise: player.thrust_clockwise, thrust_counter_clockwise: player.thrust_counterclockwise
+                                   id:  *id,
+                                   thrust_forward: player.thrust_forwards, thrust_backward: player.thrust_backwards, thrust_clockwise: player.thrust_clockwise, thrust_counter_clockwise: player.thrust_counterclockwise,
+                                   grabed_part: player.grabbed_part.map(|(id,_,_,_)| id)
                                 }.serialize());
                             }
                         }
@@ -164,7 +166,7 @@ async fn main() {
                     let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
                     core_body.set_position(Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), spawn_degrees));
 
-                    let add_player_msg = codec::ToClientMsg::AddPlayer { id, name: String::default() }.serialize();
+                    let add_player_msg = codec::ToClientMsg::AddPlayer { id, name: String::default(), core_id: core.body_id }.serialize();
 
                     socket.queue_send(Message::Binary(ToClientMsg::HandshakeAccepted{id, core_id: core.body_id}.serialize()));
                     socket.queue_send(Message::Binary(add_player_msg.clone()));
@@ -197,7 +199,7 @@ async fn main() {
                     for (id, part) in &free_parts { send_part(part, &None, &mut simulation, &mut socket); };
                     send_part(&core, &Some(id), &simulation, &mut socket);
                     for (other_id, other_core) in &player_parts {
-                        socket.queue_send(async_tungstenite::tungstenite::Message::Binary(codec::ToClientMsg::AddPlayer{ id: *other_id, name: String::default() }.serialize()));
+                        socket.queue_send(async_tungstenite::tungstenite::Message::Binary(codec::ToClientMsg::AddPlayer{ id: *other_id, name: String::default(), core_id: other_core.body_id }.serialize()));
                         send_part(other_core, &Some(*other_id), &mut simulation, &mut socket);
                         if let Some(Session::Spawned(socket, _)) = event_source.sessions.get_mut(other_id) {
                             socket.queue_send(async_tungstenite::tungstenite::Message::Binary(add_player_msg.clone()));
@@ -213,13 +215,17 @@ async fn main() {
                 } else { panic!() }
             },
 
-            SessionEvent(id, ThrusterUpdate { forward, backward, clockwise, counter_clockwise }) => {
-                let msg = codec::ToClientMsg::UpdatePlayerMeta {
-                    id, thrust_forward: forward, thrust_backward: backward, thrust_clockwise: clockwise, thrust_counter_clockwise: counter_clockwise
-                }.serialize();
-                for (_other_id, session) in &mut event_source.sessions {
-                    if let Session::Spawned(socket, _) = session {
-                        socket.queue_send(async_tungstenite::tungstenite::Message::Binary(msg.clone()));
+            SessionEvent(id, ThrusterUpdate) => {
+                if let Some(Session::Spawned(_socket, meta)) = event_source.sessions.get(&id) {
+                    let msg = codec::ToClientMsg::UpdatePlayerMeta {
+                        id,
+                        thrust_forward: meta.thrust_forwards, thrust_backward: meta.thrust_backwards, thrust_clockwise: meta.thrust_clockwise, thrust_counter_clockwise: meta.thrust_counterclockwise,
+                        grabed_part: meta.grabbed_part.map(|(id, _, _, _)| id)
+                    }.serialize();
+                    for (_other_id, session) in &mut event_source.sessions {
+                        if let Session::Spawned(socket, _) = session {
+                            socket.queue_send(async_tungstenite::tungstenite::Message::Binary(msg.clone()));
+                        }
                     }
                 }
             },
@@ -235,7 +241,23 @@ async fn main() {
                             if let MyHandle::Part(id) = collider.body() { part_id = Some(id); break; }
                         }
                         if let Some(part_id) = part_id {
-                            if free_parts.contains_key(&part_id) { player_meta.grabbed_part = Some((part_id, simulation.equip_mouse_constraint(part_id), x, y)); }
+                            let mut grabbed = false;
+                            if free_parts.contains_key(&part_id) {
+                                player_meta.grabbed_part = Some((part_id, simulation.equip_mouse_constraint(part_id), x, y));
+                                grabbed = true;
+                            } else {
+                                
+                            }
+                            if grabbed {
+                                let msg = codec::ToClientMsg::UpdatePlayerMeta {
+                                    id,
+                                    thrust_forward: player_meta.thrust_forwards, thrust_backward: player_meta.thrust_backwards, thrust_clockwise: player_meta.thrust_clockwise, thrust_counter_clockwise: player_meta.thrust_counterclockwise,
+                                    grabed_part: Some(part_id)
+                                }.serialize();
+                                for (_id, session) in &mut event_source.sessions {
+                                    if let Session::Spawned(socket, _) = session { socket.queue_send(Message::Binary(msg.clone())); }
+                                }
+                            };
                         }
                     }
                 }
@@ -253,12 +275,19 @@ async fn main() {
                     if let Some((_part_id, constraint, _x, _y)) = player_meta.grabbed_part {
                         simulation.release_constraint(constraint);
                         player_meta.grabbed_part = None;
+                        let msg = codec::ToClientMsg::UpdatePlayerMeta {
+                            id,
+                            thrust_forward: player_meta.thrust_forwards, thrust_backward: player_meta.thrust_backwards, thrust_clockwise: player_meta.thrust_clockwise, thrust_counter_clockwise: player_meta.thrust_counterclockwise,
+                            grabed_part: None
+                        }.serialize();
+                        for (_id, session) in &mut event_source.sessions {
+                            if let Session::Spawned(socket, _) = session { socket.queue_send(Message::Binary(msg.clone())); }
+                        }
                     }
                 }
             }
         }
     }
-    
 }
 
 enum FreePart {
