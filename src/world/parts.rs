@@ -6,6 +6,7 @@ use ncollide2d::shape::{Cuboid, ShapeHandle};
 use super::{MyUnits, MyHandle};
 use num_traits::identities::{Zero, One};
 use ncollide2d::pipeline::object::CollisionGroups;
+use nphysics2d::joint::DefaultJointConstraintHandle;
 
 pub struct PartStatic {
     unit_cuboid: ShapeHandle<MyUnits>,
@@ -24,10 +25,10 @@ pub const ATTACHMENT_COLLIDER_COLLISION_GROUP: [usize; 1] = [5];
 
 pub struct Part {
     pub kind: PartKind,
-    pub attachments: Box<[Option<Part>; 4]>,
+    pub attachments: Box<[Option<(Part, DefaultJointConstraintHandle)>; 4]>,
     pub body_id: u16,
     pub thrust_mode: CompactThrustMode,
-    pub attachment_colliders: Option<[Option<DefaultColliderHandle>; 4]>
+    pub attachment_colliders: Option<[Option<DefaultColliderHandle>; 4]>,
 
 }
 impl Part {

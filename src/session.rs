@@ -40,7 +40,7 @@ pub enum Session {
 pub enum SessionEvent {
     ReadyToSpawn,
     ThrusterUpdate,
-    CommitGrab { x: f32, y: f32 },
+    CommitGrab { part_id: u16, x: f32, y: f32 },
     MoveGrab { x: f32, y: f32 },
     ReleaseGrab
 }
@@ -135,7 +135,7 @@ impl Stream for Session {
                                 },
                                 Err(_) => Poll::Ready(None),
                                 Ok(ToServerMsg::Handshake { client, session }) => Poll::Ready(None),
-                                Ok(ToServerMsg::CommitGrab { x, y }) => Poll::Ready(Some(SessionEvent::CommitGrab{ x, y })),
+                                Ok(ToServerMsg::CommitGrab { grabbed_id, x, y }) => Poll::Ready(Some(SessionEvent::CommitGrab{ part_id: grabbed_id, x, y })),
                                 Ok(ToServerMsg::MoveGrab { x, y, }) => {
                                     if let Some(_) = player.grabbed_part { Poll::Ready(Some(SessionEvent::MoveGrab{ x, y })) }
                                     else { Poll::Pending }

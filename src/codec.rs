@@ -77,7 +77,7 @@ impl PartKind {
 pub enum ToServerMsg {
 	Handshake { client: String, session: Option<String>, },
 	SetThrusters { forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool, },
-	CommitGrab { x: f32, y: f32, },
+	CommitGrab { grabbed_id: u16, x: f32, y: f32, },
 	MoveGrab { x: f32, y: f32, },
 	ReleaseGrab,
 }
@@ -97,8 +97,9 @@ impl ToServerMsg {
 				type_bool_serialize(&mut out, clockwise);
 				type_bool_serialize(&mut out, counter_clockwise);
 			},
-			Self::CommitGrab { x, y} => {
+			Self::CommitGrab { grabbed_id, x, y} => {
 				out.push(2);
+				type_u16_serialize(&mut out, grabbed_id);
 				type_float_serialize(&mut out, x);
 				type_float_serialize(&mut out, y);
 			},
@@ -132,10 +133,11 @@ impl ToServerMsg {
 				Ok(ToServerMsg::SetThrusters { forward, backward, clockwise, counter_clockwise})
 			},
 			2 => {
-				let x; let y;
+				let grabbed_id; let x; let y;
+				grabbed_id = type_u16_deserialize(&buf, index)?;
 				x = type_float_deserialize(&buf, index)?;
 				y = type_float_deserialize(&buf, index)?;
-				Ok(ToServerMsg::CommitGrab { x, y})
+				Ok(ToServerMsg::CommitGrab { grabbed_id, x, y})
 			},
 			3 => {
 				let x; let y;

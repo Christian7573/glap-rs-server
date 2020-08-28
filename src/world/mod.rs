@@ -83,7 +83,7 @@ impl Simulation {
             BodyPartHandle(MyHandle::ReferencePoint, 0),
             Point::new(0.0,0.0),
             Point::new(space.x, space.y),
-            10.0
+            1000000.0
         );
         self.joints.insert(constraint)
     }

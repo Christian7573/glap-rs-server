@@ -111,6 +111,7 @@ SetThrusters.fields.append(Field("counter_clockwise", TypeBoolean))
 ToServerMsg.messages.append(SetThrusters)
 
 CommitGrab = Message("CommitGrab")
+CommitGrab.fields.append(Field("grabbed_id", TypeUShort))
 CommitGrab.fields.append(Field("x", TypeFloat))
 CommitGrab.fields.append(Field("y", TypeFloat))
 ToServerMsg.messages.append(CommitGrab)

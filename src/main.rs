@@ -9,6 +9,7 @@ use world::MyHandle;
 use world::parts::Part;
 use async_tungstenite::tungstenite::Message; use session::MyWebSocket;
 use nalgebra::Vector2; use nalgebra::geometry::{Isometry2, UnitComplex};
+use ncollide2d::pipeline::object::CollisionGroups;
 
 pub mod world;
 pub mod codec;
@@ -17,6 +18,7 @@ pub mod session;
 use session::{Session, SessionEvent};
 
 pub const TICKS_PER_SECOND: u8 = 20;
+pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 10;
 
 #[async_std::main]
 async fn main() {
@@ -137,7 +139,7 @@ async fn main() {
                             simulation.world.remove_part(world::MyHandle::Part(part.body_id));
                             nuke_messages.push(codec::ToClientMsg::RemovePart{id: part.body_id}.serialize());
                             for part in part.attachments.iter() {
-                                if let Some(part) = part { nuke_part(part, simulation, nuke_messages); }
+                                if let Some((part, _)) = part { nuke_part(part, simulation, nuke_messages); }
                             }
                         }
                         nuke_messages.push(codec::ToClientMsg::RemovePlayer{ id }.serialize());
@@ -194,7 +196,7 @@ async fn main() {
                             id, owning_player: *owning_player, thrust_mode: part.thrust_mode.into()
                         }.serialize()));
                         for part in part.attachments.iter() {
-                            if let Some(part) = part { send_part(part, owning_player, simulation, socket); }
+                            if let Some((part, _)) = part { send_part(part, owning_player, simulation, socket); }
                         }
                     }
                     for (id, part) in &free_parts { send_part(part, &None, &mut simulation, &mut socket); };
@@ -231,35 +233,29 @@ async fn main() {
                 }
             },
 
-            SessionEvent(id, CommitGrab{ x, y }) => {
+            SessionEvent(id, CommitGrab{ part_id, x, y }) => {
                 if let Some(Session::Spawned(socket, player_meta)) = event_source.sessions.get_mut(&id) {
                     if player_meta.grabbed_part.is_none() {
                         let core_location = simulation.world.get_rigid(MyHandle::Part(player_parts.get(&id).unwrap().body_id)).unwrap().position().translation;
                         let point = nphysics2d::math::Point::new(x + core_location.x, y + core_location.y);
-                        let collision_groups = ncollide2d::pipeline::object::CollisionGroups::new();
-                        let mut part_id: Option<u16> = None;
-                        for (_, collider) in simulation.geometrical_world().interferences_with_point(&simulation.colliders, &point, &collision_groups) {
-                            if let MyHandle::Part(id) = collider.body() { part_id = Some(id); break; }
-                        }
-                        if let Some(part_id) = part_id {
-                            let mut grabbed = false;
-                            if free_parts.contains_key(&part_id) {
+                        let mut grabbed = false;
+                        if let Some(free_part) = free_parts.get_mut(&part_id) {
+                            if let FreePart::Decaying(part, _) | FreePart::EarthCargo(part) = &free_part {
                                 player_meta.grabbed_part = Some((part_id, simulation.equip_mouse_constraint(part_id), x, y));
                                 grabbed = true;
-                            } else {
-                                
+                                free_part.become_grabbed(&mut earth_cargos);
                             }
-                            if grabbed {
-                                let msg = codec::ToClientMsg::UpdatePlayerMeta {
-                                    id,
-                                    thrust_forward: player_meta.thrust_forwards, thrust_backward: player_meta.thrust_backwards, thrust_clockwise: player_meta.thrust_clockwise, thrust_counter_clockwise: player_meta.thrust_counterclockwise,
-                                    grabed_part: Some(part_id)
-                                }.serialize();
-                                for (_id, session) in &mut event_source.sessions {
-                                    if let Session::Spawned(socket, _) = session { socket.queue_send(Message::Binary(msg.clone())); }
-                                }
-                            };
                         }
+                        if grabbed {
+                            let msg = codec::ToClientMsg::UpdatePlayerMeta {
+                                id,
+                                thrust_forward: player_meta.thrust_forwards, thrust_backward: player_meta.thrust_backwards, thrust_clockwise: player_meta.thrust_clockwise, thrust_counter_clockwise: player_meta.thrust_counterclockwise,
+                                grabed_part: Some(part_id)
+                            }.serialize();
+                            for (_id, session) in &mut event_source.sessions {
+                                if let Session::Spawned(socket, _) = session { socket.queue_send(Message::Binary(msg.clone())); }
+                            }
+                        };
                     }
                 }
             },
@@ -273,9 +269,30 @@ async fn main() {
             },
             SessionEvent(id, ReleaseGrab) => {
                 if let Some(Session::Spawned(_socket, player_meta)) = event_source.sessions.get_mut(&id) {
-                    if let Some((_part_id, constraint, _x, _y)) = player_meta.grabbed_part {
+                    if let Some((part_id, constraint, x, y)) = player_meta.grabbed_part {
                         simulation.release_constraint(constraint);
                         player_meta.grabbed_part = None;
+                        let mut attachment_msg: Option<Vec<u8>> = None;
+                        let core_location = simulation.world.get_rigid(MyHandle::Part(player_parts.get(&id).unwrap().body_id)).unwrap().position().translation;
+                        let point = nphysics2d::math::Point::new(x + core_location.x, y + core_location.y);
+                        for (_, collider) in simulation.geometrical_world().interferences_with_point(&simulation.colliders, &point, &CollisionGroups::empty().with_whitelist(&world::parts::ATTACHMENT_COLLIDER_COLLISION_GROUP)) {
+                            println!("Yes");
+                            fn recurse(part: &mut Part, looking_for_id: u16) -> Result<(),()> {
+                                if part.body_id == looking_for_id { Err(()) }
+                                else {
+                                    for slot in part.attachments.iter_mut() {
+                                        if let Some((part, _)) = slot { recurse(part, looking_for_id)?; }
+                                    }
+                                    Ok(())
+                                }
+                            }
+                            if let MyHandle::Part(id) = collider.body() {
+                                if recurse(player_parts.get_mut(&id).unwrap(), id).is_err() {
+                                    println!("Found the thing");
+                                };
+                            };
+                        };
+                        if attachment_msg.is_none() { free_parts.get_mut(&part_id).unwrap().become_decaying(); }
                         let msg = codec::ToClientMsg::UpdatePlayerMeta {
                             id,
                             thrust_forward: player_meta.thrust_forwards, thrust_backward: player_meta.thrust_backwards, thrust_clockwise: player_meta.thrust_clockwise, thrust_counter_clockwise: player_meta.thrust_counterclockwise,
@@ -283,6 +300,11 @@ async fn main() {
                         }.serialize();
                         for (_id, session) in &mut event_source.sessions {
                             if let Session::Spawned(socket, _) = session { socket.queue_send(Message::Binary(msg.clone())); }
+                        }
+                        if let Some(msg) = attachment_msg {
+                            for (_id, session) in &mut event_source.sessions {
+                                if let Session::Spawned(socket, _) = session { socket.queue_send(Message::Binary(msg.clone())); }
+                            }
                         }
                     }
                 }
@@ -292,24 +314,53 @@ async fn main() {
 }
 
 enum FreePart {
-    Generic{ part: world::parts::Part, despawn_ticks: u16 },
+    Decaying(world::parts::Part, u16),
     EarthCargo(world::parts::Part),
+    Grabbed(world::parts::Part),
+    PlaceholderLol,
 }
 impl std::ops::Deref for FreePart {
     type Target = world::parts::Part;
     fn deref(&self) -> &world::parts::Part {
         match self {
-            FreePart::Generic{ part, despawn_ticks} => part,
-            FreePart::EarthCargo(part) => part
+            FreePart::Decaying(part, _) => part,
+            FreePart::EarthCargo(part) => part,
+            FreePart::Grabbed(part) => part,
+            FreePart::PlaceholderLol => panic!("Attempted to get part from placeholder"),
         }
     }
 }
 impl std::ops::DerefMut for FreePart {
     fn deref_mut(&mut self) -> &mut world::parts::Part {
         match self {
-            FreePart::Generic{ part, despawn_ticks} => part,
-            FreePart::EarthCargo(part) => part
+            FreePart::Decaying(part, _) => part,
+            FreePart::EarthCargo(part) => part,
+            FreePart::Grabbed(part) => part,
+            FreePart::PlaceholderLol => panic!("Attempted to get part from placeholder"),
         }
+    }
+}
+impl FreePart {
+    pub fn become_grabbed(&mut self, earth_cargo_count: &mut u8) {
+        match &self {
+            FreePart::EarthCargo(_) => { *earth_cargo_count -= 1; },
+            _ => ()
+        }
+        let potato = match std::mem::replace(self, FreePart::PlaceholderLol) {
+            FreePart::PlaceholderLol => panic!("Become transform on Placerholderlol"),
+            FreePart::Decaying(part, _) => FreePart::Grabbed(part),
+            FreePart::EarthCargo(part) => FreePart::Grabbed(part),
+            FreePart::Grabbed(_) => panic!("Into FreePart::Grabbed called on Grabbed")
+        };
+        *self = potato;
+    }
+    pub fn become_decaying(&mut self) {
+        let potato = match std::mem::replace(self, FreePart::PlaceholderLol) {
+            FreePart::PlaceholderLol => panic!("Become transform on Placerholderlol"),
+            FreePart::Decaying(part, _) | FreePart::Grabbed(part) => FreePart::Decaying(part, DEFAULT_PART_DECAY_TICKS),
+            FreePart::EarthCargo(_) => panic!("EarthCargo into Decaying directly"),
+        };
+        *self = potato;
     }
 }
 
