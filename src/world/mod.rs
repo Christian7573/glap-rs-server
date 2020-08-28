@@ -3,7 +3,7 @@ use nphysics2d::object::{RigidBody, Body, BodyPartHandle};
 use std::collections::{BTreeMap, BTreeSet};
 use nphysics2d::force_generator::DefaultForceGeneratorSet;
 use num_traits::Pow;
-use nphysics2d::algebra::{Force2, ForceType};
+use nphysics2d::algebra::{Force2, ForceType, Inertia2};
 use nphysics2d::joint::{DefaultJointConstraintHandle, MouseConstraint, JointConstraint};
 use nphysics2d::math::Point;
 
@@ -76,8 +76,11 @@ impl Simulation {
         self.mechanics.step(&mut self.geometry, &mut self.world, &mut self.colliders, &mut self.joints, &mut self.persistant_forces);
     }
 
-    pub fn equip_mouse_constraint(&mut self, part_id: u16) -> DefaultJointConstraintHandle {
-        let space = self.world.get_rigid(MyHandle::Part(part_id)).unwrap().position().translation;
+    pub fn equip_mouse_dragging(&mut self, part_id: u16) -> DefaultJointConstraintHandle {
+        let body = self.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
+        const INERTIA_BOI: f32 = 0.00000001;
+        body.set_local_inertia(Inertia2::new(INERTIA_BOI, INERTIA_BOI));
+        let space = body.position().translation;
         let constraint = MouseConstraint::new(
             BodyPartHandle(MyHandle::Part(part_id), 0),
             BodyPartHandle(MyHandle::ReferencePoint, 0),

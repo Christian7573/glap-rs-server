@@ -17,7 +17,7 @@ impl Default for PartStatic {
     fn default() -> PartStatic { PartStatic {
         unit_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.5))),
         cargo_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.2714, 0.3563))),
-        attachment_collider_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.2)))
+        attachment_collider_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(1.0, 1.0)))
     } }
 }
 
@@ -75,29 +75,30 @@ impl Part {
 
     pub fn enable_attachment_colliders(&mut self, part_static: &PartStatic, collider_set: &mut super::MyColliderSet) {
         if self.attachment_colliders.is_none() {
+            //let collision_groups = CollisionGroups::empty().with_membership(&ATTACHMENT_COLLIDER_COLLISION_GROUP).with_whitelist(groups)
             match self.kind {
                 PartKind::Core => {
                     let colliders = [
                         Some(collider_set.insert(ColliderDesc::new(part_static.attachment_collider_cuboid.clone())
                             .position(Isometry::new(Vector2::new(0.0f32,0.5f32), 0f32))
                             .collision_groups(CollisionGroups::empty().with_membership(&ATTACHMENT_COLLIDER_COLLISION_GROUP))
-                            .sensor(true)
+                            //.sensor(true)
                             .build(BodyPartHandle(MyHandle::Part(self.body_id), 0)))),
                         Some(collider_set.insert(ColliderDesc::new(part_static.attachment_collider_cuboid.clone())
                             .position(Isometry::new(Vector2::new(0.5f32,0f32), -std::f32::consts::FRAC_PI_2))
-                            .sensor(true)
+                            //.sensor(true)
                             .collision_groups(CollisionGroups::empty().with_membership(&ATTACHMENT_COLLIDER_COLLISION_GROUP))
                             .sensor(true)
                             .build(BodyPartHandle(MyHandle::Part(self.body_id), 0)))),
                         Some(collider_set.insert(ColliderDesc::new(part_static.attachment_collider_cuboid.clone())
                             .position(Isometry::new(Vector2::new(0.0f32,-0.5f32), -std::f32::consts::PI))
                             .collision_groups(CollisionGroups::empty().with_membership(&ATTACHMENT_COLLIDER_COLLISION_GROUP))
-                            .sensor(true)
+                            //.sensor(true)
                             .build(BodyPartHandle(MyHandle::Part(self.body_id), 0)))),
                         Some(collider_set.insert(ColliderDesc::new(part_static.attachment_collider_cuboid.clone())
                             .position(Isometry::new(Vector2::new(-0.5f32,0f32), -std::f32::consts::PI - std::f32::consts::FRAC_PI_2))
                             .collision_groups(CollisionGroups::empty().with_membership(&ATTACHMENT_COLLIDER_COLLISION_GROUP))
-                            .sensor(true)
+                            //.sensor(true)
                             .build(BodyPartHandle(MyHandle::Part(self.body_id), 0))))
                     ];
                     self.attachment_colliders = Some(colliders);
@@ -116,7 +117,7 @@ impl PartKind {
     pub fn initialize(&self, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> u16 {
         match self {
             PartKind::Core | PartKind::Hub => {
-                let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(Inertia2::new(1.0,1.0)).build();
+                let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(self.inertia()).build();
                 let id = bodies.add_part(body);
                 let translation = if let PartKind::Hub = self { Vector2::new(0.0, 0.5) } else { Vector2::zero() };
                 let collider = ColliderDesc::new(part_static.unit_cuboid.clone())
@@ -126,7 +127,7 @@ impl PartKind {
                 id
             },
             PartKind::Cargo => {
-                let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(Inertia2::new(2.0, 2.0)).build();
+                let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(self.inertia()).build();
                 let id = bodies.add_part(body);
                 let collider = ColliderDesc::new(part_static.cargo_cuboid.clone())
                     .translation(Vector2::new(0.0, 0.3563))
@@ -143,6 +144,13 @@ impl PartKind {
             PartKind::Hub => None,
             PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 3, force: Force2::linear_at_point(Vector2::new(0.0, 5.0), &Point2::new(0.0, 0.8)) }),
             PartKind::Cargo => None
+        }
+    }
+    pub fn inertia(&self) -> Inertia2<MyUnits> {
+        match self {
+            PartKind::Core | PartKind::Hub => Inertia2::new(1.0,1.0),
+            PartKind::Cargo => Inertia2::new(2.0, 2.0),
+            _ => todo!()
         }
     }
     

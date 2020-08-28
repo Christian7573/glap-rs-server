@@ -241,7 +241,7 @@ async fn main() {
                         let mut grabbed = false;
                         if let Some(free_part) = free_parts.get_mut(&part_id) {
                             if let FreePart::Decaying(part, _) | FreePart::EarthCargo(part) = &free_part {
-                                player_meta.grabbed_part = Some((part_id, simulation.equip_mouse_constraint(part_id), x, y));
+                                player_meta.grabbed_part = Some((part_id, simulation.equip_mouse_dragging(part_id), x, y));
                                 grabbed = true;
                                 free_part.become_grabbed(&mut earth_cargos);
                             }
@@ -275,22 +275,28 @@ async fn main() {
                         let mut attachment_msg: Option<Vec<u8>> = None;
                         let core_location = simulation.world.get_rigid(MyHandle::Part(player_parts.get(&id).unwrap().body_id)).unwrap().position().translation;
                         let point = nphysics2d::math::Point::new(x + core_location.x, y + core_location.y);
-                        for (_, collider) in simulation.geometrical_world().interferences_with_point(&simulation.colliders, &point, &CollisionGroups::empty().with_whitelist(&world::parts::ATTACHMENT_COLLIDER_COLLISION_GROUP)) {
+                        //println!("{:?}", point);
+                        let mut grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
+                        grabbed_part_body.set_local_inertia(free_parts.get(&part_id).unwrap().kind.inertia());
+                        for (_, collider) in simulation.geometrical_world().interferences_with_point(&simulation.colliders, &point, & CollisionGroups::empty().with_membership(&world::parts::ATTACHMENT_COLLIDER_COLLISION_GROUP)) {
                             println!("Yes");
-                            fn recurse(part: &mut Part, looking_for_id: u16) -> Result<(),()> {
-                                if part.body_id == looking_for_id { Err(()) }
-                                else {
-                                    for slot in part.attachments.iter_mut() {
-                                        if let Some((part, _)) = slot { recurse(part, looking_for_id)?; }
+                            if collider.is_sensor() {
+                                println!("Sensor yes");
+                                fn recurse(part: &mut Part, looking_for_id: u16) -> Result<(),()> {
+                                    if part.body_id == looking_for_id { Err(()) }
+                                    else {
+                                        for slot in part.attachments.iter_mut() {
+                                            if let Some((part, _)) = slot { recurse(part, looking_for_id)?; }
+                                        }
+                                        Ok(())
                                     }
-                                    Ok(())
                                 }
-                            }
-                            if let MyHandle::Part(id) = collider.body() {
-                                if recurse(player_parts.get_mut(&id).unwrap(), id).is_err() {
-                                    println!("Found the thing");
+                                if let MyHandle::Part(id) = collider.body() {
+                                    if recurse(player_parts.get_mut(&id).unwrap(), id).is_err() {
+                                        println!("Found the thing");
+                                    };
                                 };
-                            };
+                            }
                         };
                         if attachment_msg.is_none() { free_parts.get_mut(&part_id).unwrap().become_decaying(); }
                         let msg = codec::ToClientMsg::UpdatePlayerMeta {
