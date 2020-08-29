@@ -89,8 +89,8 @@ impl PartKind {
             PartKind::Cargo => {
                 let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(self.inertia()).build();
                 let id = bodies.add_part(body);
-                let collider = ColliderDesc::new(part_static.cargo_cuboid.clone())
-                    .translation(Vector2::new(0.0, 0.3563))
+                let collider = ColliderDesc::new(part_static.unit_cuboid.clone())
+                    .translation(Vector2::new(0.0, 0.5))
                     .build(BodyPartHandle(MyHandle::Part(id), 0));
                 colliders.insert(collider);
                 id

@@ -244,6 +244,42 @@ async fn main() {
                                 grabbed = true;
                                 free_part.become_grabbed(&mut earth_cargos);
                             }
+                        } else {
+                            fn recurse(part: &mut Part, target_part: u16, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation) -> Result<(),Part> {
+                                for slot in part.attachments.iter_mut() {
+                                    if let Some((part, connection)) = slot {
+                                        if part.body_id == target_part {
+                                            fn recursive_detatch(part: &mut Part, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation) {
+                                                for slot in part.attachments.iter_mut() {
+                                                    if let Some((part, connection)) = slot {
+                                                        simulation.release_constraint(*connection);
+                                                        recursive_detatch(part, free_parts, simulation);
+                                                        if let Some((part, _)) = std::mem::replace(slot, None) {
+                                                            free_parts.insert(part.body_id, FreePart::Decaying(part, DEFAULT_PART_DECAY_TICKS));
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            recursive_detatch(part, free_parts, simulation);
+                                            simulation.release_constraint(*connection);
+                                            if let Some((part, _)) = std::mem::replace(slot, None) {
+                                                return Err(part);
+                                            }
+                                        }
+                                    }
+                                }
+                                for slot in part.attachments.iter_mut() {
+                                    if let Some((part, _)) = slot {
+                                        recurse(part, target_part, free_parts, simulation)?;
+                                    }
+                                }
+                                Ok(())
+                            }
+                            if let Err(part) = recurse(player_parts.get_mut(&id).unwrap(), part_id, &mut free_parts, &mut simulation) {
+                                player_meta.grabbed_part = Some((part_id, simulation.equip_mouse_dragging(part_id), x, y));
+                                grabbed = true;
+                                free_parts.insert(part_id, FreePart::Grabbed(part));
+                            }
                         }
                         if grabbed {
                             let msg = codec::ToClientMsg::UpdatePlayerMeta {
