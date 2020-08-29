@@ -28,7 +28,6 @@ pub struct Part {
     pub attachments: Box<[Option<(Part, DefaultJointConstraintHandle)>; 4]>,
     pub body_id: u16,
     pub thrust_mode: CompactThrustMode,
-    pub attachment_colliders: Option<[Option<DefaultColliderHandle>; 4]>,
 
 }
 impl Part {
@@ -38,7 +37,6 @@ impl Part {
             kind, body_id,
             attachments: Box::new([None, None, None, None]),
             thrust_mode: CompactThrustMode::default(),
-            attachment_colliders: None
         }
     }
     pub fn thrust(&self, bodies: &mut super::World, fuel: &mut u16, forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool) {
@@ -71,44 +69,6 @@ impl Part {
                 }
             }
         }
-    }
-
-    pub fn enable_attachment_colliders(&mut self, part_static: &PartStatic, collider_set: &mut super::MyColliderSet) {
-        if self.attachment_colliders.is_none() {
-            //let collision_groups = CollisionGroups::empty().with_membership(&ATTACHMENT_COLLIDER_COLLISION_GROUP).with_whitelist(groups)
-            match self.kind {
-                PartKind::Core => {
-                    let colliders = [
-                        Some(collider_set.insert(ColliderDesc::new(part_static.attachment_collider_cuboid.clone())
-                            .position(Isometry::new(Vector2::new(0.0f32,0.5f32), 0f32))
-                            .collision_groups(CollisionGroups::empty().with_membership(&ATTACHMENT_COLLIDER_COLLISION_GROUP))
-                            //.sensor(true)
-                            .build(BodyPartHandle(MyHandle::Part(self.body_id), 0)))),
-                        Some(collider_set.insert(ColliderDesc::new(part_static.attachment_collider_cuboid.clone())
-                            .position(Isometry::new(Vector2::new(0.5f32,0f32), -std::f32::consts::FRAC_PI_2))
-                            //.sensor(true)
-                            .collision_groups(CollisionGroups::empty().with_membership(&ATTACHMENT_COLLIDER_COLLISION_GROUP))
-                            .sensor(true)
-                            .build(BodyPartHandle(MyHandle::Part(self.body_id), 0)))),
-                        Some(collider_set.insert(ColliderDesc::new(part_static.attachment_collider_cuboid.clone())
-                            .position(Isometry::new(Vector2::new(0.0f32,-0.5f32), -std::f32::consts::PI))
-                            .collision_groups(CollisionGroups::empty().with_membership(&ATTACHMENT_COLLIDER_COLLISION_GROUP))
-                            //.sensor(true)
-                            .build(BodyPartHandle(MyHandle::Part(self.body_id), 0)))),
-                        Some(collider_set.insert(ColliderDesc::new(part_static.attachment_collider_cuboid.clone())
-                            .position(Isometry::new(Vector2::new(-0.5f32,0f32), -std::f32::consts::PI - std::f32::consts::FRAC_PI_2))
-                            .collision_groups(CollisionGroups::empty().with_membership(&ATTACHMENT_COLLIDER_COLLISION_GROUP))
-                            //.sensor(true)
-                            .build(BodyPartHandle(MyHandle::Part(self.body_id), 0))))
-                    ];
-                    self.attachment_colliders = Some(colliders);
-                },
-                _ => todo!()
-            }
-        } else { println!("Eanble attachment colliders called twice"); }
-    }
-    pub fn disable_attachment_colliders() {
-        
     }
 }
 
@@ -153,10 +113,53 @@ impl PartKind {
             _ => todo!()
         }
     }
-    
+    pub fn attachment_locations(&self) -> [Option<AttachmentPointDetails>; 4] {
+        match self {
+            PartKind::Core => [
+                Some(AttachmentPointDetails{ x: 0.0, y: 0.6, facing: AttachedPartFacing::Up }),
+                Some(AttachmentPointDetails{ x: 0.6, y: 0.0, facing: AttachedPartFacing::Right }),
+                Some(AttachmentPointDetails{ x: 0.0, y: -0.6, facing: AttachedPartFacing::Down }),
+                Some(AttachmentPointDetails{ x: -0.6, y: 0.0, facing: AttachedPartFacing::Left }),
+            ],
+            PartKind::Hub => [
+                Some(AttachmentPointDetails{ x: 0.0, y: 0.6, facing: AttachedPartFacing::Up }),
+                Some(AttachmentPointDetails{ x: 0.6, y: 0.0, facing: AttachedPartFacing::Right }),
+                None,
+                Some(AttachmentPointDetails{ x: -0.6, y: 0.0, facing: AttachedPartFacing::Left }),
+            ],
+            PartKind::Cargo | PartKind::LandingThruster => [ None, None, None, None ]
+        }
+    }
     // pub fn get_attachable_positions(&self) -> [(Isometry<super::MyUnits>, )] {
         
     // }
+}
+
+#[derive(Copy, Clone)]
+pub struct AttachmentPointDetails {
+    pub x: f32,
+    pub y: f32,
+    pub facing: AttachedPartFacing
+}
+#[derive(Copy, Clone)]
+pub enum AttachedPartFacing { Up, Right, Down, Left }
+impl AttachedPartFacing {
+    pub fn part_rotation_sin(&self) -> f32 {
+        match self {
+            AttachedPartFacing::Up => 0.0,
+            AttachedPartFacing::Right => -std::f32::consts::FRAC_PI_2,
+            AttachedPartFacing::Down => 0.0,
+            AttachedPartFacing::Left => std::f32::consts::PI,
+        }
+    }
+    pub fn part_rotation_cos(&self) -> f32 {
+        match self {
+            AttachedPartFacing::Right => 0.0,
+            AttachedPartFacing::Down => -std::f32::consts::FRAC_PI_2,
+            AttachedPartFacing::Left => 0.0,
+            AttachedPartFacing::Up => std::f32::consts::PI,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug)]

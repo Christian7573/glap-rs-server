@@ -161,7 +161,6 @@ async fn main() {
                 if let Session::AwaitingHandshake(mut socket) = event_source.sessions.remove(&id).unwrap() {
                     //Graduate session to being existant
                     let mut core = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
-                    core.enable_attachment_colliders(&simulation.part_static, &mut simulation.colliders);
                     let earth_position = *simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
                     let core_body = simulation.world.get_rigid_mut(MyHandle::Part(core.body_id)).unwrap();
                     //core_body.apply_force(0, &nphysics2d::algebra::Force2::torque(std::f32::consts::PI), nphysics2d::algebra::ForceType::VelocityChange, true);
@@ -274,31 +273,35 @@ async fn main() {
                         player_meta.grabbed_part = None;
                         let mut attachment_msg: Option<Vec<u8>> = None;
                         let core_location = simulation.world.get_rigid(MyHandle::Part(player_parts.get(&id).unwrap().body_id)).unwrap().position().translation;
-                        let point = nphysics2d::math::Point::new(x + core_location.x, y + core_location.y);
                         //println!("{:?}", point);
-                        let mut grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
+                        let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
                         grabbed_part_body.set_local_inertia(free_parts.get(&part_id).unwrap().kind.inertia());
-                        for (_, collider) in simulation.geometrical_world().interferences_with_point(&simulation.colliders, &point, & CollisionGroups::empty().with_membership(&world::parts::ATTACHMENT_COLLIDER_COLLISION_GROUP)) {
-                            println!("Yes");
-                            if collider.is_sensor() {
-                                println!("Sensor yes");
-                                fn recurse(part: &mut Part, looking_for_id: u16) -> Result<(),()> {
-                                    if part.body_id == looking_for_id { Err(()) }
-                                    else {
-                                        for slot in part.attachments.iter_mut() {
-                                            if let Some((part, _)) = slot { recurse(part, looking_for_id)?; }
-                                        }
-                                        Ok(())
+                        fn recurse<'a>(part: &'a mut Part, target_x: f32, target_y: f32, bodies: &world::World) -> Result<(), (&'a mut Part, usize, world::parts::AttachmentPointDetails)> {
+                            let attachments = part.kind.attachment_locations();
+                            let pos = bodies.get_rigid(MyHandle::Part(part.body_id)).unwrap().position().clone();
+                            for i in 0..part.attachments.len() {
+                                if part.attachments[i].is_none() {
+                                    if let Some(details) = &attachments[i] {
+                                        let mut rotated = rotate_vector(details.x, details.y, pos.rotation.im, pos.rotation.re);
+                                        rotated.0 += pos.translation.x;
+                                        rotated.1 += pos.translation.y;
+                                        if (rotated.0 - target_x).abs() <= 0.4 && (rotated.1 - target_y).abs() <= 0.4 { return Err((part, i, *details)); }
                                     }
                                 }
-                                if let MyHandle::Part(id) = collider.body() {
-                                    if recurse(player_parts.get_mut(&id).unwrap(), id).is_err() {
-                                        println!("Found the thing");
-                                    };
-                                };
                             }
-                        };
-                        if attachment_msg.is_none() { free_parts.get_mut(&part_id).unwrap().become_decaying(); }
+                            for subpart in part.attachments.iter_mut() {
+                                if let Some((part, _)) = subpart { recurse(part, target_x, target_y, bodies)? }
+                            }
+                            Ok(())
+                        }
+                        if let Err((part, slot_id, details)) = recurse(player_parts.get_mut(&id).unwrap(), x + core_location.x, y + core_location.y, &simulation.world) {
+                            let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
+                            grabbed_part_body.set_position(Isometry2::from_parts(nalgebra::Translation2::new(details.x + core_location.x, details.y + core_location.y), UnitComplex::from_cos_sin_unchecked(details.facing.part_rotation_cos(), details.facing.part_rotation_sin())));
+                            part.attachments[slot_id] = Some((free_parts.remove(&part_id).unwrap().extract(), simulation.equip_part_constraint(part.body_id, part_id, details.x, details.y)));
+                            attachment_msg = Some(codec::ToClientMsg::UpdatePartMeta { id: part_id, owning_player: Some(id), thrust_mode: 0}.serialize());
+                        } else {
+                            free_parts.get_mut(&part_id).unwrap().become_decaying();
+                        }
                         let msg = codec::ToClientMsg::UpdatePlayerMeta {
                             id,
                             thrust_forward: player_meta.thrust_forwards, thrust_backward: player_meta.thrust_backwards, thrust_clockwise: player_meta.thrust_clockwise, thrust_counter_clockwise: player_meta.thrust_counterclockwise,
@@ -368,6 +371,14 @@ impl FreePart {
         };
         *self = potato;
     }
+    pub fn extract(self) -> Part {
+        match self {
+            FreePart::PlaceholderLol => panic!("Tried to extract placeholderlol"),
+            FreePart::Decaying(part, _) => part,
+            FreePart::EarthCargo(part) => part,
+            FreePart::Grabbed(part) => part,
+        }
+    }
 }
 
 async fn _race_all<O>(futures: Vec<&mut (dyn Future<Output = O> + Unpin)>) -> O {
@@ -382,4 +393,9 @@ async fn _race_all<O>(futures: Vec<&mut (dyn Future<Output = O> + Unpin)>) -> O 
         }
     };
     (Racer { futures }).await
+}
+
+pub fn rotate_vector_with_angle(x: f32, y: f32, theta: f32) -> (f32, f32) { rotate_vector(x, y, theta.sin(), theta.cos()) }
+pub fn rotate_vector(x: f32, y: f32, theta_sin: f32, theta_cos: f32) -> (f32, f32) {
+    ((x * theta_cos) - (y * theta_sin), (x * theta_sin) + (y * theta_cos))
 }

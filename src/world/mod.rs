@@ -99,6 +99,16 @@ impl Simulation {
         self.joints.remove(constraint_id);
     }
 
+    pub fn equip_part_constraint(&mut self, parent: u16, child: u16, attachment_x: f32, attachment_y: f32) -> DefaultJointConstraintHandle {
+        let mut constraint = nphysics2d::joint::RevoluteConstraint::new(
+            BodyPartHandle(MyHandle::Part(parent), 0),
+            BodyPartHandle(MyHandle::Part(child), 0),
+            Point::new(attachment_x, attachment_y),
+            Point::new(0.0, 0.0)
+        );
+        self.joints.insert(constraint)
+    }
+
     pub fn geometrical_world(&self) -> &MyGeometricalWorld { &self.geometry }
 }
 
