@@ -272,11 +272,12 @@ async fn main() {
                         simulation.release_constraint(constraint);
                         player_meta.grabbed_part = None;
                         let mut attachment_msg: Option<Vec<u8>> = None;
-                        let core_location = simulation.world.get_rigid(MyHandle::Part(player_parts.get(&id).unwrap().body_id)).unwrap().position().translation;
+                        let core_location = simulation.world.get_rigid(MyHandle::Part(player_parts.get(&id).unwrap().body_id)).unwrap().position().clone();
                         //println!("{:?}", point);
                         let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
                         grabbed_part_body.set_local_inertia(free_parts.get(&part_id).unwrap().kind.inertia());
-                        fn recurse<'a>(part: &'a mut Part, target_x: f32, target_y: f32, bodies: &world::World) -> Result<(), (&'a mut Part, usize, world::parts::AttachmentPointDetails)> {
+                        grabbed_part_body.set_velocity(nphysics2d::algebra::Velocity2::new(Vector2::new(0.0,0.0), 0.0));
+                        fn recurse<'a>(part: &'a mut Part, target_x: f32, target_y: f32, bodies: &world::World) -> Result<(), (&'a mut Part, usize, world::parts::AttachmentPointDetails, (f32, f32))> {
                             let attachments = part.kind.attachment_locations();
                             let pos = bodies.get_rigid(MyHandle::Part(part.body_id)).unwrap().position().clone();
                             for i in 0..part.attachments.len() {
@@ -285,7 +286,7 @@ async fn main() {
                                         let mut rotated = rotate_vector(details.x, details.y, pos.rotation.im, pos.rotation.re);
                                         rotated.0 += pos.translation.x;
                                         rotated.1 += pos.translation.y;
-                                        if (rotated.0 - target_x).abs() <= 0.4 && (rotated.1 - target_y).abs() <= 0.4 { return Err((part, i, *details)); }
+                                        if (rotated.0 - target_x).abs() <= 0.4 && (rotated.1 - target_y).abs() <= 0.4 { return Err((part, i, *details, rotated)); }
                                     }
                                 }
                             }
@@ -294,9 +295,9 @@ async fn main() {
                             }
                             Ok(())
                         }
-                        if let Err((part, slot_id, details)) = recurse(player_parts.get_mut(&id).unwrap(), x + core_location.x, y + core_location.y, &simulation.world) {
+                        if let Err((part, slot_id, details, teleport_to)) = recurse(player_parts.get_mut(&id).unwrap(), x + core_location.translation.x, y + core_location.translation.y, &simulation.world) {
                             let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
-                            grabbed_part_body.set_position(Isometry2::from_parts(nalgebra::Translation2::new(details.x + core_location.x, details.y + core_location.y), UnitComplex::from_cos_sin_unchecked(details.facing.part_rotation_cos(), details.facing.part_rotation_sin())));
+                            grabbed_part_body.set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), details.facing.part_rotation() + core_location.rotation.angle()));
                             part.attachments[slot_id] = Some((free_parts.remove(&part_id).unwrap().extract(), simulation.equip_part_constraint(part.body_id, part_id, details.x, details.y)));
                             attachment_msg = Some(codec::ToClientMsg::UpdatePartMeta { id: part_id, owning_player: Some(id), thrust_mode: 0}.serialize());
                         } else {

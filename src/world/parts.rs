@@ -109,7 +109,7 @@ impl PartKind {
     pub fn inertia(&self) -> Inertia2<MyUnits> {
         match self {
             PartKind::Core | PartKind::Hub => Inertia2::new(1.0,1.0),
-            PartKind::Cargo => Inertia2::new(2.0, 2.0),
+            PartKind::Cargo => Inertia2::new(0.5, 2.0),
             _ => todo!()
         }
     }
@@ -144,20 +144,12 @@ pub struct AttachmentPointDetails {
 #[derive(Copy, Clone)]
 pub enum AttachedPartFacing { Up, Right, Down, Left }
 impl AttachedPartFacing {
-    pub fn part_rotation_sin(&self) -> f32 {
+    pub fn part_rotation(&self) -> f32 {
         match self {
             AttachedPartFacing::Up => 0.0,
             AttachedPartFacing::Right => -std::f32::consts::FRAC_PI_2,
-            AttachedPartFacing::Down => 0.0,
+            AttachedPartFacing::Down => std::f32::consts::PI,
             AttachedPartFacing::Left => std::f32::consts::PI,
-        }
-    }
-    pub fn part_rotation_cos(&self) -> f32 {
-        match self {
-            AttachedPartFacing::Right => 0.0,
-            AttachedPartFacing::Down => -std::f32::consts::FRAC_PI_2,
-            AttachedPartFacing::Left => 0.0,
-            AttachedPartFacing::Up => std::f32::consts::PI,
         }
     }
 }
