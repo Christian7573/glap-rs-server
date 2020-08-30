@@ -277,6 +277,7 @@ async fn main() {
                             }
                             if let Err(part) = recurse(player_parts.get_mut(&id).unwrap(), part_id, &mut free_parts, &mut simulation) {
                                 player_meta.grabbed_part = Some((part_id, simulation.equip_mouse_dragging(part_id), x, y));
+                                simulation.colliders.get_mut(part.collider).unwrap().set_user_data(None);
                                 grabbed = true;
                                 free_parts.insert(part_id, FreePart::Grabbed(part));
                             }
@@ -287,8 +288,14 @@ async fn main() {
                                 thrust_forward: player_meta.thrust_forwards, thrust_backward: player_meta.thrust_backwards, thrust_clockwise: player_meta.thrust_clockwise, thrust_counter_clockwise: player_meta.thrust_counterclockwise,
                                 grabed_part: Some(part_id)
                             }.serialize();
+                            let msg2 = codec::ToClientMsg::UpdatePartMeta {
+                                id: part_id, thrust_mode: 0, owning_player: None
+                            }.serialize();
                             for (_id, session) in &mut event_source.sessions {
-                                if let Session::Spawned(socket, _) = session { socket.queue_send(Message::Binary(msg.clone())); }
+                                if let Session::Spawned(socket, _) = session {
+                                    socket.queue_send(Message::Binary(msg.clone()));
+                                    socket.queue_send(Message::Binary(msg2.clone()));
+                                }
                             }
                         };
                     }
@@ -335,6 +342,7 @@ async fn main() {
                             let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
                             grabbed_part_body.set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), details.facing.part_rotation() + core_location.rotation.angle()));
                             part.attachments[slot_id] = Some((free_parts.remove(&part_id).unwrap().extract(), simulation.equip_part_constraint(part.body_id, part_id, details.x, details.y)));
+                            simulation.colliders.get_mut(part.collider).unwrap().set_user_data(Some(Box::new(PartOfPlayer(id))));
                             attachment_msg = Some(codec::ToClientMsg::UpdatePartMeta { id: part_id, owning_player: Some(id), thrust_mode: 0}.serialize());
                         } else {
                             free_parts.get_mut(&part_id).unwrap().become_decaying();
@@ -436,3 +444,5 @@ pub fn rotate_vector_with_angle(x: f32, y: f32, theta: f32) -> (f32, f32) { rota
 pub fn rotate_vector(x: f32, y: f32, theta_sin: f32, theta_cos: f32) -> (f32, f32) {
     ((x * theta_cos) - (y * theta_sin), (x * theta_sin) + (y * theta_cos))
 }
+
+pub struct PartOfPlayer (u16);

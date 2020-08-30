@@ -28,15 +28,16 @@ pub struct Part {
     pub attachments: Box<[Option<(Part, DefaultJointConstraintHandle)>; 4]>,
     pub body_id: u16,
     pub thrust_mode: CompactThrustMode,
-
+    pub collider: DefaultColliderHandle
 }
 impl Part {
     pub fn new(kind: PartKind, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> Part {
-        let body_id = kind.initialize(bodies, colliders, part_static);
+        let (body_id, collider) = kind.initialize(bodies, colliders, part_static);
         Part {
             kind, body_id,
             attachments: Box::new([None, None, None, None]),
             thrust_mode: CompactThrustMode::default(),
+            collider
         }
     }
     pub fn thrust(&self, bodies: &mut super::World, fuel: &mut u16, forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool) {
@@ -74,7 +75,7 @@ impl Part {
 
 pub use crate::codec::PartKind;
 impl PartKind {
-    pub fn initialize(&self, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> u16 {
+    pub fn initialize(&self, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> (u16, DefaultColliderHandle) {
         match self {
             PartKind::Core | PartKind::Hub => {
                 let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(self.inertia()).build();
@@ -83,8 +84,7 @@ impl PartKind {
                 let collider = ColliderDesc::new(part_static.unit_cuboid.clone())
                     .translation(translation)
                     .build(BodyPartHandle (MyHandle::Part(id), 0));
-                colliders.insert(collider);
-                id
+                (id, colliders.insert(collider))
             },
             PartKind::Cargo => {
                 let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(self.inertia()).build();
@@ -92,8 +92,7 @@ impl PartKind {
                 let collider = ColliderDesc::new(part_static.unit_cuboid.clone())
                     .translation(Vector2::new(0.0, 0.5))
                     .build(BodyPartHandle(MyHandle::Part(id), 0));
-                colliders.insert(collider);
-                id
+                (id, colliders.insert(collider))
             },
             PartKind::LandingThruster => todo!()
         }
