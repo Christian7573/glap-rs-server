@@ -2,7 +2,7 @@ use async_std::prelude::*;
 use std::net::SocketAddr;
 use async_std::net::TcpStream;
 use std::pin::Pin;
-use std::collections::{BTreeMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::task::Poll;
 use rand::Rng;
 use world::MyHandle;
@@ -72,6 +72,10 @@ async fn main() {
         }
     }
     let mut event_source = EventSource { inbound, ticker, sessions, should_simulate: true };
+    let mut simulation_events = Vec::new();
+    struct PlayerPlanetInteractionMeta { planet_id: u16, ticks_til_cargo_transform: u8, touching_parts: BTreeSet<u16> }
+    let mut player_planet_metas: BTreeMap<u16, PlayerPlanetInteractionMeta> = BTreeMap::new();
+    const TICKS_PER_CARGO_UPGRADE: u8 = TICKS_PER_SECOND;
 
     while let Some(event) = event_source.next().await {
         use session::SessionEvent::*;
@@ -125,9 +129,70 @@ async fn main() {
                             let position = simulation.world.get_rigid(MyHandle::Part(player_parts.get(&id).unwrap().body_id)).unwrap().position().translation;
                             simulation.move_mouse_constraint(constraint, x + position.x, y + position.y);
                         }
+                        if let Some(meta) = player_planet_metas.get_mut(id) {
+                            meta.ticks_til_cargo_transform -= 1;
+                            if meta.ticks_til_cargo_transform < 1 {
+                                meta.ticks_til_cargo_transform = TICKS_PER_CARGO_UPGRADE;
+                                if let Some(upgrade_into) = simulation.planets.get_celestial_object(meta.planet_id).unwrap().cargo_upgrade {
+                                    fn recurse<'a>(part: &'a mut Part) -> Result<(),(&'a mut Part, usize)> {
+                                        let len = part.attachments.len();
+                                        for i in 0..len {
+                                            if let Some((subpart, _connection)) = &part.attachments[i] {
+                                                if subpart.kind == world::parts::PartKind::Cargo { return Err((part, i)); }
+                                            }
+                                        };
+                                        for subpart in part.attachments.iter_mut() {
+                                            if let Some((part, _)) = subpart.as_mut() { recurse(part)?; }
+                                        }
+                                        Ok(())
+                                    }
+                                    if let Err((parent_part, slot)) = recurse(player_parts.get_mut(id).unwrap()) {
+                                        //simulation.release_constraint(parent_part.attachments[slot].as_ref().unwrap().1);
+                                        let part = &mut parent_part.attachments[slot].as_mut().unwrap().0;
+                                        part.mutate(upgrade_into, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+                                        
+                                        random_broadcast_messages.push(codec::ToClientMsg::RemovePart{ id: part.body_id }.serialize());
+                                        random_broadcast_messages.push(codec::ToClientMsg::AddPart{ id: part.body_id, kind: part.kind, }.serialize());
+                                        random_broadcast_messages.push(codec::ToClientMsg::UpdatePartMeta{ id: part.body_id, owning_player: Some(*id), thrust_mode: part.thrust_mode.into() }.serialize());
+                                    }   
+                                }
+                            }
+                        }
                     }
                 }
-                simulation.simulate();
+
+                simulation.simulate(&mut simulation_events);
+                for event in simulation_events.drain(..) {
+                    use world::SimulationEvent::*;
+                    match event {
+                        PlayerTouchPlanet{ player, planet, part } => {
+                            let player_planet_meta = if let Some(meta) = player_planet_metas.get_mut(&player) { meta }
+                            else {
+                                player_planet_metas.insert(player, PlayerPlanetInteractionMeta {
+                                    planet_id: planet,
+                                    ticks_til_cargo_transform: TICKS_PER_CARGO_UPGRADE,
+                                    touching_parts: BTreeSet::new()
+                                });
+                                player_planet_metas.get_mut(&player).unwrap()
+                            };
+                            player_planet_meta.touching_parts.insert(part);
+                            if let Some(Session::Spawned(_socket, player_meta)) = event_source.sessions.get_mut(&player) {
+                                player_meta.fuel = player_meta.max_fuel;
+                            }
+                        },
+                        PlayerUntouchPlanet{ player, planet, part } => {
+                            if let Some(meta) = player_planet_metas.get_mut(&player) {
+                                if meta.touching_parts.remove(&part) {
+                                    if meta.touching_parts.is_empty() {
+                                        player_planet_metas.remove(&player);
+                                    }
+                                }
+                            }
+                        },
+                        PartDetach{ parent_part, detached_part, player } => todo!()
+                    }
+                }
+
                 let move_messages = session::PartMoveMessage::new_all(simulation.world.get_parts());
                 for (id, session) in &mut event_source.sessions { session.update_world(&move_messages, &random_broadcast_messages); }
             },

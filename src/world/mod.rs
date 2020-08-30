@@ -1,11 +1,12 @@
 use nalgebra::Vector2;
-use nphysics2d::object::{RigidBody, Body, BodyPartHandle};
+use nphysics2d::object::{RigidBody, Body, BodyPartHandle, DefaultColliderHandle};
 use std::collections::{BTreeMap, BTreeSet};
 use nphysics2d::force_generator::DefaultForceGeneratorSet;
 use num_traits::Pow;
 use nphysics2d::algebra::{Force2, ForceType, Inertia2};
 use nphysics2d::joint::{DefaultJointConstraintHandle, MouseConstraint, JointConstraint};
 use nphysics2d::math::Point;
+use ncollide2d::pipeline::ContactEvent;
 
 pub mod planets;
 pub mod parts;
@@ -28,6 +29,13 @@ pub struct Simulation {
     pub planets: planets::Planets,
     pub part_static: parts::PartStatic
 }
+pub enum SimulationEvent {
+    PlayerTouchPlanet { player: u16, part: u16, planet: u16, },
+    PlayerUntouchPlanet { player: u16, part: u16, planet: u16 },
+    PartDetach { player: u16, parent_part: u16, detached_part: u16 }
+}
+
+
 impl Simulation {
     pub fn new(step_time: f32) -> Simulation {
         let mut mechanics = MyMechanicalWorld::new(Vector2::new(0.0, 0.0));
@@ -71,9 +79,43 @@ impl Simulation {
         }
     }
 
-    pub fn simulate(&mut self) {
+    pub fn simulate(&mut self, events: &mut Vec<SimulationEvent>) {
         self.celestial_gravity();
         self.mechanics.step(&mut self.geometry, &mut self.world, &mut self.colliders, &mut self.joints, &mut self.persistant_forces);
+        for contact_event in self.geometry.contact_events() {
+            match contact_event {
+                ContactEvent::Started(handle1, handle2) => {
+                    let planet: u16;
+                    let other: DefaultColliderHandle;
+                    if let MyHandle::CelestialObject(planet_id) = self.colliders.get(*handle1).unwrap().body() {
+                        planet = planet_id; other = *handle2;
+                    } else if let MyHandle::CelestialObject(planet_id) = self.colliders.get(*handle2).unwrap().body() {
+                        planet = planet_id; other = *handle1;
+                    } else { continue; }
+                    let part_coll = self.colliders.get(other).unwrap();
+                    if let MyHandle::Part(part_id) = part_coll.body() {
+                        if let Some(crate::PartOfPlayer(player_id)) = part_coll.user_data().map(|dat| dat.downcast_ref()).flatten() {
+                            events.push(SimulationEvent::PlayerTouchPlanet{ player: *player_id, part: part_id, planet: planet });
+                        }
+                    }
+                },
+                ContactEvent::Stopped(handle1, handle2) => {
+                    let planet: u16;
+                    let other: DefaultColliderHandle;
+                    if let MyHandle::CelestialObject(planet_id) = self.colliders.get(*handle1).unwrap().body() {
+                        planet = planet_id; other = *handle2;
+                    } else if let MyHandle::CelestialObject(planet_id) = self.colliders.get(*handle2).unwrap().body() {
+                        planet = planet_id; other = *handle1;
+                    } else { continue; }
+                    let part_coll = self.colliders.get(other).unwrap();
+                    if let MyHandle::Part(part_id) = part_coll.body() {
+                        if let Some(crate::PartOfPlayer(player_id)) = part_coll.user_data().map(|dat| dat.downcast_ref()).flatten() {
+                            events.push(SimulationEvent::PlayerUntouchPlanet{ player: *player_id, part: part_id, planet: planet });
+                        }
+                    }
+                }
+            }
+        }
     }
 
     pub fn equip_mouse_dragging(&mut self, part_id: u16) -> DefaultJointConstraintHandle {
@@ -110,10 +152,6 @@ impl Simulation {
     }
 
     pub fn geometrical_world(&self) -> &MyGeometricalWorld { &self.geometry }
-}
-
-pub enum SimulationEvent {
-    
 }
 
 pub struct World {
@@ -167,6 +205,10 @@ impl World {
         self.next_part += 1;
         self.parts.insert(id, body);
         id
+    }
+    fn swap_part(&mut self, part_id: u16, with: RigidBody<MyUnits>) {
+        self.removal_events.push_back(MyHandle::Part(part_id));
+        self.parts.insert(part_id, with).expect("Attempted swap on a non-existant part");
     }
     pub fn get_rigid(&self, handle: MyHandle) -> Option<&RigidBody<MyUnits>> {
         match handle {

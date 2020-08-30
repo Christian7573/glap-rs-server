@@ -32,13 +32,27 @@ pub struct Part {
 }
 impl Part {
     pub fn new(kind: PartKind, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> Part {
-        let (body_id, collider) = kind.initialize(bodies, colliders, part_static);
+        let (body_desc, collider_desc) = kind.physics_components(part_static);
+        let body_id = bodies.add_part(body_desc.build());
+        let collider = colliders.insert(collider_desc.build(BodyPartHandle(MyHandle::Part(body_id), 0)));
         Part {
             kind, body_id,
             attachments: Box::new([None, None, None, None]),
             thrust_mode: CompactThrustMode::default(),
             collider
         }
+    }
+    pub fn mutate(&mut self, new_kind: PartKind, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) {
+        for attachment in self.attachments.iter() { if attachment.is_some() { panic!("Mutated part with attachments"); } };
+        colliders.remove(self.collider);
+        self.kind = new_kind;
+        let (body_desc, collider_desc) = new_kind.physics_components(part_static);
+        let mut body = body_desc.build();
+        let old_body = bodies.get_rigid(MyHandle::Part(self.body_id)).unwrap();
+        body.set_position(old_body.position().clone());
+        body.set_velocity(old_body.velocity().clone());
+        bodies.swap_part(self.body_id, body);
+        self.collider = colliders.insert(collider_desc.build(BodyPartHandle(MyHandle::Part(self.body_id), 0)));
     }
     pub fn thrust(&self, bodies: &mut super::World, fuel: &mut u16, forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool) {
         match self.kind {
@@ -75,33 +89,22 @@ impl Part {
 
 pub use crate::codec::PartKind;
 impl PartKind {
-    pub fn initialize(&self, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> (u16, DefaultColliderHandle) {
+    pub fn physics_components(&self, part_static: &PartStatic) -> (RigidBodyDesc<MyUnits>, ColliderDesc<MyUnits>) {
         match self {
-            PartKind::Core | PartKind::Hub => {
-                let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(self.inertia()).build();
-                let id = bodies.add_part(body);
-                let translation = if let PartKind::Hub = self { Vector2::new(0.0, 0.5) } else { Vector2::zero() };
-                let collider = ColliderDesc::new(part_static.unit_cuboid.clone())
-                    .translation(translation)
-                    .build(BodyPartHandle (MyHandle::Part(id), 0));
-                (id, colliders.insert(collider))
-            },
-            PartKind::Cargo => {
-                let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(self.inertia()).build();
-                let id = bodies.add_part(body);
-                let collider = ColliderDesc::new(part_static.unit_cuboid.clone())
-                    .translation(Vector2::new(0.0, 0.5))
-                    .build(BodyPartHandle(MyHandle::Part(id), 0));
-                (id, colliders.insert(collider))
-            },
-            PartKind::LandingThruster => todo!()
+            PartKind::Core | PartKind::Hub | PartKind::Cargo | PartKind::LandingThruster => {
+                (
+                    RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(self.inertia()),
+                    ColliderDesc::new(part_static.unit_cuboid.clone())
+                        .translation(if let PartKind::Core = self { Vector2::zero() } else { Vector2::new(0.0, 0.5) })
+                )
+            }
         }
     }
     fn thrust(&self) -> Option<ThrustDetails> {
         match self {
             PartKind::Core => panic!("PartKind thrust called on core"),
             PartKind::Hub => None,
-            PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 3, force: Force2::linear_at_point(Vector2::new(0.0, 5.0), &Point2::new(0.0, 0.8)) }),
+            PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 3, force: Force2::linear_at_point(Vector2::new(0.0, 5.0), &Point2::new(0.0, 1.0)) }),
             PartKind::Cargo => None
         }
     }
@@ -109,6 +112,7 @@ impl PartKind {
         match self {
             PartKind::Core | PartKind::Hub => Inertia2::new(1.0,1.0),
             PartKind::Cargo => Inertia2::new(0.5, 2.0),
+            PartKind::LandingThruster => Inertia2::new(1.5, 1.5),
             _ => todo!()
         }
     }

@@ -8,7 +8,7 @@ use nphysics2d::material::{BasicMaterial, MaterialHandle};
 pub struct Planets {
     pub earth: CelestialObject,
     pub moon: CelestialObject,
-    pub planet_material: MaterialHandle<MyUnits>
+    pub planet_material: MaterialHandle<MyUnits>,
 }
 impl Planets {
     pub fn new(colliders: &mut super::MyColliderSet, bodies: &mut super::World) -> Planets {
@@ -36,7 +36,8 @@ impl Planets {
                 display_name: String::from("Earth"),
                 radius: RADIUS,
                 body: body_handle,
-                id
+                id,
+                cargo_upgrade: None,
             }
         };
 
@@ -62,7 +63,8 @@ impl Planets {
                 display_name: String::from("Moon"),
                 radius: RADIUS,
                 body: body_handle,
-                id
+                id,
+                cargo_upgrade: Some(super::parts::PartKind::LandingThruster)
             }
         };
 
@@ -74,6 +76,11 @@ impl Planets {
     pub fn celestial_objects<'a>(&'a self) -> [&'a CelestialObject; 2] {
         [&self.earth, &self.moon]
     }
+    pub fn get_celestial_object<'a>(&'a self, id: u16) -> Result<&'a CelestialObject, ()> {
+        if id == self.earth.id { Ok(&self.earth) }
+        else if id == self.moon.id { Ok(&self.moon) }
+        else { Err(()) }
+    }
 }
 
 pub struct CelestialObject {
@@ -81,5 +88,6 @@ pub struct CelestialObject {
     pub display_name: String,
     pub radius: f32,
     pub body: MyHandle,
-    pub id: u16
+    pub id: u16,
+    pub cargo_upgrade: Option<super::parts::PartKind>
 }

@@ -56,7 +56,7 @@ fn type_bool_deserialize(buf: &[u8], index: &mut usize) -> Result<bool, ()> {
     buf.get(i).map(|val| *val > 0).ok_or(())
 }
 
-#[derive(Copy, Clone)] pub enum PartKind {
+#[derive(Copy, Clone, Eq, PartialEq)] pub enum PartKind {
 	Core, Cargo, LandingThruster, Hub
 }
 impl PartKind {
