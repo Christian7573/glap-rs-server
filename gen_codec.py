@@ -196,7 +196,7 @@ rust_out.write(rust_header.read())
 rust_out.write("\n\n")
 rust_header.close()
 for enum in enums:
-    rust_out.write("#[derive(Copy, Clone)] pub enum %s {\n\t%s\n}\n" % (enum.name, ", ".join(enum.varriants)))
+    rust_out.write("#[derive(Copy, Clone, Eq, PartialEq, Debug)] pub enum %s {\n\t%s\n}\n" % (enum.name, ", ".join(enum.varriants)))
     rust_out.write("impl %s {\n\tpub fn serialize(&self, buf: &mut Vec<u8>) {\n\t\tbuf.push(match self {\n\t\t\t%s\n\t\t});\n\t}\n" % (enum.name, ", ".join(map(lambda varriant: "Self::%s => %s" % (varriant[1], varriant[0]), enumerate(enum.varriants)))))
     rust_out.write("\tpub fn deserialize(buf: &[u8], index: &mut usize) -> Result<Self, ()> {\n\t\tlet me = buf[*index]; *index += 1;\n\t\tmatch me {\n\t\t\t%s,\n\t\t\t_ => Err(())\n\t\t}\n\t}\n}\n" % ", ".join(map(lambda varriant: "%s => Ok(Self::%s)" % (varriant[0], varriant[1]), enumerate(enum.varriants))))
 rust_out.write("\n")
