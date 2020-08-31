@@ -68,11 +68,12 @@ impl Part {
                 }
             },
             _ => {
+                println!("{:?}", self.thrust_mode.get());
                 if let Some(ThrustDetails{ fuel_cost, force }) = self.kind.thrust() {
                     let should_fire = match self.thrust_mode.get_horizontal() {
                         HorizontalThrustMode::Clockwise => clockwise,
                         HorizontalThrustMode::CounterClockwise => counter_clockwise,
-                        HorizontalThrustMode::Either => clockwise | counter_clockwise
+                        HorizontalThrustMode::None => false
                     } || match self.thrust_mode.get_vertical() {
                         VerticalThrustMode::Forwards => forward,
                         VerticalThrustMode::Backwards => backward,
@@ -205,19 +206,19 @@ impl From<u8> for VerticalThrustMode {
     } }
 }
 #[derive(Copy, Clone, Debug)]
-pub enum HorizontalThrustMode { Clockwise, CounterClockwise, Either }
+pub enum HorizontalThrustMode { Clockwise, CounterClockwise, None }
 impl Into<u8> for HorizontalThrustMode {
     fn into(self) -> u8 { match self {
         HorizontalThrustMode::CounterClockwise => 0b00000000,
         HorizontalThrustMode::Clockwise => 0b00000001,
-        HorizontalThrustMode::Either => 0b00000010,
+        HorizontalThrustMode::None => 0b00000010,
     } }
 }
 impl From<u8> for HorizontalThrustMode {
     fn from(val: u8) -> Self { match val & 0b00000011 {
         0b00000000 => HorizontalThrustMode::CounterClockwise,
         0b00000001 => HorizontalThrustMode::Clockwise,
-        0b00000010 => HorizontalThrustMode::Either,
+        0b00000010 => HorizontalThrustMode::None,
         _ => panic!()
     } }
 }
