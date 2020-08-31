@@ -435,15 +435,16 @@ async fn main() {
                             world::parts::AttachedPartFacing::Up,
                             0, 0
                         ) {
+                            println!("{:?}", thrust_mode);
                             let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
                             grabbed_part_body.set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), details.facing.part_rotation() + core_location.rotation.angle()));
                             let (connection1, connection2) = simulation.equip_part_constraint(part.body_id, part_id, part.kind.attachment_locations()[slot_id].unwrap());
 
                             let mut grabbed_part = free_parts.remove(&part_id).unwrap().extract();
                             grabbed_part.thrust_mode = thrust_mode;
+                            simulation.colliders.get_mut(grabbed_part.collider).unwrap().set_user_data(Some(Box::new(PartOfPlayer(id))));
                             part.attachments[slot_id] = Some((grabbed_part, connection1, connection2));
-                            simulation.colliders.get_mut(part.collider).unwrap().set_user_data(Some(Box::new(PartOfPlayer(id))));
-                            attachment_msg = Some(codec::ToClientMsg::UpdatePartMeta { id: part_id, owning_player: Some(id), thrust_mode: part.thrust_mode.into()}.serialize());
+                            attachment_msg = Some(codec::ToClientMsg::UpdatePartMeta { id: part_id, owning_player: Some(id), thrust_mode: thrust_mode.into() }.serialize());
                         } else {
                             free_parts.get_mut(&part_id).unwrap().become_decaying();
                         }

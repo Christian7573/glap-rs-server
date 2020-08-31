@@ -143,8 +143,6 @@ impl Simulation {
 
     pub fn equip_part_constraint(&mut self, parent: u16, child: u16, attachment: parts::AttachmentPointDetails) -> (DefaultJointConstraintHandle, DefaultJointConstraintHandle) {
         let offset = (attachment.perpendicular.0 * 0.2, attachment.perpendicular.1 * 0.2);
-        println!("{:?}", Point::new(attachment.x + offset.0, attachment.y + offset.1));
-        println!("{:?}", Point::new(attachment.x - offset.0, attachment.y - offset.1));
         let mut constraint1 = nphysics2d::joint::RevoluteConstraint::new(
             BodyPartHandle(MyHandle::Part(parent), 0),
             BodyPartHandle(MyHandle::Part(child), 0),
