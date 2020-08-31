@@ -436,6 +436,7 @@ async fn main() {
                             0, 0
                         ) {
                             part.thrust_mode = thrust_mode;
+                            println!("{:?}", thrust_mode.get());
                             let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
                             grabbed_part_body.set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), details.facing.part_rotation() + core_location.rotation.angle()));
                             part.attachments[slot_id] = Some((free_parts.remove(&part_id).unwrap().extract(), simulation.equip_part_constraint(part.body_id, part_id, details.x, details.y)));

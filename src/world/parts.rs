@@ -80,9 +80,14 @@ impl Part {
                     };
                     if *fuel >= fuel_cost && should_fire  {
                         *fuel -= fuel_cost;
-                        bodies.get_rigid_mut(MyHandle::Part(self.body_id)).unwrap().apply_force(0, &force, ForceType::Force, true)
+                        bodies.get_rigid_mut(MyHandle::Part(self.body_id)).unwrap().apply_local_force(0, &force, ForceType::Force, true)
                     }
                 }
+            }
+        }
+        for attachment in self.attachments.iter() {
+            if let Some((part, _)) = attachment.as_ref() {
+                part.thrust(bodies, fuel, forward, backward, clockwise, counter_clockwise);
             }
         }
     }
@@ -105,7 +110,7 @@ impl PartKind {
         match self {
             PartKind::Core => panic!("PartKind thrust called on core"),
             PartKind::Hub => None,
-            PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 3, force: Force2::linear_at_point(Vector2::new(0.0, 5.0), &Point2::new(0.0, 1.0)) }),
+            PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 3, force: Force2::linear_at_point(Vector2::new(0.0, -5.0), &Point2::new(0.0, 1.0)) }),
             PartKind::Cargo => None
         }
     }
