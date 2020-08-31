@@ -25,7 +25,7 @@ pub const ATTACHMENT_COLLIDER_COLLISION_GROUP: [usize; 1] = [5];
 
 pub struct Part {
     pub kind: PartKind,
-    pub attachments: Box<[Option<(Part, DefaultJointConstraintHandle)>; 4]>,
+    pub attachments: Box<[Option<(Part, DefaultJointConstraintHandle, DefaultJointConstraintHandle)>; 4]>,
     pub body_id: u16,
     pub thrust_mode: CompactThrustMode,
     pub collider: DefaultColliderHandle
@@ -86,7 +86,7 @@ impl Part {
             }
         }
         for attachment in self.attachments.iter() {
-            if let Some((part, _)) = attachment.as_ref() {
+            if let Some((part, _, _)) = attachment.as_ref() {
                 part.thrust(bodies, fuel, forward, backward, clockwise, counter_clockwise);
             }
         }
@@ -125,16 +125,16 @@ impl PartKind {
     pub fn attachment_locations(&self) -> [Option<AttachmentPointDetails>; 4] {
         match self {
             PartKind::Core => [
-                Some(AttachmentPointDetails{ x: 0.0, y: 0.6, facing: AttachedPartFacing::Up }),
-                Some(AttachmentPointDetails{ x: 0.6, y: 0.0, facing: AttachedPartFacing::Right }),
-                Some(AttachmentPointDetails{ x: 0.0, y: -0.6, facing: AttachedPartFacing::Down }),
-                Some(AttachmentPointDetails{ x: -0.6, y: 0.0, facing: AttachedPartFacing::Left }),
+                Some(AttachmentPointDetails{ x: 0.0, y: 0.6, facing: AttachedPartFacing::Up, perpendicular: (1.0, 0.0) }),
+                Some(AttachmentPointDetails{ x: 0.6, y: 0.0, facing: AttachedPartFacing::Right, perpendicular: (0.0, 1.0) }),
+                Some(AttachmentPointDetails{ x: 0.0, y: -0.6, facing: AttachedPartFacing::Down, perpendicular: (-1.0, 0.0) }),
+                Some(AttachmentPointDetails{ x: -0.6, y: 0.0, facing: AttachedPartFacing::Left, perpendicular: (0.0, -1.0) }),
             ],
             PartKind::Hub => [
-                Some(AttachmentPointDetails{ x: 0.0, y: 0.6, facing: AttachedPartFacing::Up }),
-                Some(AttachmentPointDetails{ x: 0.6, y: 0.0, facing: AttachedPartFacing::Right }),
+                Some(AttachmentPointDetails{ x: 0.0, y: 0.6, facing: AttachedPartFacing::Up, perpendicular: (1.0, 0.0) }),
+                Some(AttachmentPointDetails{ x: 0.6, y: 0.0, facing: AttachedPartFacing::Right, perpendicular: (0.0, 1.0) }),
                 None,
-                Some(AttachmentPointDetails{ x: -0.6, y: 0.0, facing: AttachedPartFacing::Left }),
+                Some(AttachmentPointDetails{ x: -0.6, y: 0.0, facing: AttachedPartFacing::Left, perpendicular: (0.0, -1.0) }),
             ],
             PartKind::Cargo | PartKind::LandingThruster => [ None, None, None, None ]
         }
@@ -148,6 +148,7 @@ impl PartKind {
 pub struct AttachmentPointDetails {
     pub x: f32,
     pub y: f32,
+    pub perpendicular: (f32,f32),
     pub facing: AttachedPartFacing
 }
 #[derive(Copy, Clone)]

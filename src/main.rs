@@ -137,12 +137,12 @@ async fn main() {
                                     fn recurse<'a>(part: &'a mut Part) -> Result<(),(&'a mut Part, usize)> {
                                         let len = part.attachments.len();
                                         for i in 0..len {
-                                            if let Some((subpart, _connection)) = &part.attachments[i] {
+                                            if let Some((subpart, _connection, _connection2)) = &part.attachments[i] {
                                                 if subpart.kind == world::parts::PartKind::Cargo { return Err((part, i)); }
                                             }
                                         };
                                         for subpart in part.attachments.iter_mut() {
-                                            if let Some((part, _)) = subpart.as_mut() { recurse(part)?; }
+                                            if let Some((part, _, _)) = subpart.as_mut() { recurse(part)?; }
                                         }
                                         Ok(())
                                     }
@@ -204,7 +204,7 @@ async fn main() {
                             simulation.world.remove_part(world::MyHandle::Part(part.body_id));
                             nuke_messages.push(codec::ToClientMsg::RemovePart{id: part.body_id}.serialize());
                             for part in part.attachments.iter() {
-                                if let Some((part, _)) = part { nuke_part(part, simulation, nuke_messages); }
+                                if let Some((part, _, _)) = part { nuke_part(part, simulation, nuke_messages); }
                             }
                         }
                         nuke_messages.push(codec::ToClientMsg::RemovePlayer{ id }.serialize());
@@ -260,7 +260,7 @@ async fn main() {
                             id, owning_player: *owning_player, thrust_mode: part.thrust_mode.into()
                         }.serialize()));
                         for part in part.attachments.iter() {
-                            if let Some((part, _)) = part { send_part(part, owning_player, simulation, socket); }
+                            if let Some((part, _, _)) = part { send_part(part, owning_player, simulation, socket); }
                         }
                     }
                     for (id, part) in &free_parts { send_part(part, &None, &mut simulation, &mut socket); };
@@ -312,14 +312,15 @@ async fn main() {
                         } else {
                             fn recurse(part: &mut Part, target_part: u16, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation) -> Result<(),Part> {
                                 for slot in part.attachments.iter_mut() {
-                                    if let Some((part, connection)) = slot {
+                                    if let Some((part, connection, connection2)) = slot {
                                         if part.body_id == target_part {
                                             fn recursive_detatch(part: &mut Part, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation) {
                                                 for slot in part.attachments.iter_mut() {
-                                                    if let Some((part, connection)) = slot {
+                                                    if let Some((part, connection, connection2)) = slot {
                                                         simulation.release_constraint(*connection);
+                                                        simulation.release_constraint(*connection2);
                                                         recursive_detatch(part, free_parts, simulation);
-                                                        if let Some((part, _)) = std::mem::replace(slot, None) {
+                                                        if let Some((part, _, _)) = std::mem::replace(slot, None) {
                                                             free_parts.insert(part.body_id, FreePart::Decaying(part, DEFAULT_PART_DECAY_TICKS));
                                                         }
                                                     }
@@ -327,14 +328,15 @@ async fn main() {
                                             }
                                             recursive_detatch(part, free_parts, simulation);
                                             simulation.release_constraint(*connection);
-                                            if let Some((part, _)) = std::mem::replace(slot, None) {
+                                            simulation.release_constraint(*connection2);
+                                            if let Some((part, _, _)) = std::mem::replace(slot, None) {
                                                 return Err(part);
                                             }
                                         }
                                     }
                                 }
                                 for slot in part.attachments.iter_mut() {
-                                    if let Some((part, _)) = slot {
+                                    if let Some((part, _, _)) = slot {
                                         recurse(part, target_part, free_parts, simulation)?;
                                     }
                                 }
@@ -418,7 +420,7 @@ async fn main() {
                                 }
                             }
                             for (i, subpart) in part.attachments.iter_mut().enumerate() {
-                                if let Some((part, _)) = subpart {
+                                if let Some((part, _, _)) = subpart {
                                     let my_actual_rotation = attachments[i].unwrap().facing.get_actual_rotation(parent_actual_rotation);
                                     let new_x = x + match my_actual_rotation { AttachedPartFacing::Left => -1, AttachedPartFacing::Right => 1, _ => 0 };
                                     let new_y = y + match my_actual_rotation { AttachedPartFacing::Up => 1, AttachedPartFacing::Down => -1, _ => 0 };
@@ -439,7 +441,8 @@ async fn main() {
                             println!("{:?}", thrust_mode.get());
                             let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
                             grabbed_part_body.set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), details.facing.part_rotation() + core_location.rotation.angle()));
-                            part.attachments[slot_id] = Some((free_parts.remove(&part_id).unwrap().extract(), simulation.equip_part_constraint(part.body_id, part_id, details.x, details.y)));
+                            let (connection1, connection2) = simulation.equip_part_constraint(part.body_id, part_id, part.kind.attachment_locations()[slot_id].unwrap());
+                            part.attachments[slot_id] = Some((free_parts.remove(&part_id).unwrap().extract(), connection1, connection2));
                             simulation.colliders.get_mut(part.collider).unwrap().set_user_data(Some(Box::new(PartOfPlayer(id))));
                             attachment_msg = Some(codec::ToClientMsg::UpdatePartMeta { id: part_id, owning_player: Some(id), thrust_mode: part.thrust_mode.into()}.serialize());
                         } else {
