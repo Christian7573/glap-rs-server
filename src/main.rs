@@ -383,7 +383,6 @@ async fn main() {
                         player_meta.grabbed_part = None;
                         let mut attachment_msg: Option<Vec<u8>> = None;
                         let core_location = simulation.world.get_rigid(MyHandle::Part(player_parts.get(&id).unwrap().body_id)).unwrap().position().clone();
-                        //println!("{:?}", point);
                         let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
                         grabbed_part_body.set_local_inertia(free_parts.get(&part_id).unwrap().kind.inertia());
                         grabbed_part_body.set_velocity(nphysics2d::algebra::Velocity2::new(Vector2::new(0.0,0.0), 0.0));
@@ -401,19 +400,18 @@ async fn main() {
                                         if (rotated.0 - target_x).abs() <= 0.4 && (rotated.1 - target_y).abs() <= 0.4 {
                                             let my_actual_rotation = details.facing.get_actual_rotation(parent_actual_rotation);
                                             use world::parts::{HorizontalThrustMode, VerticalThrustMode};
-                                            let thrust_mode = CompactThrustMode::new(
-                                                match my_actual_rotation {
-                                                    AttachedPartFacing::Up => if x < 0 { HorizontalThrustMode::CounterClockwise } else if x > 0 { HorizontalThrustMode::Clockwise } else { HorizontalThrustMode::None },
-                                                    AttachedPartFacing::Right => if y > 0 { HorizontalThrustMode::CounterClockwise } else { HorizontalThrustMode::Clockwise },
-                                                    AttachedPartFacing::Down => if x < 0 { HorizontalThrustMode::Clockwise } else if x > 0 { HorizontalThrustMode::CounterClockwise } else { HorizontalThrustMode::None },
-                                                    AttachedPartFacing::Left => if y > 0 { HorizontalThrustMode::Clockwise } else { HorizontalThrustMode::CounterClockwise },
-                                                },
-                                                match my_actual_rotation {
-                                                    AttachedPartFacing::Up => VerticalThrustMode::Backwards,
-                                                    AttachedPartFacing::Down => VerticalThrustMode::Forwards,
-                                                    AttachedPartFacing::Left | AttachedPartFacing::Right => VerticalThrustMode::None
-                                                }
-                                            );
+                                            let hroizontal = match my_actual_rotation {
+                                                AttachedPartFacing::Up => if x < 0 { HorizontalThrustMode::CounterClockwise } else if x > 0 { HorizontalThrustMode::Clockwise } else { HorizontalThrustMode::None },
+                                                AttachedPartFacing::Right => if y > 0 { HorizontalThrustMode::CounterClockwise } else { HorizontalThrustMode::Clockwise },
+                                                AttachedPartFacing::Down => if x < 0 { HorizontalThrustMode::Clockwise } else if x > 0 { HorizontalThrustMode::CounterClockwise } else { HorizontalThrustMode::None },
+                                                AttachedPartFacing::Left => if y > 0 { HorizontalThrustMode::Clockwise } else { HorizontalThrustMode::CounterClockwise },
+                                            };
+                                            let vertical = match my_actual_rotation  {
+                                                AttachedPartFacing::Up => VerticalThrustMode::Backwards,
+                                                AttachedPartFacing::Down => VerticalThrustMode::Forwards,
+                                                AttachedPartFacing::Left | AttachedPartFacing::Right => VerticalThrustMode::None
+                                            };
+                                            let thrust_mode = CompactThrustMode::new(hroizontal, vertical);
                                             return Err((part, i, *details, rotated, thrust_mode));
                                         }
                                     }
@@ -437,12 +435,13 @@ async fn main() {
                             world::parts::AttachedPartFacing::Up,
                             0, 0
                         ) {
-                            part.thrust_mode = thrust_mode;
-                            println!("{:?}", part.thrust_mode.get());
                             let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
                             grabbed_part_body.set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), details.facing.part_rotation() + core_location.rotation.angle()));
                             let (connection1, connection2) = simulation.equip_part_constraint(part.body_id, part_id, part.kind.attachment_locations()[slot_id].unwrap());
-                            part.attachments[slot_id] = Some((free_parts.remove(&part_id).unwrap().extract(), connection1, connection2));
+
+                            let mut grabbed_part = free_parts.remove(&part_id).unwrap().extract();
+                            grabbed_part.thrust_mode = thrust_mode;
+                            part.attachments[slot_id] = Some((grabbed_part, connection1, connection2));
                             simulation.colliders.get_mut(part.collider).unwrap().set_user_data(Some(Box::new(PartOfPlayer(id))));
                             attachment_msg = Some(codec::ToClientMsg::UpdatePartMeta { id: part_id, owning_player: Some(id), thrust_mode: part.thrust_mode.into()}.serialize());
                         } else {

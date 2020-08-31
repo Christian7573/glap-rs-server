@@ -68,7 +68,6 @@ impl Part {
                 }
             },
             _ => {
-                println!("{:?}", self.thrust_mode.get());
                 if let Some(ThrustDetails{ fuel_cost, force }) = self.kind.thrust() {
                     let should_fire = match self.thrust_mode.get_horizontal() {
                         HorizontalThrustMode::Clockwise => clockwise,
