@@ -75,7 +75,8 @@ impl Part {
                         HorizontalThrustMode::Either => clockwise | counter_clockwise
                     } || match self.thrust_mode.get_vertical() {
                         VerticalThrustMode::Forwards => forward,
-                        VerticalThrustMode::Backwards => backward
+                        VerticalThrustMode::Backwards => backward,
+                        VerticalThrustMode::None => false,
                     };
                     if *fuel >= fuel_cost && should_fire  {
                         *fuel -= fuel_cost;
@@ -155,33 +156,75 @@ impl AttachedPartFacing {
             AttachedPartFacing::Left => std::f32::consts::PI,
         }
     }
+    pub fn get_actual_rotation(&self, parent_actual_rotation: AttachedPartFacing) -> AttachedPartFacing {
+        let parent_actual_rotation: u8 = parent_actual_rotation.into();
+        let my_rotation: u8 = (*self).into();
+        let num: u8 = parent_actual_rotation + my_rotation;
+        if num > 3 { (num - 4).into() } else { num.into() }
+    }
+}
+impl Into<u8> for AttachedPartFacing {
+    fn into(self) -> u8 { match self {
+        AttachedPartFacing::Up => 0,
+        AttachedPartFacing::Right => 1,
+        AttachedPartFacing::Down => 2,
+        AttachedPartFacing::Left => 3
+    } }
+}
+impl From<u8> for AttachedPartFacing {
+    fn from(other: u8) -> Self { match other {
+        0 => AttachedPartFacing::Up,
+        1 => AttachedPartFacing::Right,
+        2 => AttachedPartFacing::Down,
+        3 => AttachedPartFacing::Left,
+        _ => panic!()
+    } }
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum VerticalThrustMode { Forwards, Backwards }
+pub enum VerticalThrustMode { Forwards, Backwards, None }
+impl Into<u8> for VerticalThrustMode {
+    fn into(self) -> u8 { match self { 
+        VerticalThrustMode::Backwards => 0b00000000,
+        VerticalThrustMode::Forwards => 0b00000100,
+        VerticalThrustMode::None => 0b00001000,
+    } }
+}
+impl From<u8> for VerticalThrustMode {
+    fn from(val: u8) -> Self { match val & 0b00001100 {
+        0b00000000 => VerticalThrustMode::Backwards,
+        0b00000100 => VerticalThrustMode::Forwards,
+        0b00001000 => VerticalThrustMode::None,
+        _ => panic!()
+    } }
+}
 #[derive(Copy, Clone, Debug)]
 pub enum HorizontalThrustMode { Clockwise, CounterClockwise, Either }
+impl Into<u8> for HorizontalThrustMode {
+    fn into(self) -> u8 { match self {
+        HorizontalThrustMode::CounterClockwise => 0b00000000,
+        HorizontalThrustMode::Clockwise => 0b00000001,
+        HorizontalThrustMode::Either => 0b00000010,
+    } }
+}
+impl From<u8> for HorizontalThrustMode {
+    fn from(val: u8) -> Self { match val & 0b00000011 {
+        0b00000000 => HorizontalThrustMode::CounterClockwise,
+        0b00000001 => HorizontalThrustMode::Clockwise,
+        0b00000010 => HorizontalThrustMode::Either,
+        _ => panic!()
+    } }
+}
 #[derive(Copy, Clone, Debug)]
 pub struct CompactThrustMode( u8 );
 impl CompactThrustMode {
     pub fn new(horizontal: HorizontalThrustMode, vertical: VerticalThrustMode) -> CompactThrustMode {
-        let horizontal: u8 = match horizontal {
-            HorizontalThrustMode::Clockwise => 1,
-            HorizontalThrustMode::CounterClockwise => 0,
-            HorizontalThrustMode::Either => 2
-        };
-        let vertical: u8 = if let VerticalThrustMode::Forwards = vertical { 4 } else { 0 };
+        let horizontal: u8 = horizontal.into();
+        let vertical: u8 = vertical.into();
         CompactThrustMode (horizontal | vertical)
     }
-    pub fn get_horizontal(&self) -> HorizontalThrustMode { 
-        match self.0 & 0b00000011 {
-            1 => HorizontalThrustMode::Clockwise,
-            0 => HorizontalThrustMode::CounterClockwise,
-            2 => HorizontalThrustMode::Either,
-            _ => panic!()
-        }
-    }
-    pub fn get_vertical(&self) -> VerticalThrustMode { if self.0 & 0b00001100 > 0 { VerticalThrustMode::Forwards } else { VerticalThrustMode::Backwards } }
+    pub fn get_horizontal(&self) -> HorizontalThrustMode { HorizontalThrustMode::from(self.0) }
+    pub fn get_vertical(&self) -> VerticalThrustMode { VerticalThrustMode::from(self.0) }
     pub fn get(&self) -> (HorizontalThrustMode, VerticalThrustMode) { (self.get_horizontal(), self.get_vertical()) }
     pub fn set_horizontal(&mut self, horizontal: HorizontalThrustMode) { std::mem::replace::<CompactThrustMode>(self, CompactThrustMode::new(horizontal, self.get_vertical())); }
     pub fn set_vertical(&mut self, vertical: VerticalThrustMode) { std::mem::replace::<CompactThrustMode>(self, CompactThrustMode::new(self.get_horizontal(), vertical)); }

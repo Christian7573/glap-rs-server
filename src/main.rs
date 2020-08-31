@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::task::Poll;
 use rand::Rng;
 use world::MyHandle;
-use world::parts::Part;
+use world::parts::{Part, AttachedPartFacing};
 use async_tungstenite::tungstenite::Message; use session::MyWebSocket;
 use nalgebra::Vector2; use nalgebra::geometry::{Isometry2, UnitComplex};
 use ncollide2d::pipeline::object::CollisionGroups;
@@ -385,7 +385,9 @@ async fn main() {
                         let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
                         grabbed_part_body.set_local_inertia(free_parts.get(&part_id).unwrap().kind.inertia());
                         grabbed_part_body.set_velocity(nphysics2d::algebra::Velocity2::new(Vector2::new(0.0,0.0), 0.0));
-                        fn recurse<'a>(part: &'a mut Part, target_x: f32, target_y: f32, bodies: &world::World) -> Result<(), (&'a mut Part, usize, world::parts::AttachmentPointDetails, (f32, f32))> {
+
+                        use world::parts::CompactThrustMode;
+                        fn recurse<'a>(part: &'a mut Part, target_x: f32, target_y: f32, bodies: &world::World, parent_actual_rotation: world::parts::AttachedPartFacing, x: i16, y: i16) -> Result<(), (&'a mut Part, usize, world::parts::AttachmentPointDetails, (f32, f32), CompactThrustMode)> {
                             let attachments = part.kind.attachment_locations();
                             let pos = bodies.get_rigid(MyHandle::Part(part.body_id)).unwrap().position().clone();
                             for i in 0..part.attachments.len() {
@@ -394,24 +396,55 @@ async fn main() {
                                         let mut rotated = rotate_vector(details.x, details.y, pos.rotation.im, pos.rotation.re);
                                         rotated.0 += pos.translation.x;
                                         rotated.1 += pos.translation.y;
-                                        if (rotated.0 - target_x).abs() <= 0.4 && (rotated.1 - target_y).abs() <= 0.4 { return Err((part, i, *details, rotated)); }
+                                        if (rotated.0 - target_x).abs() <= 0.4 && (rotated.1 - target_y).abs() <= 0.4 {
+                                            let my_actual_rotation = details.facing.get_actual_rotation(parent_actual_rotation);
+                                            use world::parts::{HorizontalThrustMode, VerticalThrustMode};
+                                            let thrust_mode = CompactThrustMode::new(
+                                                match my_actual_rotation {
+                                                    AttachedPartFacing::Up => if x < 0 { HorizontalThrustMode::CounterClockwise } else if x > 0 { HorizontalThrustMode::Clockwise } else { HorizontalThrustMode::Either },
+                                                    AttachedPartFacing::Right => if y > 0 { HorizontalThrustMode::CounterClockwise } else { HorizontalThrustMode::Clockwise },
+                                                    AttachedPartFacing::Down => if x < 0 { HorizontalThrustMode::Clockwise } else if x > 0 { HorizontalThrustMode::CounterClockwise } else { HorizontalThrustMode::Either },
+                                                    AttachedPartFacing::Left => if y > 0 { HorizontalThrustMode::Clockwise } else { HorizontalThrustMode::CounterClockwise },
+                                                },
+                                                match my_actual_rotation {
+                                                    AttachedPartFacing::Up => VerticalThrustMode::Backwards,
+                                                    AttachedPartFacing::Down => VerticalThrustMode::Forwards,
+                                                    AttachedPartFacing::Left | AttachedPartFacing::Right => VerticalThrustMode::None
+                                                }
+                                            );
+                                            return Err((part, i, *details, rotated, thrust_mode));
+                                        }
                                     }
                                 }
                             }
-                            for subpart in part.attachments.iter_mut() {
-                                if let Some((part, _)) = subpart { recurse(part, target_x, target_y, bodies)? }
+                            for (i, subpart) in part.attachments.iter_mut().enumerate() {
+                                if let Some((part, _)) = subpart {
+                                    let my_actual_rotation = attachments[i].unwrap().facing.get_actual_rotation(parent_actual_rotation);
+                                    let new_x = x + match my_actual_rotation { AttachedPartFacing::Left => -1, AttachedPartFacing::Right => 1, _ => 0 };
+                                    let new_y = y + match my_actual_rotation { AttachedPartFacing::Up => 1, AttachedPartFacing::Down => -1, _ => 0 };
+                                    recurse(part, target_x, target_y, bodies, my_actual_rotation, new_x, new_y)?
+                                }
                             }
                             Ok(())
                         }
-                        if let Err((part, slot_id, details, teleport_to)) = recurse(player_parts.get_mut(&id).unwrap(), x + core_location.translation.x, y + core_location.translation.y, &simulation.world) {
+                        if let Err((part, slot_id, details, teleport_to, thrust_mode)) = recurse(
+                            player_parts.get_mut(&id).unwrap(), 
+                            x + core_location.translation.x, 
+                            y + core_location.translation.y, 
+                            &simulation.world,
+                            world::parts::AttachedPartFacing::Up,
+                            0, 0
+                        ) {
+                            part.thrust_mode = thrust_mode;
                             let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
                             grabbed_part_body.set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), details.facing.part_rotation() + core_location.rotation.angle()));
                             part.attachments[slot_id] = Some((free_parts.remove(&part_id).unwrap().extract(), simulation.equip_part_constraint(part.body_id, part_id, details.x, details.y)));
                             simulation.colliders.get_mut(part.collider).unwrap().set_user_data(Some(Box::new(PartOfPlayer(id))));
-                            attachment_msg = Some(codec::ToClientMsg::UpdatePartMeta { id: part_id, owning_player: Some(id), thrust_mode: 0}.serialize());
+                            attachment_msg = Some(codec::ToClientMsg::UpdatePartMeta { id: part_id, owning_player: Some(id), thrust_mode: part.thrust_mode.into()}.serialize());
                         } else {
                             free_parts.get_mut(&part_id).unwrap().become_decaying();
                         }
+
                         let msg = codec::ToClientMsg::UpdatePlayerMeta {
                             id,
                             thrust_forward: player_meta.thrust_forwards, thrust_backward: player_meta.thrust_backwards, thrust_clockwise: player_meta.thrust_clockwise, thrust_counter_clockwise: player_meta.thrust_counterclockwise,
