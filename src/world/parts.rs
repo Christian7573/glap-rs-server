@@ -44,7 +44,7 @@ impl Part {
     }
     pub fn mutate(&mut self, new_kind: PartKind, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) {
         for attachment in self.attachments.iter() { if attachment.is_some() { panic!("Mutated part with attachments"); } };
-        colliders.remove(self.collider);
+        let mut prev_collider = colliders.remove(self.collider).unwrap();        
         self.kind = new_kind;
         let (body_desc, collider_desc) = new_kind.physics_components(part_static);
         let mut body = body_desc.build();
@@ -52,7 +52,9 @@ impl Part {
         body.set_position(old_body.position().clone());
         body.set_velocity(old_body.velocity().clone());
         bodies.swap_part(self.body_id, body);
-        self.collider = colliders.insert(collider_desc.build(BodyPartHandle(MyHandle::Part(self.body_id), 0)));
+        let mut collider = collider_desc.build(BodyPartHandle(MyHandle::Part(self.body_id), 0));
+        collider.set_user_data(prev_collider.take_user_data());
+        self.collider = colliders.insert(collider);
     }
     pub fn thrust(&self, bodies: &mut super::World, fuel: &mut u16, forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool) {
         match self.kind {
