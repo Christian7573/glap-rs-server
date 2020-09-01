@@ -345,7 +345,7 @@ async fn main() {
                                 }
                                 Ok(())
                             }
-                            if let Err(part) = recurse(player_parts.get_mut(&id).unwrap(), part_id, &mut free_parts, &mut simulation, &mut random_broadcast_messages) {
+                            if let Err(part) = recurse(player_parts.get_mut(&id).unwrap(), part_id, &mut free_parts, &mut simulation, &mut random_on_grabbed_messages) {
                                 player_meta.grabbed_part = Some((part_id, simulation.equip_mouse_dragging(part_id), x, y));
                                 player_meta.max_power -= part.kind.power_storage();
                                 if player_meta.power > player_meta.max_power { player_meta.power = player_meta.max_power };
