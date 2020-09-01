@@ -304,6 +304,7 @@ async fn main() {
                         let core_location = simulation.world.get_rigid(MyHandle::Part(player_parts.get(&id).unwrap().body_id)).unwrap().position().translation;
                         let point = nphysics2d::math::Point::new(x + core_location.x, y + core_location.y);
                         let mut grabbed = false;
+                        let mut random_on_grabbed_messages: Vec<Vec<u8>> = Vec::new();
                         if let Some(free_part) = free_parts.get_mut(&part_id) {
                             if let FreePart::Decaying(part, _) | FreePart::EarthCargo(part) = &free_part {
                                 player_meta.grabbed_part = Some((part_id, simulation.equip_mouse_dragging(part_id), x, y));
@@ -311,23 +312,24 @@ async fn main() {
                                 free_part.become_grabbed(&mut earth_cargos);
                             }
                         } else {
-                            fn recurse(part: &mut Part, target_part: u16, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation) -> Result<(),Part> {
+                            fn recurse(part: &mut Part, target_part: u16, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation, random_on_grabbed_messages: &mut Vec<Vec<u8>>) -> Result<(),Part> {
                                 for slot in part.attachments.iter_mut() {
                                     if let Some((part, connection, connection2)) = slot {
                                         if part.body_id == target_part {
-                                            fn recursive_detatch(part: &mut Part, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation) {
+                                            fn recursive_detatch(part: &mut Part, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation, random_on_grabbed_messages: &mut Vec<Vec<u8>>) {
                                                 for slot in part.attachments.iter_mut() {
                                                     if let Some((part, connection, connection2)) = slot {
                                                         simulation.release_constraint(*connection);
                                                         simulation.release_constraint(*connection2);
-                                                        recursive_detatch(part, free_parts, simulation);
+                                                        recursive_detatch(part, free_parts, simulation, random_on_grabbed_messages);
                                                         if let Some((part, _, _)) = std::mem::replace(slot, None) {
+                                                            random_on_grabbed_messages.push(codec::ToClientMsg::UpdatePartMeta{ id: part.body_id, owning_player: None, thrust_mode: 0 }.serialize());
                                                             free_parts.insert(part.body_id, FreePart::Decaying(part, DEFAULT_PART_DECAY_TICKS));
                                                         }
                                                     }
                                                 }
                                             }
-                                            recursive_detatch(part, free_parts, simulation);
+                                            recursive_detatch(part, free_parts, simulation, random_on_grabbed_messages);
                                             simulation.release_constraint(*connection);
                                             simulation.release_constraint(*connection2);
                                             if let Some((part, _, _)) = std::mem::replace(slot, None) {
@@ -338,12 +340,12 @@ async fn main() {
                                 }
                                 for slot in part.attachments.iter_mut() {
                                     if let Some((part, _, _)) = slot {
-                                        recurse(part, target_part, free_parts, simulation)?;
+                                        recurse(part, target_part, free_parts, simulation, random_on_grabbed_messages)?;
                                     }
                                 }
                                 Ok(())
                             }
-                            if let Err(part) = recurse(player_parts.get_mut(&id).unwrap(), part_id, &mut free_parts, &mut simulation) {
+                            if let Err(part) = recurse(player_parts.get_mut(&id).unwrap(), part_id, &mut free_parts, &mut simulation, &mut random_broadcast_messages) {
                                 player_meta.grabbed_part = Some((part_id, simulation.equip_mouse_dragging(part_id), x, y));
                                 player_meta.max_power -= part.kind.power_storage();
                                 if player_meta.power > player_meta.max_power { player_meta.power = player_meta.max_power };
@@ -366,6 +368,7 @@ async fn main() {
                                 if let Session::Spawned(socket, _) = session {
                                     socket.queue_send(Message::Binary(msg.clone()));
                                     socket.queue_send(Message::Binary(msg2.clone()));
+                                    for msg in &random_on_grabbed_messages { socket.queue_send(Message::Binary(msg.clone())); };
                                 }
                             }
                         };
