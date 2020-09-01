@@ -114,9 +114,9 @@ async fn main() {
                 let mut random_broadcast_messages: Vec<Vec<u8>> = Vec::new();
                 for (id, session) in &mut event_source.sessions {
                     if let Session::Spawned(_, player) = session {
-                        if player.fuel > 0 {
-                            player_parts.get(id).unwrap().thrust(&mut simulation.world, &mut player.fuel, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise);
-                            if player.fuel < 1 {
+                        if player.power > 0 {
+                            player_parts.get(id).unwrap().thrust(&mut simulation.world, &mut player.power, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise);
+                            if player.power < 1 {
                                 player.thrust_backwards = false; player.thrust_forwards = false; player.thrust_clockwise = false; player.thrust_counterclockwise = false;
                                 random_broadcast_messages.push(codec::ToClientMsg::UpdatePlayerMeta {
                                    id:  *id,
@@ -177,7 +177,7 @@ async fn main() {
                             };
                             player_planet_meta.touching_parts.insert(part);
                             if let Some(Session::Spawned(_socket, player_meta)) = event_source.sessions.get_mut(&player) {
-                                player_meta.fuel = player_meta.max_fuel;
+                                player_meta.power = player_meta.max_power;
                             }
                         },
                         PlayerUntouchPlanet{ player, planet, part } => {
@@ -278,7 +278,7 @@ async fn main() {
                     //Graduate to spawned player
                     player_parts.insert(id, core);
                     let meta = session::PlayerMeta::default();
-                    socket.queue_send(Message::Binary(codec::ToClientMsg::UpdateMyMeta{ max_fuel: meta.max_fuel }.serialize()));
+                    socket.queue_send(Message::Binary(codec::ToClientMsg::UpdateMyMeta{ max_fuel: meta.max_power }.serialize()));
                     event_source.sessions.insert(id, Session::Spawned(socket, meta));
                 } else { panic!() }
             },

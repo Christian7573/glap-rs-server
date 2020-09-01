@@ -112,16 +112,15 @@ impl PartKind {
         match self {
             PartKind::Core => panic!("PartKind thrust called on core"),
             PartKind::Hub => None,
-            PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 3, force: Force2::linear_at_point(Vector2::new(0.0, -5.0), &Point2::new(0.0, 1.0)) }),
+            PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 2, force: Force2::linear_at_point(Vector2::new(0.0, -1.0), &Point2::new(0.0, 1.0)) }),
             PartKind::Cargo => None
         }
     }
     pub fn inertia(&self) -> Inertia2<MyUnits> {
         match self {
             PartKind::Core | PartKind::Hub => Inertia2::new(1.0,1.0),
-            PartKind::Cargo => Inertia2::new(0.5, 0.5),
-            PartKind::LandingThruster => Inertia2::new(1.5, 1.5),
-            PartKind::Hub => Inertia2::new(1.0, 1.0),
+            PartKind::Cargo => Inertia2::new(0.75, 0.75),
+            PartKind::LandingThruster => Inertia2::new(0.75, 0.75),
             _ => todo!()
         }
     }
@@ -140,6 +139,15 @@ impl PartKind {
                 Some(AttachmentPointDetails{ x: -0.6, y: 0.0, facing: AttachedPartFacing::Left, perpendicular: (0.0, -1.0) }),
             ],
             PartKind::Cargo | PartKind::LandingThruster => [ None, None, None, None ]
+        }
+    }
+    pub fn power_storage(&self) -> u16 {
+        const CORE_MAX_POWER: u16 = 100 * crate::TICKS_PER_SECOND as u16;
+        match self {
+            PartKind::Core => CORE_MAX_POWER,
+            PartKind::Cargo => CORE_MAX_POWER / 5 * 3,
+            PartKind::LandingThruster => CORE_MAX_POWER / 10 * 3,
+            PartKind::Hub => CORE_MAX_POWER / 2,
         }
     }
     // pub fn get_attachable_positions(&self) -> [(Isometry<super::MyUnits>, )] {

@@ -50,14 +50,14 @@ pub struct PlayerMeta {
     pub thrust_backwards: bool,
     pub thrust_clockwise: bool,
     pub thrust_counterclockwise: bool,
-    pub fuel: u16,
-    pub max_fuel: u16,
+    pub power: u16,
+    pub max_power: u16,
     pub grabbed_part: Option<(u16, nphysics2d::joint::DefaultJointConstraintHandle, f32, f32)>
 }
 impl Default for PlayerMeta {
     fn default() -> PlayerMeta { PlayerMeta {
         thrust_backwards: false, thrust_clockwise: false, thrust_counterclockwise: false, thrust_forwards: false,
-        fuel: 100 * crate::TICKS_PER_SECOND as u16, max_fuel: 100 * crate::TICKS_PER_SECOND as u16,
+        power: 100 * crate::TICKS_PER_SECOND as u16, max_power: 100 * crate::TICKS_PER_SECOND as u16,
         grabbed_part: None
     } }
 }
@@ -75,7 +75,7 @@ impl Session {
                 //Do some check here in the future, don't need to send messages about things that are really far away
                 socket.queue_send(Message::Binary(msg.msg.clone()));
             }
-            socket.queue_send(Message::Binary(ToClientMsg::PostSimulationTick{ your_fuel: myself.fuel }.serialize()));
+            socket.queue_send(Message::Binary(ToClientMsg::PostSimulationTick{ your_fuel: myself.power }.serialize()));
             for msg in random_broadcast_messages { socket.queue_send(Message::Binary(msg.clone())); };
             //println!("{}", myself.fuel);
         }
@@ -125,7 +125,7 @@ impl Stream for Session {
                         Some(Message::Binary(dat)) => {
                             match ToServerMsg::deserialize(dat.as_slice(), &mut 0) {
                                 Ok(ToServerMsg::SetThrusters { forward, backward, clockwise, counter_clockwise }) => {
-                                    if player.fuel > 0 {
+                                    if player.power > 0 {
                                         player.thrust_forwards = forward;
                                         player.thrust_backwards = backward;
                                         player.thrust_clockwise = clockwise;

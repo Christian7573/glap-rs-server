@@ -13,7 +13,7 @@ pub struct Planets {
 }
 impl Planets {
     pub fn new(colliders: &mut super::MyColliderSet, bodies: &mut super::World) -> Planets {
-        const EARTH_MASS: f32 = 700.0;
+        const EARTH_MASS: f32 = 700.0 * 0.8;
         let planet_material = MaterialHandle::new(BasicMaterial::new(0.0, 1.0));
         let earth = {
             let body = RigidBodyDesc::new()
@@ -47,7 +47,7 @@ impl Planets {
                 .translation(Vector2::new(42.4530083832,69.2770133538))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
-                .mass(EARTH_MASS / 81.0)
+                .mass(EARTH_MASS / 41.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = 25.0 / 4.0;
@@ -74,7 +74,7 @@ impl Planets {
                 .translation(Vector2::new(0.0,-1000.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
-                .mass(EARTH_MASS / 2.0)
+                .mass(EARTH_MASS / 4.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = 25.0 / 2.0;
