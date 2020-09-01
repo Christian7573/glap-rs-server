@@ -93,15 +93,15 @@ async fn main() {
                         ticks_til_earth_cargo_spawn = TICKS_PER_EARTH_CARGO_SPAWN;
                         earth_cargos += 1;
                         let earth_position = simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
-                        let part = world::parts::Part::new(world::parts::PartKind::Cargo, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+                        let part = world::parts::Part::new(world::parts::PartKind::Hub, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
                         let id = part.body_id;
                         let body = simulation.world.get_rigid_mut(MyHandle::Part(part.body_id)).unwrap();
                         let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                         let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
-                        body.set_position(Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), spawn_degrees));
+                        body.set_position(Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0)); // spawn_degrees));
                         free_parts.insert(part.body_id, FreePart::EarthCargo(part));
 
-                        let add_msg = codec::ToClientMsg::AddPart { id, kind: world::parts::PartKind::Cargo }.serialize();
+                        let add_msg = codec::ToClientMsg::AddPart { id, kind: world::parts::PartKind::Hub }.serialize();
                         let move_msg = codec::ToClientMsg::MovePart { id, x: body.position().translation.x, y: body.position().translation.y, rotation_i: body.position().rotation.im, rotation_n: body.position().rotation.re }.serialize();
                         for (_id, session) in &mut event_source.sessions {
                             if let Session::Spawned(socket, _) = session {
@@ -392,6 +392,7 @@ async fn main() {
                         grabbed_part_body.set_velocity(nphysics2d::algebra::Velocity2::new(Vector2::new(0.0,0.0), 0.0));
 
                         use world::parts::CompactThrustMode;
+                        println!("e {} {}", x + core_location.translation.x, y + core_location.translation.y);
                         fn recurse<'a>(part: &'a mut Part, target_x: f32, target_y: f32, bodies: &world::World, parent_actual_rotation: world::parts::AttachedPartFacing, x: i16, y: i16) -> Result<(), (&'a mut Part, usize, world::parts::AttachmentPointDetails, (f32, f32), CompactThrustMode)> {
                             let attachments = part.kind.attachment_locations();
                             let pos = bodies.get_rigid(MyHandle::Part(part.body_id)).unwrap().position().clone();
@@ -399,10 +400,11 @@ async fn main() {
                                 if part.attachments[i].is_none() {
                                     if let Some(details) = &attachments[i] {
                                         let mut rotated = rotate_vector(details.x, details.y, pos.rotation.im, pos.rotation.re);
+                                        println!("r {} {} {:?} {}", details.x, details.y, rotated, pos.rotation.angle());
                                         rotated.0 += pos.translation.x;
                                         rotated.1 += pos.translation.y;
                                         if (rotated.0 - target_x).abs() <= 0.4 && (rotated.1 - target_y).abs() <= 0.4 {
-                                            println!("{:?}", details.facing);
+                                            println!("{:?} {:?}", details.facing, rotated);
                                             let my_actual_rotation = details.facing.get_actual_rotation(parent_actual_rotation);
                                             use world::parts::{HorizontalThrustMode, VerticalThrustMode};
                                             let hroizontal = match my_actual_rotation {
