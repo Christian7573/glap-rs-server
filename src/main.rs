@@ -345,6 +345,9 @@ async fn main() {
                             }
                             if let Err(part) = recurse(player_parts.get_mut(&id).unwrap(), part_id, &mut free_parts, &mut simulation) {
                                 player_meta.grabbed_part = Some((part_id, simulation.equip_mouse_dragging(part_id), x, y));
+                                player_meta.max_power -= part.kind.power_storage();
+                                if player_meta.power > player_meta.max_power { player_meta.power = player_meta.max_power };
+                                socket.queue_send(Message::Binary(codec::ToClientMsg::UpdateMyMeta{ max_fuel: player_meta.max_power }.serialize()));
                                 simulation.colliders.get_mut(part.collider).unwrap().set_user_data(None);
                                 grabbed = true;
                                 free_parts.insert(part_id, FreePart::Grabbed(part));
@@ -378,7 +381,7 @@ async fn main() {
                 }
             },
             SessionEvent(id, ReleaseGrab) => {
-                if let Some(Session::Spawned(_socket, player_meta)) = event_source.sessions.get_mut(&id) {
+                if let Some(Session::Spawned(socket, player_meta)) = event_source.sessions.get_mut(&id) {
                     if let Some((part_id, constraint, x, y)) = player_meta.grabbed_part {
                         simulation.release_constraint(constraint);
                         player_meta.grabbed_part = None;
@@ -442,6 +445,8 @@ async fn main() {
                             let (connection1, connection2) = simulation.equip_part_constraint(part.body_id, part_id, part.kind.attachment_locations()[slot_id].unwrap());
 
                             let mut grabbed_part = free_parts.remove(&part_id).unwrap().extract();
+                            player_meta.max_power += grabbed_part.kind.power_storage();
+                            socket.queue_send(Message::Binary(codec::ToClientMsg::UpdateMyMeta{ max_fuel: player_meta.max_power }.serialize()));
                             grabbed_part.thrust_mode = thrust_mode;
                             simulation.colliders.get_mut(grabbed_part.collider).unwrap().set_user_data(Some(Box::new(PartOfPlayer(id))));
                             part.attachments[slot_id] = Some((grabbed_part, connection1, connection2));
