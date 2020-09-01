@@ -13,7 +13,7 @@ pub struct Planets {
 }
 impl Planets {
     pub fn new(colliders: &mut super::MyColliderSet, bodies: &mut super::World) -> Planets {
-        const EARTH_MASS: f32 = 700.0;
+        const EARTH_MASS: f32 = 650.0;
         let planet_material = MaterialHandle::new(BasicMaterial::new(0.0, 1.0));
         let earth = {
             let body = RigidBodyDesc::new()

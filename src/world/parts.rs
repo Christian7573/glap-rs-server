@@ -134,10 +134,10 @@ impl PartKind {
                 Some(AttachmentPointDetails{ x: -0.6, y: 0.0, facing: AttachedPartFacing::Left, perpendicular: (0.0, -1.0) }),
             ],
             PartKind::Hub => [
-                Some(AttachmentPointDetails{ x: 0.0, y: 0.6, facing: AttachedPartFacing::Up, perpendicular: (1.0, 0.0) }),
-                Some(AttachmentPointDetails{ x: 0.6, y: 0.0, facing: AttachedPartFacing::Right, perpendicular: (0.0, 1.0) }),
+                Some(AttachmentPointDetails{ x: 0.0, y: 1.1, facing: AttachedPartFacing::Up, perpendicular: (1.0, 0.0) }),
+                Some(AttachmentPointDetails{ x: 0.6, y: 0.5, facing: AttachedPartFacing::Right, perpendicular: (0.0, 1.0) }),
                 None,
-                Some(AttachmentPointDetails{ x: -0.6, y: 0.0, facing: AttachedPartFacing::Left, perpendicular: (0.0, -1.0) }),
+                Some(AttachmentPointDetails{ x: -0.6, y: 0.5, facing: AttachedPartFacing::Left, perpendicular: (0.0, -1.0) }),
             ],
             PartKind::Cargo | PartKind::LandingThruster => [ None, None, None, None ]
         }
@@ -146,9 +146,9 @@ impl PartKind {
         const CORE_MAX_POWER: u16 = 100 * crate::TICKS_PER_SECOND as u16;
         match self {
             PartKind::Core => CORE_MAX_POWER,
-            PartKind::Cargo => CORE_MAX_POWER / 5 * 3,
-            PartKind::LandingThruster => CORE_MAX_POWER / 10 * 3,
-            PartKind::Hub => CORE_MAX_POWER / 2,
+            PartKind::Cargo => CORE_MAX_POWER / 10,
+            PartKind::LandingThruster => CORE_MAX_POWER / 5,
+            PartKind::Hub => CORE_MAX_POWER / 3,
         }
     }
     // pub fn get_attachable_positions(&self) -> [(Isometry<super::MyUnits>, )] {
@@ -156,14 +156,14 @@ impl PartKind {
     // }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct AttachmentPointDetails {
     pub x: f32,
     pub y: f32,
     pub perpendicular: (f32,f32),
     pub facing: AttachedPartFacing
 }
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum AttachedPartFacing { Up, Right, Down, Left }
 impl AttachedPartFacing {
     pub fn part_rotation(&self) -> f32 {

@@ -402,6 +402,7 @@ async fn main() {
                                         rotated.0 += pos.translation.x;
                                         rotated.1 += pos.translation.y;
                                         if (rotated.0 - target_x).abs() <= 0.4 && (rotated.1 - target_y).abs() <= 0.4 {
+                                            println!("{:?}", details.facing);
                                             let my_actual_rotation = details.facing.get_actual_rotation(parent_actual_rotation);
                                             use world::parts::{HorizontalThrustMode, VerticalThrustMode};
                                             let hroizontal = match my_actual_rotation {
