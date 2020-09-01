@@ -121,6 +121,7 @@ impl PartKind {
             PartKind::Core | PartKind::Hub => Inertia2::new(1.0,1.0),
             PartKind::Cargo => Inertia2::new(0.5, 0.5),
             PartKind::LandingThruster => Inertia2::new(1.5, 1.5),
+            PartKind::Hub => Inertia2::new(1.0, 1.0),
             _ => todo!()
         }
     }
