@@ -134,10 +134,10 @@ impl PartKind {
                 Some(AttachmentPointDetails{ x: -0.6, y: 0.0, facing: AttachedPartFacing::Left, perpendicular: (0.0, -1.0) }),
             ],
             PartKind::Hub => [
-                Some(AttachmentPointDetails{ x: 0.0, y: 1.1, facing: AttachedPartFacing::Up, perpendicular: (1.0, 0.0) }),
-                Some(AttachmentPointDetails{ x: 0.6, y: 0.5, facing: AttachedPartFacing::Right, perpendicular: (0.0, 1.0) }),
                 None,
                 Some(AttachmentPointDetails{ x: -0.6, y: 0.5, facing: AttachedPartFacing::Left, perpendicular: (0.0, -1.0) }),
+                Some(AttachmentPointDetails{ x: 0.0, y: 1.1, facing: AttachedPartFacing::Up, perpendicular: (1.0, 0.0) }),
+                Some(AttachmentPointDetails{ x: 0.6, y: 0.5, facing: AttachedPartFacing::Right, perpendicular: (0.0, 1.0) }),
             ],
             PartKind::Cargo | PartKind::LandingThruster => [ None, None, None, None ]
         }
