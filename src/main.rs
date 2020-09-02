@@ -77,6 +77,23 @@ async fn main() {
     let mut player_planet_metas: BTreeMap<u16, PlayerPlanetInteractionMeta> = BTreeMap::new();
     const TICKS_PER_CARGO_UPGRADE: u8 = TICKS_PER_SECOND;
 
+    let my_thruster_1 = world::parts::Part::new(world::parts::PartKind::Hub, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+    simulation.world.get_rigid_mut(MyHandle::Part(my_thruster_1.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(0.0, 27.0), 0.0));
+    free_parts.insert(my_thruster_1.body_id, FreePart::Decaying(my_thruster_1, DEFAULT_PART_DECAY_TICKS));
+    let my_thruster_2 = world::parts::Part::new(world::parts::PartKind::Hub, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+    simulation.world.get_rigid_mut(MyHandle::Part(my_thruster_2.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(2.0, 27.0), 0.0));
+    free_parts.insert(my_thruster_2.body_id, FreePart::Decaying(my_thruster_2, DEFAULT_PART_DECAY_TICKS));
+    let my_thruster_3 = world::parts::Part::new(world::parts::PartKind::Hub, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+    simulation.world.get_rigid_mut(MyHandle::Part(my_thruster_3.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(4.0, 27.0), 0.0));
+    free_parts.insert(my_thruster_3.body_id, FreePart::Decaying(my_thruster_3, DEFAULT_PART_DECAY_TICKS));
+    let my_thruster_4 = world::parts::Part::new(world::parts::PartKind::LandingThruster, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+    simulation.world.get_rigid_mut(MyHandle::Part(my_thruster_4.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(6.0, 27.0), 0.0));
+    free_parts.insert(my_thruster_4.body_id, FreePart::Decaying(my_thruster_4, DEFAULT_PART_DECAY_TICKS));
+    let my_thruster_5 = world::parts::Part::new(world::parts::PartKind::LandingThruster, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+    simulation.world.get_rigid_mut(MyHandle::Part(my_thruster_5.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(8.0, 27.0), 0.0));
+    free_parts.insert(my_thruster_5.body_id, FreePart::Decaying(my_thruster_5, DEFAULT_PART_DECAY_TICKS));
+    
+
     while let Some(event) = event_source.next().await {
         use session::SessionEvent::*;
         use Event::*;
@@ -91,7 +108,7 @@ async fn main() {
                     ticks_til_earth_cargo_spawn -= 1;
                     if ticks_til_earth_cargo_spawn == 0 {
                         ticks_til_earth_cargo_spawn = TICKS_PER_EARTH_CARGO_SPAWN;
-                        earth_cargos += 1;
+                        earth_cargos += 1; 
                         let earth_position = simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
                         let part = world::parts::Part::new(world::parts::PartKind::Cargo, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
                         let id = part.body_id;
@@ -232,7 +249,7 @@ async fn main() {
                     //core_body.apply_force(0, &nphysics2d::algebra::Force2::torque(std::f32::consts::PI), nphysics2d::algebra::ForceType::VelocityChange, true);
                     let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                     let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
-                    core_body.set_position(Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), spawn_degrees));
+                    core_body.set_position(Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0));
 
                     let add_player_msg = codec::ToClientMsg::AddPlayer { id, name: String::default(), core_id: core.body_id }.serialize();
 
@@ -395,34 +412,34 @@ async fn main() {
                         grabbed_part_body.set_velocity(nphysics2d::algebra::Velocity2::new(Vector2::new(0.0,0.0), 0.0));
 
                         use world::parts::CompactThrustMode;
-                        println!("e {} {}", x + core_location.translation.x, y + core_location.translation.y);
-                        fn recurse<'a>(part: &'a mut Part, target_x: f32, target_y: f32, bodies: &world::World, parent_actual_rotation: world::parts::AttachedPartFacing, x: i16, y: i16) -> Result<(), (&'a mut Part, usize, world::parts::AttachmentPointDetails, (f32, f32), CompactThrustMode)> {
+                        println!("Start");
+                        fn recurse<'a>(part: &'a mut Part, target_x: f32, target_y: f32, bodies: &world::World, parent_actual_rotation: world::parts::AttachedPartFacing, x: i16, y: i16) -> Result<(), (&'a mut Part, usize, world::parts::AttachmentPointDetails, (f32, f32), CompactThrustMode, world::parts::AttachedPartFacing)> {
                             let attachments = part.kind.attachment_locations();
                             let pos = bodies.get_rigid(MyHandle::Part(part.body_id)).unwrap().position().clone();
+                            println!("Iter");
                             for i in 0..part.attachments.len() {
                                 if part.attachments[i].is_none() {
                                     if let Some(details) = &attachments[i] {
+                                        println!("r {:?} {:?}", details, details.facing.get_actual_rotation(parent_actual_rotation));
                                         let mut rotated = rotate_vector(details.x, details.y, pos.rotation.im, pos.rotation.re);
-                                        println!("r {} {} {:?} {}", details.x, details.y, rotated, pos.rotation.angle());
                                         rotated.0 += pos.translation.x;
                                         rotated.1 += pos.translation.y;
                                         if (rotated.0 - target_x).abs() <= 0.4 && (rotated.1 - target_y).abs() <= 0.4 {
-                                            println!("{:?} {:?}", details.facing, rotated);
-                                            let my_actual_rotation = details.facing.get_actual_rotation(parent_actual_rotation);
+                                            let my_actual_facing = details.facing.get_actual_rotation(parent_actual_rotation);
                                             use world::parts::{HorizontalThrustMode, VerticalThrustMode};
-                                            let hroizontal = match my_actual_rotation {
+                                            let hroizontal = match my_actual_facing {
                                                 AttachedPartFacing::Up => if x < 0 { HorizontalThrustMode::CounterClockwise } else if x > 0 { HorizontalThrustMode::Clockwise } else { HorizontalThrustMode::None },
                                                 AttachedPartFacing::Right => if y > 0 { HorizontalThrustMode::CounterClockwise } else { HorizontalThrustMode::Clockwise },
                                                 AttachedPartFacing::Down => if x < 0 { HorizontalThrustMode::Clockwise } else if x > 0 { HorizontalThrustMode::CounterClockwise } else { HorizontalThrustMode::None },
                                                 AttachedPartFacing::Left => if y > 0 { HorizontalThrustMode::Clockwise } else { HorizontalThrustMode::CounterClockwise },
                                             };
-                                            let vertical = match my_actual_rotation  {
+                                            let vertical = match my_actual_facing  {
                                                 AttachedPartFacing::Up => VerticalThrustMode::Backwards,
                                                 AttachedPartFacing::Down => VerticalThrustMode::Forwards,
                                                 AttachedPartFacing::Left | AttachedPartFacing::Right => VerticalThrustMode::None
                                             };
                                             let thrust_mode = CompactThrustMode::new(hroizontal, vertical);
-                                            return Err((part, i, *details, rotated, thrust_mode));
+                                            return Err((part, i, *details, rotated, thrust_mode, my_actual_facing));
                                         }
                                     }
                                 }
@@ -437,7 +454,7 @@ async fn main() {
                             }
                             Ok(())
                         }
-                        if let Err((part, slot_id, details, teleport_to, thrust_mode)) = recurse(
+                        if let Err((part, slot_id, details, teleport_to, thrust_mode, my_actual_facing)) = recurse(
                             player_parts.get_mut(&id).unwrap(), 
                             x + core_location.translation.x, 
                             y + core_location.translation.y, 
@@ -445,9 +462,9 @@ async fn main() {
                             world::parts::AttachedPartFacing::Up,
                             0, 0
                         ) {
-                            println!("{:?}", thrust_mode);
                             let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
-                            grabbed_part_body.set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), details.facing.part_rotation() + core_location.rotation.angle()));
+                            println!("e {:?} {:?} {:?}", details, core_location, my_actual_facing);
+                            grabbed_part_body.set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), my_actual_facing.part_rotation() + core_location.rotation.angle()));
                             let (connection1, connection2) = simulation.equip_part_constraint(part.body_id, part_id, part.kind.attachment_locations()[slot_id].unwrap());
 
                             let mut grabbed_part = free_parts.remove(&part_id).unwrap().extract();

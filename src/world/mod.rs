@@ -120,7 +120,6 @@ impl Simulation {
 
     pub fn equip_mouse_dragging(&mut self, part_id: u16) -> DefaultJointConstraintHandle {
         let body = self.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
-        const INERTIA_BOI: f32 = 0.00000001;
         body.set_local_inertia(Inertia2::new(0.00000001, body.augmented_mass().angular));
         let space = body.position().translation;
         let constraint = MouseConstraint::new(
@@ -143,12 +142,14 @@ impl Simulation {
 
     pub fn equip_part_constraint(&mut self, parent: u16, child: u16, attachment: parts::AttachmentPointDetails) -> (DefaultJointConstraintHandle, DefaultJointConstraintHandle) {
         let offset = (attachment.perpendicular.0 * 0.2, attachment.perpendicular.1 * 0.2);
+        //println!("{} {}", attachment.x + offset.0, attachment.y + offset.1);
         let mut constraint1 = nphysics2d::joint::RevoluteConstraint::new(
             BodyPartHandle(MyHandle::Part(parent), 0),
             BodyPartHandle(MyHandle::Part(child), 0),
             Point::new(attachment.x + offset.0, attachment.y + offset.1),
             Point::new(0.2, 0.0)
         );
+        //println!("{} {}", attachment.x - offset.0, attachment.y - offset.1);
         let mut constraint2 = nphysics2d::joint::RevoluteConstraint::new(
             BodyPartHandle(MyHandle::Part(parent), 0),
             BodyPartHandle(MyHandle::Part(child), 0),

@@ -129,15 +129,15 @@ impl PartKind {
         match self {
             PartKind::Core => [
                 Some(AttachmentPointDetails{ x: 0.0, y: 0.6, facing: AttachedPartFacing::Up, perpendicular: (1.0, 0.0) }),
-                Some(AttachmentPointDetails{ x: 0.6, y: 0.0, facing: AttachedPartFacing::Right, perpendicular: (0.0, 1.0) }),
+                Some(AttachmentPointDetails{ x: -0.6, y: 0.0, facing: AttachedPartFacing::Right, perpendicular: (0.0, 1.0) }),
                 Some(AttachmentPointDetails{ x: 0.0, y: -0.6, facing: AttachedPartFacing::Down, perpendicular: (-1.0, 0.0) }),
-                Some(AttachmentPointDetails{ x: -0.6, y: 0.0, facing: AttachedPartFacing::Left, perpendicular: (0.0, -1.0) }),
+                Some(AttachmentPointDetails{ x: 0.6, y: 0.0, facing: AttachedPartFacing::Left, perpendicular: (0.0, -1.0) }),
             ],
             PartKind::Hub => [
                 None,
-                Some(AttachmentPointDetails{ x: -0.6, y: 0.5, facing: AttachedPartFacing::Left, perpendicular: (0.0, -1.0) }),
+                Some(AttachmentPointDetails{ x: 0.6, y: 0.5, facing: AttachedPartFacing::Left, perpendicular: (0.0, -1.0) }),
                 Some(AttachmentPointDetails{ x: 0.0, y: 1.1, facing: AttachedPartFacing::Up, perpendicular: (1.0, 0.0) }),
-                Some(AttachmentPointDetails{ x: 0.6, y: 0.5, facing: AttachedPartFacing::Right, perpendicular: (0.0, 1.0) }),
+                Some(AttachmentPointDetails{ x: -0.6, y: 0.5, facing: AttachedPartFacing::Right, perpendicular: (0.0, 1.0) }),
             ],
             PartKind::Cargo | PartKind::LandingThruster => [ None, None, None, None ]
         }
@@ -169,9 +169,9 @@ impl AttachedPartFacing {
     pub fn part_rotation(&self) -> f32 {
         match self {
             AttachedPartFacing::Up => 0.0,
-            AttachedPartFacing::Right => -std::f32::consts::FRAC_PI_2,
+            AttachedPartFacing::Right => std::f32::consts::FRAC_PI_2,
             AttachedPartFacing::Down => std::f32::consts::PI,
-            AttachedPartFacing::Left => std::f32::consts::FRAC_PI_2,
+            AttachedPartFacing::Left => -std::f32::consts::FRAC_PI_2,
         }
     }
     pub fn get_actual_rotation(&self, parent_actual_rotation: AttachedPartFacing) -> AttachedPartFacing {

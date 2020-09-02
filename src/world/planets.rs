@@ -74,7 +74,7 @@ impl Planets {
                 .translation(Vector2::new(0.0,-1000.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
-                .mass(EARTH_MASS / 2.0)
+                .mass(EARTH_MASS / 4.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = 25.0 / 2.0;
