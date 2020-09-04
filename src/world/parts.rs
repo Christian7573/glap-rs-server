@@ -112,16 +112,16 @@ impl PartKind {
         match self {
             PartKind::Core => panic!("PartKind thrust called on core"),
             PartKind::Hub => None,
-            PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 3, force: Force2::linear_at_point(Vector2::new(0.0, -5.0), &Point2::new(0.0, 1.0)) }),
+            PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 2, force: Force2::linear_at_point(Vector2::new(0.0, -5.0), &Point2::new(0.0, 1.0)) }),
             PartKind::Cargo => None
         }
     }
     pub fn inertia(&self) -> Inertia2<MyUnits> {
         match self {
-            PartKind::Core | PartKind::Hub => Inertia2::new(1.0,1.0),
+            PartKind::Core => Inertia2::new(1.0,1.0),
             PartKind::Cargo => Inertia2::new(0.5, 0.5),
             PartKind::LandingThruster => Inertia2::new(1.5, 1.5),
-            PartKind::Hub => Inertia2::new(1.0, 1.0),
+            PartKind::Hub => Inertia2::new(0.75, 0.75),
             _ => todo!()
         }
     }

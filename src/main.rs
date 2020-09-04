@@ -18,7 +18,7 @@ pub mod session;
 use session::{Session, SessionEvent};
 
 pub const TICKS_PER_SECOND: u8 = 20;
-pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 10;
+pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 20;
 
 #[async_std::main]
 async fn main() {
@@ -104,6 +104,20 @@ async fn main() {
                 event_source.sessions.insert(id, Session::new(socket));
             },
             Simulate => {
+                let mut random_broadcast_messages: Vec<Vec<u8>> = Vec::new();
+                let mut to_delete: Vec<u16> = Vec::new();
+                for (id, part) in free_parts.iter_mut() {
+                    if let FreePart::Decaying(_, ticks) = part {
+                        *ticks -= 1;
+                        if *ticks < 1 { to_delete.push(*id); }
+                    }
+                }
+                for to_delete in to_delete {
+                    if let Some(FreePart::Decaying(_part, _)) = free_parts.remove(&to_delete) {
+                        simulation.world.remove_part(MyHandle::Part(to_delete));
+                        random_broadcast_messages.push(codec::ToClientMsg::RemovePart{ id: to_delete }.serialize());
+                    }
+                }
                 if earth_cargos < MAX_EARTH_CARGOS {
                     ticks_til_earth_cargo_spawn -= 1;
                     if ticks_til_earth_cargo_spawn == 0 {
@@ -128,9 +142,8 @@ async fn main() {
                         }
                     }
                 }
-                let mut random_broadcast_messages: Vec<Vec<u8>> = Vec::new();
                 for (id, session) in &mut event_source.sessions {
-                    if let Session::Spawned(_, player) = session {
+                    if let Session::Spawned(socket, player) = session {
                         if player.power > 0 {
                             player_parts.get(id).unwrap().thrust(&mut simulation.world, &mut player.power, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise);
                             if player.power < 1 {
@@ -167,6 +180,9 @@ async fn main() {
                                         //simulation.release_constraint(parent_part.attachments[slot].as_ref().unwrap().1);
                                         let part = &mut parent_part.attachments[slot].as_mut().unwrap().0;
                                         part.mutate(upgrade_into, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+                                        player.max_power -= world::parts::PartKind::Cargo.power_storage();
+                                        player.max_power += upgrade_into.power_storage();
+                                        socket.queue_send(Message::Binary(codec::ToClientMsg::UpdateMyMeta{ max_fuel: player.max_power }.serialize()));
                                         
                                         random_broadcast_messages.push(codec::ToClientMsg::RemovePart{ id: part.body_id }.serialize());
                                         random_broadcast_messages.push(codec::ToClientMsg::AddPart{ id: part.body_id, kind: part.kind, }.serialize());
@@ -192,6 +208,11 @@ async fn main() {
                                 });
                                 player_planet_metas.get_mut(&player).unwrap()
                             };
+                            if player_planet_meta.planet_id != planet {
+                                println!("REEEEEEE");
+                                for part in &player_planet_meta.touching_parts { print!("{}", part); }
+                                println!("");
+                            }
                             player_planet_meta.touching_parts.insert(part);
                             if let Some(Session::Spawned(_socket, player_meta)) = event_source.sessions.get_mut(&player) {
                                 player_meta.power = player_meta.max_power;
@@ -329,7 +350,7 @@ async fn main() {
                                 free_part.become_grabbed(&mut earth_cargos);
                             }
                         } else {
-                            fn recurse(part: &mut Part, target_part: u16, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation, random_on_grabbed_messages: &mut Vec<Vec<u8>>) -> Result<(),Part> {
+                            fn recurse_2(part: &mut Part, target_part: u16, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation, random_on_grabbed_messages: &mut Vec<Vec<u8>>) -> Result<(),Part> {
                                 for slot in part.attachments.iter_mut() {
                                     if let Some((part, connection, connection2)) = slot {
                                         if part.body_id == target_part {
@@ -357,18 +378,27 @@ async fn main() {
                                 }
                                 for slot in part.attachments.iter_mut() {
                                     if let Some((part, _, _)) = slot {
-                                        recurse(part, target_part, free_parts, simulation, random_on_grabbed_messages)?;
+                                        recurse_2(part, target_part, free_parts, simulation, random_on_grabbed_messages)?;
                                     }
                                 }
                                 Ok(())
                             }
-                            if let Err(part) = recurse(player_parts.get_mut(&id).unwrap(), part_id, &mut free_parts, &mut simulation, &mut random_on_grabbed_messages) {
+                            if let Err(part) = recurse_2(player_parts.get_mut(&id).unwrap(), part_id, &mut free_parts, &mut simulation, &mut random_on_grabbed_messages) {
                                 player_meta.grabbed_part = Some((part_id, simulation.equip_mouse_dragging(part_id), x, y));
+                                println!("{:?}", part.kind);
                                 player_meta.max_power -= part.kind.power_storage();
                                 if player_meta.power > player_meta.max_power { player_meta.power = player_meta.max_power };
                                 socket.queue_send(Message::Binary(codec::ToClientMsg::UpdateMyMeta{ max_fuel: player_meta.max_power }.serialize()));
                                 simulation.colliders.get_mut(part.collider).unwrap().set_user_data(None);
                                 grabbed = true;
+                                if let Some(planet_meta) = player_planet_metas.get_mut(&id) {
+                                    if planet_meta.touching_parts.remove(&part.body_id) {
+                                        if planet_meta.touching_parts.is_empty() {
+                                            player_planet_metas.remove(&id);
+                                        }
+                                    }
+                                }
+
                                 free_parts.insert(part_id, FreePart::Grabbed(part));
                             }
                         }
