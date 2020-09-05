@@ -52,12 +52,14 @@ pub struct PlayerMeta {
     pub thrust_counterclockwise: bool,
     pub power: u16,
     pub max_power: u16,
+    pub power_regen_per_5_ticks: u16,
     pub grabbed_part: Option<(u16, nphysics2d::joint::DefaultJointConstraintHandle, f32, f32)>
 }
 impl Default for PlayerMeta {
     fn default() -> PlayerMeta { PlayerMeta {
         thrust_backwards: false, thrust_clockwise: false, thrust_counterclockwise: false, thrust_forwards: false,
         power: 100 * crate::TICKS_PER_SECOND as u16, max_power: 100 * crate::TICKS_PER_SECOND as u16,
+        power_regen_per_5_ticks: 0,
         grabbed_part: None
     } }
 }

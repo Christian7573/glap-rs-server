@@ -10,6 +10,7 @@ pub struct Planets {
     pub moon: CelestialObject,
     pub planet_material: MaterialHandle<MyUnits>,
     pub mars: CelestialObject,
+    pub mercury: CelestialObject,
 }
 impl Planets {
     pub fn new(colliders: &mut super::MyColliderSet, bodies: &mut super::World) -> Planets {
@@ -71,7 +72,7 @@ impl Planets {
 
         let mars = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(0.0,-1000.0))
+                .translation(Vector2::new(-128.0,-1000.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 4.0)
@@ -96,18 +97,46 @@ impl Planets {
             }
         };
 
+        let mercury = {
+            let body = RigidBodyDesc::new()
+                .translation(Vector2::new(-1600.0,267.0))
+                .gravity_enabled(false)
+                .status(BodyStatus::Static)
+                .mass(EARTH_MASS / 25.0)
+                .build();
+            let body_handle = bodies.add_celestial_object(body);
+            const RADIUS: f32 = 25.0 * 0.38;
+            let shape = ShapeHandle::new(Ball::new(RADIUS));
+            let collider = ColliderDesc::new(shape)
+                .material(planet_material.clone())
+                .build(BodyPartHandle(body_handle, 0));
+            colliders.insert(collider);
+
+            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+            
+            CelestialObject {
+                name: String::from("mercury"),
+                display_name: String::from("Mercury"),
+                radius: RADIUS,
+                body: body_handle,
+                id,
+                cargo_upgrade: Some(super::parts::PartKind::SolarPanel),
+            }
+        };
+
         Planets {
-            earth, moon, planet_material, mars,
+            earth, moon, planet_material, mars, mercury,
         }
     }
 
-    pub fn celestial_objects<'a>(&'a self) -> [&'a CelestialObject; 3] {
-        [&self.earth, &self.moon, &self.mars]
+    pub fn celestial_objects<'a>(&'a self) -> [&'a CelestialObject; 4] {
+        [&self.earth, &self.moon, &self.mars, &self.mercury]
     }
     pub fn get_celestial_object<'a>(&'a self, id: u16) -> Result<&'a CelestialObject, ()> {
         if id == self.earth.id { Ok(&self.earth) }
         else if id == self.moon.id { Ok(&self.moon) }
         else if id == self.mars.id { Ok(&self.mars) }
+        else if id == self.mercury.id { Ok(&self.mercury) }
         else { Err(()) }
     }
 }

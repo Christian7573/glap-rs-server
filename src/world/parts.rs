@@ -99,7 +99,7 @@ pub use crate::codec::PartKind;
 impl PartKind {
     pub fn physics_components(&self, part_static: &PartStatic) -> (RigidBodyDesc<MyUnits>, ColliderDesc<MyUnits>) {
         match self {
-            PartKind::Core | PartKind::Hub | PartKind::Cargo | PartKind::LandingThruster => {
+            PartKind::Core | PartKind::Hub | PartKind::Cargo | PartKind::LandingThruster | PartKind::SolarPanel => {
                 (
                     RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(self.inertia()),
                     ColliderDesc::new(part_static.unit_cuboid.clone())
@@ -113,7 +113,7 @@ impl PartKind {
             PartKind::Core => panic!("PartKind thrust called on core"),
             PartKind::Hub => None,
             PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 2, force: Force2::linear_at_point(Vector2::new(0.0, -5.0), &Point2::new(0.0, 1.0)) }),
-            PartKind::Cargo => None
+            PartKind::Cargo | PartKind::SolarPanel => None
         }
     }
     pub fn inertia(&self) -> Inertia2<MyUnits> {
@@ -122,7 +122,7 @@ impl PartKind {
             PartKind::Cargo => Inertia2::new(0.5, 0.5),
             PartKind::LandingThruster => Inertia2::new(1.5, 1.5),
             PartKind::Hub => Inertia2::new(0.75, 0.75),
-            _ => todo!()
+            PartKind::SolarPanel => Inertia2::new(0.4, 0.4),
         }
     }
     pub fn attachment_locations(&self) -> [Option<AttachmentPointDetails>; 4] {
@@ -139,7 +139,7 @@ impl PartKind {
                 Some(AttachmentPointDetails{ x: 0.0, y: 1.1, facing: AttachedPartFacing::Up, perpendicular: (1.0, 0.0) }),
                 Some(AttachmentPointDetails{ x: -0.6, y: 0.5, facing: AttachedPartFacing::Right, perpendicular: (0.0, 1.0) }),
             ],
-            PartKind::Cargo | PartKind::LandingThruster => [ None, None, None, None ]
+            PartKind::Cargo | PartKind::LandingThruster | PartKind::SolarPanel => [ None, None, None, None ]
         }
     }
     pub fn power_storage(&self) -> u16 {
@@ -149,6 +149,13 @@ impl PartKind {
             PartKind::Cargo => CORE_MAX_POWER / 10,
             PartKind::LandingThruster => CORE_MAX_POWER / 5,
             PartKind::Hub => CORE_MAX_POWER / 3,
+            PartKind::SolarPanel => 0,
+        }
+    }
+    pub fn power_regen_per_5_ticks(&self) -> u16 {
+        match self {
+            PartKind::SolarPanel => 1,
+            _ => 0,
         }
     }
     // pub fn get_attachable_positions(&self) -> [(Isometry<super::MyUnits>, )] {

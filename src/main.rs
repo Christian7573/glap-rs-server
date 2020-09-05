@@ -93,6 +93,7 @@ async fn main() {
     simulation.world.get_rigid_mut(MyHandle::Part(my_thruster_5.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(8.0, 27.0), 0.0));
     free_parts.insert(my_thruster_5.body_id, FreePart::Decaying(my_thruster_5, DEFAULT_PART_DECAY_TICKS));
     
+    let mut ticks_til_power_regen = 5u8;
 
     while let Some(event) = event_source.next().await {
         use session::SessionEvent::*;
@@ -142,8 +143,16 @@ async fn main() {
                         }
                     }
                 }
+                ticks_til_power_regen -= 1;
+                let is_power_regen_tick;
+                if ticks_til_power_regen == 0 { ticks_til_power_regen = 5; is_power_regen_tick = true; }
+                else { is_power_regen_tick = false; }
                 for (id, session) in &mut event_source.sessions {
                     if let Session::Spawned(socket, player) = session {
+                        if is_power_regen_tick {
+                            player.power += player.power_regen_per_5_ticks;
+                            if player.power > player.max_power { player.power = player.max_power; };
+                        };
                         if player.power > 0 {
                             player_parts.get(id).unwrap().thrust(&mut simulation.world, &mut player.power, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise);
                             if player.power < 1 {
@@ -182,6 +191,8 @@ async fn main() {
                                         part.mutate(upgrade_into, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
                                         player.max_power -= world::parts::PartKind::Cargo.power_storage();
                                         player.max_power += upgrade_into.power_storage();
+                                        player.power_regen_per_5_ticks -= world::parts::PartKind::Cargo.power_regen_per_5_ticks();
+                                        player.power_regen_per_5_ticks += upgrade_into.power_regen_per_5_ticks();
                                         socket.queue_send(Message::Binary(codec::ToClientMsg::UpdateMyMeta{ max_fuel: player.max_power }.serialize()));
                                         
                                         random_broadcast_messages.push(codec::ToClientMsg::RemovePart{ id: part.body_id }.serialize());
@@ -350,16 +361,18 @@ async fn main() {
                                 free_part.become_grabbed(&mut earth_cargos);
                             }
                         } else {
-                            fn recurse_2(part: &mut Part, target_part: u16, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation, random_on_grabbed_messages: &mut Vec<Vec<u8>>) -> Result<(),Part> {
+                            fn recurse_2(part: &mut Part, target_part: u16, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation, random_on_grabbed_messages: &mut Vec<Vec<u8>>) -> Result<(),(Part, u16, u16)> {
                                 for slot in part.attachments.iter_mut() {
                                     if let Some((part, connection, connection2)) = slot {
                                         if part.body_id == target_part {
-                                            fn recursive_detatch(part: &mut Part, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation, random_on_grabbed_messages: &mut Vec<Vec<u8>>) {
+                                            fn recursive_detatch(part: &mut Part, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation, random_on_grabbed_messages: &mut Vec<Vec<u8>>, max_power_lost: &mut u16, regen_lost: &mut u16) {
                                                 for slot in part.attachments.iter_mut() {
                                                     if let Some((part, connection, connection2)) = slot {
                                                         simulation.release_constraint(*connection);
                                                         simulation.release_constraint(*connection2);
-                                                        recursive_detatch(part, free_parts, simulation, random_on_grabbed_messages);
+                                                        *max_power_lost += part.kind.power_storage();
+                                                        *regen_lost += part.kind.power_regen_per_5_ticks();
+                                                        recursive_detatch(part, free_parts, simulation, random_on_grabbed_messages, max_power_lost, regen_lost);
                                                         if let Some((part, _, _)) = std::mem::replace(slot, None) {
                                                             random_on_grabbed_messages.push(codec::ToClientMsg::UpdatePartMeta{ id: part.body_id, owning_player: None, thrust_mode: 0 }.serialize());
                                                             free_parts.insert(part.body_id, FreePart::Decaying(part, DEFAULT_PART_DECAY_TICKS));
@@ -367,11 +380,13 @@ async fn main() {
                                                     }
                                                 }
                                             }
-                                            recursive_detatch(part, free_parts, simulation, random_on_grabbed_messages);
+                                            let mut max_power_lost: u16 = 0;
+                                            let mut regen_lost: u16 = 0;
+                                            recursive_detatch(part, free_parts, simulation, random_on_grabbed_messages, &mut max_power_lost, &mut regen_lost);
                                             simulation.release_constraint(*connection);
                                             simulation.release_constraint(*connection2);
                                             if let Some((part, _, _)) = std::mem::replace(slot, None) {
-                                                return Err(part);
+                                                return Err((part, max_power_lost, regen_lost));
                                             }
                                         }
                                     }
@@ -383,11 +398,13 @@ async fn main() {
                                 }
                                 Ok(())
                             }
-                            if let Err(part) = recurse_2(player_parts.get_mut(&id).unwrap(), part_id, &mut free_parts, &mut simulation, &mut random_on_grabbed_messages) {
+                            if let Err((part, max_power_lost, regen_lost)) = recurse_2(player_parts.get_mut(&id).unwrap(), part_id, &mut free_parts, &mut simulation, &mut random_on_grabbed_messages) {
                                 player_meta.grabbed_part = Some((part_id, simulation.equip_mouse_dragging(part_id), x, y));
                                 println!("{:?}", part.kind);
                                 player_meta.max_power -= part.kind.power_storage();
+                                player_meta.max_power -= max_power_lost;
                                 if player_meta.power > player_meta.max_power { player_meta.power = player_meta.max_power };
+                                player_meta.power_regen_per_5_ticks -= regen_lost;
                                 socket.queue_send(Message::Binary(codec::ToClientMsg::UpdateMyMeta{ max_fuel: player_meta.max_power }.serialize()));
                                 simulation.colliders.get_mut(part.collider).unwrap().set_user_data(None);
                                 grabbed = true;
@@ -499,6 +516,7 @@ async fn main() {
 
                             let mut grabbed_part = free_parts.remove(&part_id).unwrap().extract();
                             player_meta.max_power += grabbed_part.kind.power_storage();
+                            player_meta.power_regen_per_5_ticks += grabbed_part.kind.power_regen_per_5_ticks();
                             socket.queue_send(Message::Binary(codec::ToClientMsg::UpdateMyMeta{ max_fuel: player_meta.max_power }.serialize()));
                             grabbed_part.thrust_mode = thrust_mode;
                             simulation.colliders.get_mut(grabbed_part.collider).unwrap().set_user_data(Some(Box::new(PartOfPlayer(id))));

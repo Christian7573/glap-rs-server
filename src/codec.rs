@@ -57,18 +57,18 @@ fn type_bool_deserialize(buf: &[u8], index: &mut usize) -> Result<bool, ()> {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)] pub enum PartKind {
-	Core, Cargo, LandingThruster, Hub
+	Core, Cargo, LandingThruster, Hub, SolarPanel
 }
 impl PartKind {
 	pub fn serialize(&self, buf: &mut Vec<u8>) {
 		buf.push(match self {
-			Self::Core => 0, Self::Cargo => 1, Self::LandingThruster => 2, Self::Hub => 3
+			Self::Core => 0, Self::Cargo => 1, Self::LandingThruster => 2, Self::Hub => 3, Self::SolarPanel => 4
 		});
 	}
 	pub fn deserialize(buf: &[u8], index: &mut usize) -> Result<Self, ()> {
 		let me = buf[*index]; *index += 1;
 		match me {
-			0 => Ok(Self::Core), 1 => Ok(Self::Cargo), 2 => Ok(Self::LandingThruster), 3 => Ok(Self::Hub),
+			0 => Ok(Self::Core), 1 => Ok(Self::Cargo), 2 => Ok(Self::LandingThruster), 3 => Ok(Self::Hub), 4 => Ok(Self::SolarPanel),
 			_ => Err(())
 		}
 	}

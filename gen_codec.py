@@ -90,6 +90,7 @@ PartKind = Enum("PartKind", [
     "Cargo",
     "LandingThruster",
     "Hub",
+    "SolarPanel",
 ])
 enums.append(PartKind)
 TypePartKind = EnumType("PartKind")
