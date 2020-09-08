@@ -75,54 +75,54 @@ impl PartKind {
 }
 
 pub enum ToServerMsg {
-	Handshake { client: String, session: Option<String>, },
+	Handshake { client: String, session: Option<String>, name: String, },
 	SetThrusters { forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool, },
 	CommitGrab { grabbed_id: u16, x: f32, y: f32, },
 	MoveGrab { x: f32, y: f32, },
 	ReleaseGrab,
 }
 impl ToServerMsg {
-	pub fn serialize(&self) -> Vec<u8> {
-		let mut out: Vec<u8> = Vec::new();
+	pub fn serialize(&self, out: &mut Vec<u8>) {
 		match self {
-			Self::Handshake { client, session} => {
+			Self::Handshake { client, session, name} => {
 				out.push(0);
-				type_string_serialize(&mut out, client);
-				if let Some(tmp) = session {out.push(1); type_string_serialize(&mut out, tmp);} else {out.push(0);}
+				type_string_serialize(out, client);
+				if let Some(tmp) = session {out.push(1); type_string_serialize(out, tmp);} else {out.push(0);}
+				type_string_serialize(out, name);
 			},
 			Self::SetThrusters { forward, backward, clockwise, counter_clockwise} => {
 				out.push(1);
-				type_bool_serialize(&mut out, forward);
-				type_bool_serialize(&mut out, backward);
-				type_bool_serialize(&mut out, clockwise);
-				type_bool_serialize(&mut out, counter_clockwise);
+				type_bool_serialize(out, forward);
+				type_bool_serialize(out, backward);
+				type_bool_serialize(out, clockwise);
+				type_bool_serialize(out, counter_clockwise);
 			},
 			Self::CommitGrab { grabbed_id, x, y} => {
 				out.push(2);
-				type_u16_serialize(&mut out, grabbed_id);
-				type_float_serialize(&mut out, x);
-				type_float_serialize(&mut out, y);
+				type_u16_serialize(out, grabbed_id);
+				type_float_serialize(out, x);
+				type_float_serialize(out, y);
 			},
 			Self::MoveGrab { x, y} => {
 				out.push(3);
-				type_float_serialize(&mut out, x);
-				type_float_serialize(&mut out, y);
+				type_float_serialize(out, x);
+				type_float_serialize(out, y);
 			},
 			Self::ReleaseGrab { } => {
 				out.push(4);
 			},
 		};
-		out
 	}
 	pub fn deserialize(buf: &[u8], index: &mut usize) -> Result<Self,()> {
 		let i = *index;
 		*index += 1;
 		match buf[i] {
 			0 => {
-				let client; let session;
+				let client; let session; let name;
 				client = type_string_deserialize(&buf, index)?;
 				session = {if buf[*index] > 0 {*index += 1; let tmp; tmp = type_string_deserialize(&buf, index)?; Some(tmp)} else {*index += 1; None}};
-				Ok(ToServerMsg::Handshake { client, session})
+				name = type_string_deserialize(&buf, index)?;
+				Ok(ToServerMsg::Handshake { client, session, name})
 			},
 			1 => {
 				let forward; let backward; let clockwise; let counter_clockwise;
@@ -168,74 +168,72 @@ pub enum ToClientMsg {
 	UpdateMyMeta { max_fuel: u16, },
 }
 impl ToClientMsg {
-	pub fn serialize(&self) -> Vec<u8> {
-		let mut out: Vec<u8> = Vec::new();
+	pub fn serialize(&self, out: &mut Vec<u8>) {
 		match self {
 			Self::HandshakeAccepted { id, core_id} => {
 				out.push(0);
-				type_u16_serialize(&mut out, id);
-				type_u16_serialize(&mut out, core_id);
+				type_u16_serialize(out, id);
+				type_u16_serialize(out, core_id);
 			},
 			Self::AddCelestialObject { name, display_name, radius, id, position} => {
 				out.push(1);
-				type_string_serialize(&mut out, name);
-				type_string_serialize(&mut out, display_name);
-				type_float_serialize(&mut out, radius);
-				type_u16_serialize(&mut out, id);
-				type_float_pair_serialize(&mut out, position);
+				type_string_serialize(out, name);
+				type_string_serialize(out, display_name);
+				type_float_serialize(out, radius);
+				type_u16_serialize(out, id);
+				type_float_pair_serialize(out, position);
 			},
 			Self::AddPart { id, kind} => {
 				out.push(2);
-				type_u16_serialize(&mut out, id);
-				kind.serialize(&mut out);
+				type_u16_serialize(out, id);
+				kind.serialize(out);
 			},
 			Self::MovePart { id, x, y, rotation_n, rotation_i} => {
 				out.push(3);
-				type_u16_serialize(&mut out, id);
-				type_float_serialize(&mut out, x);
-				type_float_serialize(&mut out, y);
-				type_float_serialize(&mut out, rotation_n);
-				type_float_serialize(&mut out, rotation_i);
+				type_u16_serialize(out, id);
+				type_float_serialize(out, x);
+				type_float_serialize(out, y);
+				type_float_serialize(out, rotation_n);
+				type_float_serialize(out, rotation_i);
 			},
 			Self::UpdatePartMeta { id, owning_player, thrust_mode} => {
 				out.push(4);
-				type_u16_serialize(&mut out, id);
-				if let Some(tmp) = owning_player {out.push(1); type_u16_serialize(&mut out, tmp);} else {out.push(0);}
-				type_u8_serialize(&mut out, thrust_mode);
+				type_u16_serialize(out, id);
+				if let Some(tmp) = owning_player {out.push(1); type_u16_serialize(out, tmp);} else {out.push(0);}
+				type_u8_serialize(out, thrust_mode);
 			},
 			Self::RemovePart { id} => {
 				out.push(5);
-				type_u16_serialize(&mut out, id);
+				type_u16_serialize(out, id);
 			},
 			Self::AddPlayer { id, core_id, name} => {
 				out.push(6);
-				type_u16_serialize(&mut out, id);
-				type_u16_serialize(&mut out, core_id);
-				type_string_serialize(&mut out, name);
+				type_u16_serialize(out, id);
+				type_u16_serialize(out, core_id);
+				type_string_serialize(out, name);
 			},
 			Self::UpdatePlayerMeta { id, thrust_forward, thrust_backward, thrust_clockwise, thrust_counter_clockwise, grabed_part} => {
 				out.push(7);
-				type_u16_serialize(&mut out, id);
-				type_bool_serialize(&mut out, thrust_forward);
-				type_bool_serialize(&mut out, thrust_backward);
-				type_bool_serialize(&mut out, thrust_clockwise);
-				type_bool_serialize(&mut out, thrust_counter_clockwise);
-				if let Some(tmp) = grabed_part {out.push(1); type_u16_serialize(&mut out, tmp);} else {out.push(0);}
+				type_u16_serialize(out, id);
+				type_bool_serialize(out, thrust_forward);
+				type_bool_serialize(out, thrust_backward);
+				type_bool_serialize(out, thrust_clockwise);
+				type_bool_serialize(out, thrust_counter_clockwise);
+				if let Some(tmp) = grabed_part {out.push(1); type_u16_serialize(out, tmp);} else {out.push(0);}
 			},
 			Self::RemovePlayer { id} => {
 				out.push(8);
-				type_u16_serialize(&mut out, id);
+				type_u16_serialize(out, id);
 			},
 			Self::PostSimulationTick { your_fuel} => {
 				out.push(9);
-				type_u16_serialize(&mut out, your_fuel);
+				type_u16_serialize(out, your_fuel);
 			},
 			Self::UpdateMyMeta { max_fuel} => {
 				out.push(10);
-				type_u16_serialize(&mut out, max_fuel);
+				type_u16_serialize(out, max_fuel);
 			},
 		};
-		out
 	}
 	pub fn deserialize(buf: &[u8], index: &mut usize) -> Result<Self,()> {
 		let i = *index;

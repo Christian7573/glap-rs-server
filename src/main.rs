@@ -18,8 +18,6 @@ pub mod codec;
 pub mod session;
 use codec::*;
 
-use session::{Session, SessionEvent};
-
 pub const TICKS_PER_SECOND: u8 = 20;
 pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 20;
 
@@ -30,12 +28,9 @@ async fn main() {
 
     let (sessiond_inbound, inbound) = async_std::sync::channel(10000);
     let (outbound, sessiond_outbound) = async_std::sync::channel(10000);
-    let sessiond_task = async_std::task::Builder::new()
-        .name("sessiond".to_string())
-        .spawn(session::sessiond(listener, sessiond_inbound, sessiond_outbound));
-
-    let sessions: BTreeMap<u16, Session> = BTreeMap::new();
-    let mut next_session: u16 = 1;
+    let _sessiond_task = async_std::task::Builder::new()
+    .name("sessiond".to_string())
+    .spawn(session::SessionDInit::InitPloz(listener, sessiond_inbound, sessiond_outbound));
 
     const TIMESTEP: f32 = 1.0/(TICKS_PER_SECOND as f32);
     let ticker = async_std::stream::interval(std::time::Duration::from_secs_f32(TIMESTEP));
@@ -58,7 +53,7 @@ async fn main() {
     impl Stream for EventSource {
         type Item = Event;
         fn poll_next(mut self: Pin<&mut Self>, ctx: &mut std::task::Context) -> Poll<Option<Event>> {
-            if let Poll::Ready(Some(_)) = self.ticker.next().poll_unpin(ctx) { return Poll::Ready(Some(Event::Simulate)); }
+            if let Poll::Ready(Some(_)) = self.ticker.poll_next_unpin(ctx) { return Poll::Ready(Some(Event::Simulate)); }
             match self.inbound.poll_next_unpin(ctx) {
                 Poll::Ready(Some(event)) => return Poll::Ready(Some(Event::InboundEvent(event))),
                 Poll::Ready(None) => return Poll::Ready(None),
@@ -145,6 +140,7 @@ async fn main() {
                                 grabed_part: player.grabbed_part.map(|(id,_,_,_)| id)
                             }));
                         }
+                        outbound_events.push(OutboundEvent::Message(*id, ToClientMsg::PostSimulationTick{ your_fuel: player.power }));
                     }
                     if let Some((_part_id, constraint, x, y)) = player.grabbed_part {
                         let position = simulation.world.get_rigid(MyHandle::Part(part.body_id)).unwrap().position().translation;
@@ -208,8 +204,15 @@ async fn main() {
                     }
                 }
 
-                // let move_messages = session::PartMoveMessage::new_all(simulation.world.get_parts());
-                // for (id, session) in &mut event_source.sessions { session.update_world(&move_messages, &random_broadcast_messages); }
+                let move_messages = simulation.world.get_parts().iter().map(|(id, part)| {
+                    let position = part.position();
+                    session::WorldUpdatePartMove {
+                        id: *id,
+                        x: position.translation.x, y: position.translation.y,
+                        rot_cos: position.rotation.re, rot_sin: position.rotation.im,
+                    }
+                }).collect::<Vec<_>>();
+                outbound_events.push(OutboundEvent::WorldUpdate(move_messages));
             },
 
 
@@ -224,7 +227,7 @@ async fn main() {
                 outbound_events.push(OutboundEvent::Broadcast(codec::ToClientMsg::RemovePlayer{ id }));
                 if let Some((_player, part)) = players.remove(&id) {
                     nuke_part(&part, &mut simulation, &mut outbound_events);
-                };
+                } else { panic!("RE Player Quit Error"); }
             },
             
             Event::InboundEvent(NewPlayer{ id, name }) => { 
@@ -448,7 +451,6 @@ async fn main() {
                                     0, 0
                                 ) {
                                     let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
-                                    println!("e {:?} {:?} {:?}", details, core_location, my_actual_facing);
                                     grabbed_part_body.set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), my_actual_facing.part_rotation() + core_location.rotation.angle()));
                                     let (connection1, connection2) = simulation.equip_part_constraint(part.body_id, part_id, part.kind.attachment_locations()[slot_id].unwrap());
         
