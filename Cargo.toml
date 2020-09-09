@@ -12,7 +12,7 @@ features = ["attributes", "unstable"]
 
 [dependencies.async-tungstenite]
 version = "0.8.0"
-features = ["async-std-runtime"]
+features = ["async-std-runtime", "async-native-tls"]
 
 [dependencies]
 nphysics2d = "0.17.0"
