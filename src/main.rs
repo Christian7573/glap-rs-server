@@ -463,7 +463,7 @@ async fn main() {
                                     grabbed_part.thrust_mode = thrust_mode;
                                     simulation.colliders.get_mut(grabbed_part.collider).unwrap().set_user_data(Some(Box::new(PartOfPlayer(id))));
                                     part.attachments[slot_id] = Some((grabbed_part, connection1, connection2));
-                                    outbound_events.push(OutboundEvent::Message(id, codec::ToClientMsg::UpdatePartMeta { id: part_id, owning_player: Some(id), thrust_mode: thrust_mode.into() }));
+                                    outbound_events.push(OutboundEvent::Broadcast(codec::ToClientMsg::UpdatePartMeta { id: part_id, owning_player: Some(id), thrust_mode: thrust_mode.into() }));
                                 } else {
                                     free_parts.get_mut(&part_id).unwrap().become_decaying();
                                 }
