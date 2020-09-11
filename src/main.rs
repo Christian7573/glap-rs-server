@@ -140,7 +140,6 @@ async fn main() {
                                 grabed_part: player.grabbed_part.map(|(id,_,_,_)| id)
                             }));
                         }
-                        outbound_events.push(OutboundEvent::Message(*id, ToClientMsg::PostSimulationTick{ your_fuel: player.power }));
                     }
                     if let Some((_part_id, constraint, x, y)) = player.grabbed_part {
                         let position = simulation.world.get_rigid(MyHandle::Part(part.body_id)).unwrap().position().translation;
@@ -213,6 +212,9 @@ async fn main() {
                     }
                 }).collect::<Vec<_>>();
                 outbound_events.push(OutboundEvent::WorldUpdate(move_messages));
+                for (id, (player, _core)) in &players {
+                    outbound_events.push(OutboundEvent::Message(*id, ToClientMsg::PostSimulationTick{ your_fuel: player.power }));
+                }
             },
 
 
