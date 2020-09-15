@@ -105,6 +105,8 @@ async fn main() {
                                 let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                                 let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
                                 body.set_position(Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0)); // spawn_degrees));
+                                use nphysics2d::object::Body;
+                                body.apply_force(0, &nphysics2d::math::Force::zero(), nphysics2d::math::ForceType::Force, true);
                                 *ticks = TICKS_PER_SECOND as u16 * 60;
                             }
                         },
@@ -265,7 +267,7 @@ async fn main() {
                 core_body.set_position(Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0));
 
                 outbound_events.push(OutboundEvent::Message(id, ToClientMsg::HandshakeAccepted{id, core_id: core.body_id}));
-                outbound_events.push(OutboundEvent::Broadcast(codec::ToClientMsg::AddPlayer { id, name: String::default(), core_id: core.body_id }));
+                outbound_events.push(OutboundEvent::Broadcast(codec::ToClientMsg::AddPlayer { id, name: name.clone(), core_id: core.body_id }));
 
                 //Send over celestial object locations
                 for planet in simulation.planets.celestial_objects().iter() {
@@ -295,13 +297,13 @@ async fn main() {
                 for (_id, part) in &free_parts { send_part(part, &None, &mut simulation, id, &mut outbound_events); };
                 send_part(&core, &Some(id), &simulation, id, &mut outbound_events);
                 for (other_id, (other_player, other_core)) in &players {
-                    outbound_events.push(session::OutboundEvent::Message(id, codec::ToClientMsg::AddPlayer{ id: *other_id, name: String::default(), core_id: other_core.body_id }));
+                    outbound_events.push(session::OutboundEvent::Message(id, codec::ToClientMsg::AddPlayer{ id: *other_id, name: other_player.name.clone(), core_id: other_core.body_id }));
                     send_part(other_core, &Some(*other_id), &mut simulation, id, &mut outbound_events);
                     send_part(&core, &Some(id), &mut simulation, *other_id, &mut outbound_events);
                 }
                 
                 //Graduate to spawned player
-                let meta = PlayerMeta::default();
+                let meta = PlayerMeta::new(name);
                 outbound_events.push(OutboundEvent::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: meta.max_power }));
                 players.insert(id, (meta, core));
             },
@@ -570,6 +572,7 @@ pub fn rotate_vector(x: f32, y: f32, theta_sin: f32, theta_cos: f32) -> (f32, f3
 }
 
 pub struct PlayerMeta {
+    pub name: String,
     pub thrust_forwards: bool,
     pub thrust_backwards: bool,
     pub thrust_clockwise: bool,
@@ -585,8 +588,9 @@ pub struct PlayerMeta {
     ticks_til_cargo_transform: u8,
     parts_touching_planet: BTreeSet<u16>,
 }
-impl Default for PlayerMeta {
-    fn default() -> PlayerMeta { PlayerMeta {
+impl PlayerMeta {
+    fn new(name: String) -> PlayerMeta { PlayerMeta {
+        name,
         thrust_backwards: false, thrust_clockwise: false, thrust_counterclockwise: false, thrust_forwards: false,
         power: 100 * crate::TICKS_PER_SECOND as u32, max_power: 100 * crate::TICKS_PER_SECOND as u32,
         power_regen_per_5_ticks: 0,
