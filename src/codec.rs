@@ -34,6 +34,15 @@ fn type_u16_deserialize(buf: &[u8], index: &mut usize) -> Result<u16, ()> {
     buf.read_with(index, byte::BE).or(Err(()))
 }
 
+fn type_u32_serialize(out: &mut Vec<u8>, uint: &u32) {
+    let mut index = out.len();
+    out.push(0); out.push(0); out.push(0); out.push(0);
+    out.write_with::<u32>(&mut index, *uint, byte::BE);
+}
+fn type_u32_deserialize(buf: &[u8], index: &mut usize) -> Result<u32, ()> {
+    buf.read_with(index, byte::BE).or(Err(()))
+}
+
 fn type_float_pair_serialize(out: &mut Vec<u8>, pair: &(f32, f32)) {
     type_float_serialize(out, &pair.0);
     type_float_serialize(out, &pair.1);
@@ -55,6 +64,7 @@ fn type_bool_deserialize(buf: &[u8], index: &mut usize) -> Result<bool, ()> {
     *index += 1;
     buf.get(i).map(|val| *val > 0).ok_or(())
 }
+
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)] pub enum PartKind {
 	Core, Cargo, LandingThruster, Hub, SolarPanel
@@ -164,8 +174,8 @@ pub enum ToClientMsg {
 	AddPlayer { id: u16, core_id: u16, name: String, },
 	UpdatePlayerMeta { id: u16, thrust_forward: bool, thrust_backward: bool, thrust_clockwise: bool, thrust_counter_clockwise: bool, grabed_part: Option<u16>, },
 	RemovePlayer { id: u16, },
-	PostSimulationTick { your_fuel: u16, },
-	UpdateMyMeta { max_fuel: u16, },
+	PostSimulationTick { your_power: u32, },
+	UpdateMyMeta { max_power: u32, },
 }
 impl ToClientMsg {
 	pub fn serialize(&self, out: &mut Vec<u8>) {
@@ -225,13 +235,13 @@ impl ToClientMsg {
 				out.push(8);
 				type_u16_serialize(out, id);
 			},
-			Self::PostSimulationTick { your_fuel} => {
+			Self::PostSimulationTick { your_power} => {
 				out.push(9);
-				type_u16_serialize(out, your_fuel);
+				type_u32_serialize(out, your_power);
 			},
-			Self::UpdateMyMeta { max_fuel} => {
+			Self::UpdateMyMeta { max_power} => {
 				out.push(10);
-				type_u16_serialize(out, max_fuel);
+				type_u32_serialize(out, max_power);
 			},
 		};
 	}
@@ -304,14 +314,14 @@ impl ToClientMsg {
 				Ok(ToClientMsg::RemovePlayer { id})
 			},
 			9 => {
-				let your_fuel;
-				your_fuel = type_u16_deserialize(&buf, index)?;
-				Ok(ToClientMsg::PostSimulationTick { your_fuel})
+				let your_power;
+				your_power = type_u32_deserialize(&buf, index)?;
+				Ok(ToClientMsg::PostSimulationTick { your_power})
 			},
 			10 => {
-				let max_fuel;
-				max_fuel = type_u16_deserialize(&buf, index)?;
-				Ok(ToClientMsg::UpdateMyMeta { max_fuel})
+				let max_power;
+				max_power = type_u32_deserialize(&buf, index)?;
+				Ok(ToClientMsg::UpdateMyMeta { max_power})
 			},
 			_ => Err(())
 		}

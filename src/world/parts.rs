@@ -11,12 +11,14 @@ use nphysics2d::joint::DefaultJointConstraintHandle;
 pub struct PartStatic {
     unit_cuboid: ShapeHandle<MyUnits>,
     cargo_cuboid: ShapeHandle<MyUnits>,
+    solar_panel_cuboid: ShapeHandle<MyUnits>,
     attachment_collider_cuboid: ShapeHandle<MyUnits>,
 }
 impl Default for PartStatic {
     fn default() -> PartStatic { PartStatic {
         unit_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.5))),
-        cargo_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.2714, 0.3563))),
+        cargo_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.38, 0.5))),
+        solar_panel_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.31, 0.5))),
         attachment_collider_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(1.0, 1.0)))
     } }
 }
@@ -56,7 +58,7 @@ impl Part {
         collider.set_user_data(prev_collider.take_user_data());
         self.collider = colliders.insert(collider);
     }
-    pub fn thrust(&self, bodies: &mut super::World, fuel: &mut u16, forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool) {
+    pub fn thrust(&self, bodies: &mut super::World, fuel: &mut u32, forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool) {
         match self.kind {
             PartKind::Core => {
                 if *fuel > 0 {
@@ -102,10 +104,17 @@ impl PartKind {
             PartKind::Core | PartKind::Hub | PartKind::Cargo | PartKind::LandingThruster | PartKind::SolarPanel => {
                 (
                     RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(self.inertia()),
-                    ColliderDesc::new(part_static.unit_cuboid.clone())
+                    ColliderDesc::new(self.shape(part_static))
                         .translation(if let PartKind::Core = self { Vector2::zero() } else { Vector2::new(0.0, 0.5) })
                 )
             }
+        }
+    }
+    fn shape(&self, part_static: &PartStatic) -> ShapeHandle<MyUnits> {
+        match self {
+            PartKind::Core | PartKind::Hub => part_static.unit_cuboid.clone(),
+            PartKind::Cargo | PartKind::LandingThruster => part_static.cargo_cuboid.clone(),
+            PartKind::SolarPanel => part_static.solar_panel_cuboid.clone(), 
         }
     }
     fn thrust(&self) -> Option<ThrustDetails> {
@@ -142,8 +151,8 @@ impl PartKind {
             PartKind::Cargo | PartKind::LandingThruster | PartKind::SolarPanel => [ None, None, None, None ]
         }
     }
-    pub fn power_storage(&self) -> u16 {
-        const CORE_MAX_POWER: u16 = 100 * crate::TICKS_PER_SECOND as u16;
+    pub fn power_storage(&self) -> u32 {
+        const CORE_MAX_POWER: u32 = 100 * crate::TICKS_PER_SECOND as u32;
         match self {
             PartKind::Core => CORE_MAX_POWER,
             PartKind::Cargo => CORE_MAX_POWER / 10,
@@ -152,7 +161,7 @@ impl PartKind {
             PartKind::SolarPanel => 0,
         }
     }
-    pub fn power_regen_per_5_ticks(&self) -> u16 {
+    pub fn power_regen_per_5_ticks(&self) -> u32 {
         match self {
             PartKind::SolarPanel => 1,
             _ => 0,
@@ -268,4 +277,4 @@ impl Default for CompactThrustMode {
     
 // }
 
-struct ThrustDetails { fuel_cost: u16, force: Force2<MyUnits> }
+struct ThrustDetails { fuel_cost: u32, force: Force2<MyUnits> }

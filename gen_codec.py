@@ -64,6 +64,7 @@ TypeUShort = BasicType("u16", "u16", "number", "ushort")
 TypeFloatPair = BasicType("(f32,f32)", "float_pair", "[number, number]", "float_pair")
 TypeUByte = BasicType("u8", "u8", "number", "ubyte")
 TypeBoolean = BasicType("bool","bool","boolean","boolean")
+TypeUInt = BasicType("u32", "u32", "number", "uint")
 
 class MessageCategory:
     def __init__(self, name):
@@ -185,11 +186,11 @@ RemovePlayer.fields.append(Field("id", TypeUShort))
 ToClientMsg.messages.append(RemovePlayer)
 
 PostSimulationTick = Message("PostSimulationTick")
-PostSimulationTick.fields.append(Field("your_fuel", TypeUShort))
+PostSimulationTick.fields.append(Field("your_power", TypeUInt))
 ToClientMsg.messages.append(PostSimulationTick)
 
 UpdateMyMeta = Message("UpdateMyMeta")
-UpdateMyMeta.fields.append(Field("max_fuel", TypeUShort))
+UpdateMyMeta.fields.append(Field("max_power", TypeUInt))
 ToClientMsg.messages.append(UpdateMyMeta)
 
 rust_header = open("codec_header.rs", "r")
