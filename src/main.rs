@@ -189,7 +189,7 @@ async fn main() {
                                     player.max_power += upgrade_into.power_storage();
                                     player.power_regen_per_5_ticks -= world::parts::PartKind::Cargo.power_regen_per_5_ticks();
                                     player.power_regen_per_5_ticks += upgrade_into.power_regen_per_5_ticks();
-                                    outbound_events.push(OutboundEvent::Message(*id, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power }));
+                                    outbound_events.push(OutboundEvent::Message(*id, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
                                     
                                     outbound_events.push(OutboundEvent::Broadcast(codec::ToClientMsg::RemovePart{ id: part.body_id }));
                                     outbound_events.push(OutboundEvent::Broadcast(codec::ToClientMsg::AddPart{ id: part.body_id, kind: part.kind, }));
@@ -205,16 +205,25 @@ async fn main() {
                     use world::SimulationEvent::*;
                     match event {
                         PlayerTouchPlanet{ player, planet, part } => {
+                            let player_id = player;
                             if let Some((player, _part)) = players.get_mut(&player) {
                                 player.touching_planet = Some(planet);
+                                player.can_beamout = simulation.planets.get_celestial_object(planet).unwrap().can_beamout;
+                                player.ticks_til_cargo_transform = TICKS_PER_SECOND;
                                 player.parts_touching_planet.insert(part);
                                 player.power = player.max_power;
+                                outbound_events.push(OutboundEvent::Message(player_id, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
                             }
                         },
                         PlayerUntouchPlanet{ player, planet, part } => {
+                            let player_id = player;
                             if let Some((player, _part)) = players.get_mut(&player) {
                                 if player.parts_touching_planet.remove(&part) {
-                                    if player.parts_touching_planet.is_empty() { player.touching_planet = None; }
+                                    if player.parts_touching_planet.is_empty() { 
+                                        player.touching_planet = None;
+                                        player.can_beamout = false;
+                                        outbound_events.push(OutboundEvent::Message(player_id, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
+                                    }
                                 }
                             }
                         },
@@ -306,7 +315,7 @@ async fn main() {
                 
                 //Graduate to spawned player
                 let meta = PlayerMeta::new(name);
-                outbound_events.push(OutboundEvent::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: meta.max_power }));
+                outbound_events.push(OutboundEvent::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: meta.max_power, can_beamout: meta.can_beamout }));
                 players.insert(id, (meta, core));
             },
 
@@ -385,7 +394,7 @@ async fn main() {
                                         if player_meta.power > player_meta.max_power { player_meta.power = player_meta.max_power };
                                         player_meta.power_regen_per_5_ticks -= regen_lost;
                                         player_meta.power_regen_per_5_ticks -= part.kind.power_regen_per_5_ticks();
-                                        outbound_events.push(OutboundEvent::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: player_meta.max_power }));
+                                        outbound_events.push(OutboundEvent::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: player_meta.max_power, can_beamout: player_meta.can_beamout }));
                                         simulation.colliders.get_mut(part.collider).unwrap().set_user_data(None);
                                         grabbed = true;
                                         if player_meta.parts_touching_planet.remove(&part.body_id) {
@@ -484,7 +493,7 @@ async fn main() {
                                     let mut grabbed_part = free_parts.remove(&part_id).unwrap().extract();
                                     player_meta.max_power += grabbed_part.kind.power_storage();
                                     player_meta.power_regen_per_5_ticks += grabbed_part.kind.power_regen_per_5_ticks();
-                                    outbound_events.push(OutboundEvent::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: player_meta.max_power }));
+                                    outbound_events.push(OutboundEvent::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: player_meta.max_power, can_beamout: player_meta.can_beamout }));
                                     grabbed_part.thrust_mode = thrust_mode;
                                     simulation.colliders.get_mut(grabbed_part.collider).unwrap().set_user_data(Some(Box::new(PartOfPlayer(id))));
                                     part.attachments[slot_id] = Some((grabbed_part, connection1, connection2));
@@ -592,6 +601,7 @@ pub struct PlayerMeta {
     pub touching_planet: Option<u16>,
     ticks_til_cargo_transform: u8,
     parts_touching_planet: BTreeSet<u16>,
+    can_beamout: bool,
 }
 impl PlayerMeta {
     fn new(name: String) -> PlayerMeta { PlayerMeta {
@@ -603,6 +613,7 @@ impl PlayerMeta {
         touching_planet: None,
         parts_touching_planet: BTreeSet::new(),
         ticks_til_cargo_transform: TICKS_PER_SECOND,
+        can_beamout: false,
     } }
 }
 pub struct PartOfPlayer (u16);

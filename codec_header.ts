@@ -52,6 +52,7 @@ function type_uint_serialize(out: number[], uint: number) {
 function type_uint_deserialize(buf: Uint8Array, index: Box<number>): number {
     const arr = new Uint8Array([buf[index.v+3], buf[index.v+2], buf[index.v+1], buf[index.v]]);
     const view = new Uint32Array(arr.buffer);
+	index.v += 4;
     return view[0];
 }
 

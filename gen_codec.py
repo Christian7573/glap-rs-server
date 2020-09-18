@@ -194,6 +194,7 @@ ToClientMsg.messages.append(PostSimulationTick)
 
 UpdateMyMeta = Message("UpdateMyMeta")
 UpdateMyMeta.fields.append(Field("max_power", TypeUInt))
+UpdateMyMeta.fields.append(Field("can_beamout", TypeBoolean))
 ToClientMsg.messages.append(UpdateMyMeta)
 
 rust_header = open("codec_header.rs", "r")

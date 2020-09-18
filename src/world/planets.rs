@@ -40,6 +40,7 @@ impl Planets {
                 body: body_handle,
                 id,
                 cargo_upgrade: None,
+                can_beamout: true,
             }
         };
 
@@ -66,7 +67,8 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: Some(super::parts::PartKind::LandingThruster)
+                cargo_upgrade: Some(super::parts::PartKind::LandingThruster),
+                can_beamout: true,
             }
         };
 
@@ -94,6 +96,7 @@ impl Planets {
                 body: body_handle,
                 id,
                 cargo_upgrade: Some(super::parts::PartKind::Hub),
+                can_beamout: false,
             }
         };
 
@@ -121,6 +124,7 @@ impl Planets {
                 body: body_handle,
                 id,
                 cargo_upgrade: Some(super::parts::PartKind::SolarPanel),
+                can_beamout: false,
             }
         };
 
@@ -147,5 +151,6 @@ pub struct CelestialObject {
     pub radius: f32,
     pub body: MyHandle,
     pub id: u16,
-    pub cargo_upgrade: Option<super::parts::PartKind>
+    pub cargo_upgrade: Option<super::parts::PartKind>,
+    pub can_beamout: bool,
 }

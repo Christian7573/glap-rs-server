@@ -184,7 +184,7 @@ pub enum ToClientMsg {
 	UpdatePlayerMeta { id: u16, thrust_forward: bool, thrust_backward: bool, thrust_clockwise: bool, thrust_counter_clockwise: bool, grabed_part: Option<u16>, },
 	RemovePlayer { id: u16, },
 	PostSimulationTick { your_power: u32, },
-	UpdateMyMeta { max_power: u32, },
+	UpdateMyMeta { max_power: u32, can_beamout: bool, },
 }
 impl ToClientMsg {
 	pub fn serialize(&self, out: &mut Vec<u8>) {
@@ -248,9 +248,10 @@ impl ToClientMsg {
 				out.push(9);
 				type_u32_serialize(out, your_power);
 			},
-			Self::UpdateMyMeta { max_power} => {
+			Self::UpdateMyMeta { max_power, can_beamout} => {
 				out.push(10);
 				type_u32_serialize(out, max_power);
+				type_bool_serialize(out, can_beamout);
 			},
 		};
 	}
@@ -328,9 +329,10 @@ impl ToClientMsg {
 				Ok(ToClientMsg::PostSimulationTick { your_power})
 			},
 			10 => {
-				let max_power;
+				let max_power; let can_beamout;
 				max_power = type_u32_deserialize(&buf, index)?;
-				Ok(ToClientMsg::UpdateMyMeta { max_power})
+				can_beamout = type_bool_deserialize(&buf, index)?;
+				Ok(ToClientMsg::UpdateMyMeta { max_power, can_beamout})
 			},
 			_ => Err(())
 		}
