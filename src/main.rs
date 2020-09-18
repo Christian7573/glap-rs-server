@@ -1,3 +1,4 @@
+#[macro_use] extern crate serde_derive;
 use async_std::prelude::*;
 use std::net::SocketAddr;
 use async_std::net::TcpStream;
@@ -16,6 +17,7 @@ use ncollide2d::pipeline::object::CollisionGroups;
 pub mod world;
 pub mod codec;
 pub mod session;
+pub mod beamout;
 use codec::*;
 
 pub const TICKS_PER_SECOND: u8 = 20;
@@ -498,6 +500,9 @@ async fn main() {
                                 }));
                             }
                         }
+                    },
+                    ToServerMsg::BeamOut => {
+
                     },
                     _ => { outbound_events.push(OutboundEvent::SessionBad(id)); }
                 }

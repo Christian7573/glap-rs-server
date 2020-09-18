@@ -70,10 +70,11 @@ fn type_bool_deserialize(buf: &[u8], index: &mut usize) -> Result<bool, ()> {
 	Core, Cargo, LandingThruster, Hub, SolarPanel
 }
 impl PartKind {
-	pub fn serialize(&self, buf: &mut Vec<u8>) {
-		buf.push(match self {
+	pub fn val_of(&self) -> u8 { match self {
 			Self::Core => 0, Self::Cargo => 1, Self::LandingThruster => 2, Self::Hub => 3, Self::SolarPanel => 4
-		});
+		} }
+	pub fn serialize(&self, buf: &mut Vec<u8>) {
+		buf.push(self.val_of());
 	}
 	pub fn deserialize(buf: &[u8], index: &mut usize) -> Result<Self, ()> {
 		let me = buf[*index]; *index += 1;
@@ -90,6 +91,7 @@ pub enum ToServerMsg {
 	CommitGrab { grabbed_id: u16, x: f32, y: f32, },
 	MoveGrab { x: f32, y: f32, },
 	ReleaseGrab,
+	BeamOut,
 }
 impl ToServerMsg {
 	pub fn serialize(&self, out: &mut Vec<u8>) {
@@ -120,6 +122,9 @@ impl ToServerMsg {
 			},
 			Self::ReleaseGrab { } => {
 				out.push(4);
+			},
+			Self::BeamOut { } => {
+				out.push(5);
 			},
 		};
 	}
@@ -158,6 +163,10 @@ impl ToServerMsg {
 			4 => {
 				
 				Ok(ToServerMsg::ReleaseGrab { })
+			},
+			5 => {
+				
+				Ok(ToServerMsg::BeamOut { })
 			},
 			_ => Err(())
 		}

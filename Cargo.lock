@@ -480,6 +480,9 @@ dependencies = [
  "nphysics2d",
  "num-traits",
  "rand",
+ "serde",
+ "serde_derive",
+ "serde_json",
 ]
 
 [[package]]
