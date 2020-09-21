@@ -47,3 +47,18 @@ impl<'de> Deserialize<'de> for PartKind {
     }
 }
 
+pub fn spawn_beamout_request(session_id: Option<String>, beamout_layout: RecursivePartDescription, api: &Option<crate::ApiDat>) {
+    if let Some(api) = &api {
+        if let Some(session_id) = session_id {
+            let uri = api.beamout.clone() + "?session=" + &session_id;
+            async_std::task::spawn(async {
+                let beamout_layout = beamout_layout;
+                match surf::post(uri).body(serde_json::to_string(&beamout_layout).unwrap()).await {
+                    Ok(res) if !res.status().is_success() => { eprintln!("Beamout post does not indicate success"); },
+                    Err(err) => { eprintln!("Beamout post failed\n{}", err); },
+                    _ => {}
+                };
+            });
+        }
+    } 
+}

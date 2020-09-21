@@ -10,7 +10,7 @@ use super::world::{MyHandle, MyUnits};
 use super::world::parts::{Part, PartKind};
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
-use crate::beamout::RecursivePartDescription;
+use crate::beamout::{RecursivePartDescription, spawn_beamout_request};
 use crate::ApiDat;
 
 use crate::codec::*;
@@ -160,20 +160,8 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
                                     socket.flush().await; 
                                 });
 
-                                if let Some(api) = &api {
-                                    if let Some(session_id) = session_id {
-                                        let uri = api.beamout.clone() + "?session=" + &session_id;
-                                        async_std::task::spawn(async {
-                                            let beamout_layout = beamout_layout;
-                                            surf::post(uri).body(serde_json::to_value(&beamout_layout).unwrap()).await;
-                                        });
-                                        /*async_std::task::spawn(async {
-                                            let client = surf::Client::new();
-                                            client.post(uri).body_json(beamout_layout).unwrap().await;
-                                        });*/
-                                    }
-                                }
-                            }
+                                spawn_beamout_request(session_id, beamout_layout, &api);
+                            } 
                         },
                     };
                 };

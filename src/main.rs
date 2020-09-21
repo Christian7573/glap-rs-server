@@ -24,7 +24,7 @@ pub const TICKS_PER_SECOND: u8 = 20;
 pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 20;
 
 #[derive(Clone)]
-struct ApiDat { prefix: String, beamout: String, fetch_ship: String }
+pub struct ApiDat { prefix: String, beamout: String, fetch_ship: String }
 
 #[async_std::main]
 async fn main() {
@@ -36,6 +36,16 @@ async fn main() {
         beamout: prefix.clone() + "/beamout",
         fetch_ship: prefix.clone() + "/fetch_ship"
     });
+
+    let api = if let Some(api) = api {
+        let ping_addr = api.prefix.clone() + "/ping";
+        println!("Pinging API at ${}", ping_addr);
+        let res = surf::get(ping_addr).await;
+        if let Ok(mut res) = res {
+            if res.status().is_success() && res.body_string().await.map(|body| body == "PONG" ).unwrap_or(false) { println!("API Ping success"); Some(api) }
+            else { eprintln!("API Ping Failed"); None }
+        } else { eprintln!("API Ping Failed Badly"); None }
+    } else { println!("No API"); None };
 
     let (sessiond_inbound, inbound) = async_std::sync::channel(10000);
     let (outbound, sessiond_outbound) = async_std::sync::channel(10000);
