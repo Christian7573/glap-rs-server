@@ -197,6 +197,10 @@ UpdateMyMeta.fields.append(Field("max_power", TypeUInt))
 UpdateMyMeta.fields.append(Field("can_beamout", TypeBoolean))
 ToClientMsg.messages.append(UpdateMyMeta)
 
+BeamOutAnimation = Message("BeamOutAnimation")
+BeamOutAnimation.fields.append(Field("player_id", TypeUShort))
+ToClientMsg.messages.append(BeamOutAnimation)
+
 rust_header = open("codec_header.rs", "r")
 rust_out = open("codec.rs", "w")
 rust_out.write(rust_header.read())

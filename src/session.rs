@@ -10,6 +10,8 @@ use super::world::{MyHandle, MyUnits};
 use super::world::parts::{Part, PartKind};
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
+use crate::beamout::RecursivePartDescription;
+use crate::ApiDat;
 
 use crate::codec::*;
 
@@ -22,7 +24,8 @@ pub enum OutboundEvent {
     Message (u16, ToClientMsg),
     Broadcast (ToClientMsg),
     WorldUpdate (Vec<WorldUpdatePartMove>),
-    SessionBad(u16)
+    SessionBad(u16),
+    BeamOutPlayer(u16, RecursivePartDescription),
 }
 pub struct WorldUpdatePartMove { pub id: u16, pub x: f32, pub y: f32, pub rot_sin: f32, pub rot_cos: f32 }
 
@@ -48,16 +51,16 @@ impl Future for GuarenteeOnePoll {
     }
 }
 
-pub enum SessionDInit { InitPloz (TcpListener, async_std::sync::Sender<InboundEvent>, async_std::sync::Receiver<Vec<OutboundEvent>>), IntermediateState, Inited(Pin<Box<dyn Future<Output = ()>>>) }
+pub enum SessionDInit { InitPloz (TcpListener, async_std::sync::Sender<InboundEvent>, async_std::sync::Receiver<Vec<OutboundEvent>>, Option<ApiDat>), IntermediateState, Inited(Pin<Box<dyn Future<Output = ()>>>) }
 unsafe impl Send for SessionDInit {}
 impl Future for SessionDInit {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.deref_mut() {
             SessionDInit::Inited(sessiond) => sessiond.as_mut().poll(cx),
-            SessionDInit::InitPloz(listener, inbound, outbound) => {
-                if let SessionDInit::InitPloz(listener, inbound, outbound) = std::mem::replace(self.deref_mut(), SessionDInit::IntermediateState) {
-                    *self = SessionDInit::Inited(sessiond(listener, inbound, outbound).boxed_local());
+            SessionDInit::InitPloz(listener, inbound, outbound, api) => {
+                if let SessionDInit::InitPloz(listener, inbound, outbound, api) = std::mem::replace(self.deref_mut(), SessionDInit::IntermediateState) {
+                    *self = SessionDInit::Inited(sessiond(listener, inbound, outbound, api).boxed_local());
                     cx.waker().wake_by_ref();
                     Poll::Pending
                 } else { panic!(); }
@@ -67,7 +70,7 @@ impl Future for SessionDInit {
     }
 }
 
-async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<InboundEvent>, outbound: async_std::sync::Receiver<Vec<OutboundEvent>>) {
+async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<InboundEvent>, outbound: async_std::sync::Receiver<Vec<OutboundEvent>>, api: Option<ApiDat>) {
     struct Pulser {
         listener: TcpListener,
         potential_sessions: MaybeFairPoller7573<PotentialSession>,
@@ -148,7 +151,30 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
                                 }
                                 serialization_vec.clear();
                             }
-                        }
+                        },
+                        OutboundEvent::BeamOutPlayer(id, beamout_layout) => {
+                            if let Some(session) = pulser.sessions.0.remove(&id) {
+                                let session_id = session.session_id.clone();
+                                async_std::task::spawn(async {
+                                    let mut socket = session.socket.socket;
+                                    socket.flush().await; 
+                                });
+
+                                if let Some(api) = &api {
+                                    if let Some(session_id) = session_id {
+                                        let uri = api.beamout.clone() + "?session=" + &session_id;
+                                        async_std::task::spawn(async {
+                                            let beamout_layout = beamout_layout;
+                                            surf::post(uri).body(serde_json::to_value(&beamout_layout).unwrap()).await;
+                                        });
+                                        /*async_std::task::spawn(async {
+                                            let client = surf::Client::new();
+                                            client.post(uri).body_json(beamout_layout).unwrap().await;
+                                        });*/
+                                    }
+                                }
+                            }
+                        },
                     };
                 };
             }
@@ -166,7 +192,7 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
                                 PotentialSession::AwaitingHandshake(socket) => socket,
                                 _ => panic!(),
                             };
-                            pulser.sessions.0.insert(id, Session{ socket });
+                            pulser.sessions.0.insert(id, Session{ socket, session_id: session });
                             inbound.send(InboundEvent::NewPlayer{ id, name }).await;
                         },
                         _ => { pulser.potential_sessions.0.remove(&id); }
@@ -247,7 +273,7 @@ impl Stream for PotentialSession {
     }
 }
 
-pub struct Session { socket: MyWebSocket }
+pub struct Session { socket: MyWebSocket, session_id: Option<String> }
 impl Stream for Session {
     type Item = Vec<u8>;
     fn poll_next(

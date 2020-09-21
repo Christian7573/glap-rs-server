@@ -185,6 +185,7 @@ pub enum ToClientMsg {
 	RemovePlayer { id: u16, },
 	PostSimulationTick { your_power: u32, },
 	UpdateMyMeta { max_power: u32, can_beamout: bool, },
+	BeamOutAnimation { player_id: u16, },
 }
 impl ToClientMsg {
 	pub fn serialize(&self, out: &mut Vec<u8>) {
@@ -252,6 +253,10 @@ impl ToClientMsg {
 				out.push(10);
 				type_u32_serialize(out, max_power);
 				type_bool_serialize(out, can_beamout);
+			},
+			Self::BeamOutAnimation { player_id} => {
+				out.push(11);
+				type_u16_serialize(out, player_id);
 			},
 		};
 	}
@@ -333,6 +338,11 @@ impl ToClientMsg {
 				max_power = type_u32_deserialize(&buf, index)?;
 				can_beamout = type_bool_deserialize(&buf, index)?;
 				Ok(ToClientMsg::UpdateMyMeta { max_power, can_beamout})
+			},
+			11 => {
+				let player_id;
+				player_id = type_u16_deserialize(&buf, index)?;
+				Ok(ToClientMsg::BeamOutAnimation { player_id})
 			},
 			_ => Err(())
 		}

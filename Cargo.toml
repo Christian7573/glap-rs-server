@@ -14,6 +14,15 @@ features = ["attributes", "unstable"]
 version = "0.8.0"
 features = ["async-std-runtime", "async-native-tls"]
 
+[dependencies.surf]
+version = "= 2.0.0-alpha.5"
+# default-features = false
+features = ["curl-client", "encoding", ]
+# [dependencies.http-client]
+# version = "5.0.0"
+# default-features = false
+# features = ["curl_client"]
+
 [dependencies]
 nphysics2d = "0.17.0"
 nalgebra = "0.22.0"

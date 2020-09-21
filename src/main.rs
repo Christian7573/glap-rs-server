@@ -23,16 +23,25 @@ use codec::*;
 pub const TICKS_PER_SECOND: u8 = 20;
 pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 20;
 
+#[derive(Clone)]
+struct ApiDat { prefix: String, beamout: String, fetch_ship: String }
+
 #[async_std::main]
 async fn main() {
     let server_port = if let Ok(port) = std::env::var("PORT") { port.parse::<u16>().unwrap_or(8081) } else { 8081 };
     let listener = async_std::net::TcpListener::bind(SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED), server_port)).await.expect(&format!("Failed to bind to port {}", server_port));
 
+    let api = std::env::var("API").ok().map(|prefix| ApiDat {
+        prefix: prefix.clone(),
+        beamout: prefix.clone() + "/beamout",
+        fetch_ship: prefix.clone() + "/fetch_ship"
+    });
+
     let (sessiond_inbound, inbound) = async_std::sync::channel(10000);
     let (outbound, sessiond_outbound) = async_std::sync::channel(10000);
     let _sessiond_task = async_std::task::Builder::new()
     .name("sessiond".to_string())
-    .spawn(session::SessionDInit::InitPloz(listener, sessiond_inbound, sessiond_outbound));
+    .spawn(session::SessionDInit::InitPloz(listener, sessiond_inbound, sessiond_outbound, api.clone()));
 
     const TIMESTEP: f32 = 1.0/(TICKS_PER_SECOND as f32);
     let ticker = async_std::stream::interval(std::time::Duration::from_secs_f32(TIMESTEP));
@@ -511,7 +520,22 @@ async fn main() {
                         }
                     },
                     ToServerMsg::BeamOut => {
-
+                        if let Some((_player, core)) = players.remove(&id) {
+                            let beamout_layout = beamout::RecursivePartDescription::deflate(&core, &simulation.world);
+                            outbound_events.push(OutboundEvent::Broadcast(codec::ToClientMsg::BeamOutAnimation { player_id: id }));
+                            fn recursive_beamout_remove(part: &Part, simulation: &mut world::Simulation) {
+                                for slot in 0..part.attachments.len() {
+                                    if let Some((part, joint1, joint2)) = part.attachments[slot].as_ref() {
+                                        simulation.release_constraint(*joint1);
+                                        simulation.release_constraint(*joint2);
+                                        recursive_beamout_remove(part, simulation);
+                                    }
+                                }
+                                simulation.world.remove_part(MyHandle::Part(part.body_id));
+                            }
+                            recursive_beamout_remove(&core, &mut simulation);
+                            outbound_events.push(OutboundEvent::BeamOutPlayer(id, beamout_layout));
+                        }
                     },
                     _ => { outbound_events.push(OutboundEvent::SessionBad(id)); }
                 }
