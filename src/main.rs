@@ -13,6 +13,7 @@ use world::parts::{Part, AttachedPartFacing};
 use async_tungstenite::tungstenite::Message; use session::MyWebSocket;
 use nalgebra::Vector2; use nalgebra::geometry::{Isometry2, UnitComplex};
 use ncollide2d::pipeline::object::CollisionGroups;
+use std::sync::Arc;
 
 pub mod world;
 pub mod codec;
@@ -24,7 +25,7 @@ pub const TICKS_PER_SECOND: u8 = 20;
 pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 20;
 
 #[derive(Clone)]
-pub struct ApiDat { prefix: String, beamout: String, fetch_ship: String }
+pub struct ApiDat { prefix: String, beamout: String, fetch_ship: String, beamin: String }
 
 #[async_std::main]
 async fn main() {
@@ -34,7 +35,8 @@ async fn main() {
     let api = std::env::var("API").ok().map(|prefix| ApiDat {
         prefix: prefix.clone(),
         beamout: prefix.clone() + "/beamout",
-        fetch_ship: prefix.clone() + "/fetch_ship"
+        fetch_ship: prefix.clone() + "/fetch_ship",
+        beamin: prefix.clone() + "/beamin",
     });
 
     let api = if let Some(api) = api {
@@ -46,6 +48,8 @@ async fn main() {
             else { eprintln!("API Ping Failed"); None }
         } else { eprintln!("API Ping Failed Badly"); None }
     } else { println!("No API"); None };
+
+    let api = api.map(|api| Arc::new(api));
 
     let (sessiond_inbound, inbound) = async_std::sync::channel(10000);
     let (outbound, sessiond_outbound) = async_std::sync::channel(10000);
@@ -531,7 +535,7 @@ async fn main() {
                     },
                     ToServerMsg::BeamOut => {
                         if let Some((_player, core)) = players.remove(&id) {
-                            let beamout_layout = beamout::RecursivePartDescription::deflate(&core, &simulation.world);
+                            let beamout_layout = beamout::RecursivePartDescription::deflate(&core);
                             outbound_events.push(OutboundEvent::Broadcast(codec::ToClientMsg::BeamOutAnimation { player_id: id }));
                             fn recursive_beamout_remove(part: &Part, simulation: &mut world::Simulation) {
                                 for slot in 0..part.attachments.len() {

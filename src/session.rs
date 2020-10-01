@@ -10,8 +10,9 @@ use super::world::{MyHandle, MyUnits};
 use super::world::parts::{Part, PartKind};
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
-use crate::beamout::{RecursivePartDescription, spawn_beamout_request};
+use crate::beamout::{RecursivePartDescription, beamin_request, spawn_beamout_request};
 use crate::ApiDat;
+use std::sync::Arc;
 
 use crate::codec::*;
 
@@ -32,6 +33,7 @@ pub struct WorldUpdatePartMove { pub id: u16, pub x: f32, pub y: f32, pub rot_si
 enum Event {
     NewSocket { socket: TcpStream },
     PotentialSessionMessage { id: u16, msg: Vec<u8> },
+    PotentialSessionBeamin { id: u16, parts: Option<RecursivePartDescription> },
     PotentialSessionDisconnect { id: u16 },
     SessionMessage { id: u16, msg: Vec<u8> },
     SessionDisconnect { id: u16 },
@@ -51,7 +53,7 @@ impl Future for GuarenteeOnePoll {
     }
 }
 
-pub enum SessionDInit { InitPloz (TcpListener, async_std::sync::Sender<InboundEvent>, async_std::sync::Receiver<Vec<OutboundEvent>>, Option<ApiDat>), IntermediateState, Inited(Pin<Box<dyn Future<Output = ()>>>) }
+pub enum SessionDInit { InitPloz (TcpListener, async_std::sync::Sender<InboundEvent>, async_std::sync::Receiver<Vec<OutboundEvent>>, Option<Arc<ApiDat>>), IntermediateState, Inited(Pin<Box<dyn Future<Output = ()>>>) }
 unsafe impl Send for SessionDInit {}
 impl Future for SessionDInit {
     type Output = ();
@@ -70,7 +72,7 @@ impl Future for SessionDInit {
     }
 }
 
-async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<InboundEvent>, outbound: async_std::sync::Receiver<Vec<OutboundEvent>>, api: Option<ApiDat>) {
+async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<InboundEvent>, outbound: async_std::sync::Receiver<Vec<OutboundEvent>>, api: Option<Arc<ApiDat>>) {
     struct Pulser {
         listener: TcpListener,
         potential_sessions: MaybeFairPoller7573<PotentialSession>,
@@ -92,7 +94,8 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
                 Poll::Ready(None) => panic!("I wrote this, how did we get here?")
             };
             match self.potential_sessions.poll_next_unpin(ctx) {
-                Poll::Ready(Some((id, Some(msg)))) => return Poll::Ready(Some(Event::PotentialSessionMessage{ id, msg })),
+                Poll::Ready(Some((id, Some(PotentialSessionEvent::Msg(msg))))) => return Poll::Ready(Some(Event::PotentialSessionMessage{ id, msg })),
+                Poll::Ready(Some((id, Some(PotentialSessionEvent::Beamin(beamin))))) => return Poll::Ready(Some(Event::PotentialSessionBeamin{ id, parts: beamin })),
                 Poll::Ready(Some((id, None))) => return Poll::Ready(Some(Event::PotentialSessionDisconnect{ id })),
                 Poll::Pending => (),
                 Poll::Ready(None) => panic!("I wrote this, how did we get here?")
@@ -160,7 +163,7 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
                                     socket.flush().await; 
                                 });
 
-                                spawn_beamout_request(session_id, beamout_layout, &api);
+                                spawn_beamout_request(session_id, beamout_layout, api.clone());
                             } 
                         },
                     };
@@ -173,23 +176,27 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
                 pulser.potential_sessions.0.insert(my_id, PotentialSession::AcceptingWebSocket(async_tungstenite::accept_async(socket).boxed_local()));
             },
             Event::PotentialSessionMessage{ id, msg } => {
-                if let Ok(msg) = crate::codec::ToServerMsg::deserialize(msg.as_ref(), &mut 0) {
+                if let Ok(msg) = ToServerMsg::deserialize(msg.as_ref(), &mut 0) {
                     match msg {
                         ToServerMsg::Handshake{ session, client, name } => {
-                            let socket = match pulser.potential_sessions.0.remove(&id).unwrap() {
-                                PotentialSession::AwaitingHandshake(socket) => socket,
-                                _ => panic!(),
-                            };
-                            pulser.sessions.0.insert(id, Session{ socket, session_id: session });
-                            inbound.send(InboundEvent::NewPlayer{ id, name }).await;
+                            let beamin = beamin_request(session.clone(), api.clone()).boxed();
+                            if let Some(PotentialSession::AwaitingHandshake(socket)) = pulser.potential_sessions.0.remove(&id) {
+                                pulser.potential_sessions.0.insert(id, PotentialSession::AwaitingBeamin(socket, beamin, session, name));
+                            }
                         },
                         _ => { pulser.potential_sessions.0.remove(&id); }
                     }
                 } else { pulser.potential_sessions.0.remove(&id); }
             },
+            Event::PotentialSessionBeamin{ id, parts } => {
+                if let Some(PotentialSession::AwaitingBeamin(socket, _, session, name)) = pulser.potential_sessions.0.remove(&id) {
+                    pulser.sessions.0.insert(id, Session{ socket, session_id: session });
+                    inbound.send(InboundEvent::NewPlayer{ id, name }).await;
+                }
+            },
             Event::PotentialSessionDisconnect{ id } => { pulser.potential_sessions.0.remove(&id); },
             Event::SessionMessage{ id, msg } => {
-                if let Ok(msg) = crate::codec::ToServerMsg::deserialize(msg.as_ref(), &mut 0) { inbound.send(InboundEvent::PlayerMessage{ id, msg }).await; }
+                if let Ok(msg) = ToServerMsg::deserialize(msg.as_ref(), &mut 0) { inbound.send(InboundEvent::PlayerMessage{ id, msg }).await; }
                 else {
                     pulser.sessions.0.remove(&id);
                     inbound.send(InboundEvent::PlayerQuit{ id }).await;
@@ -228,9 +235,11 @@ impl<T> Stream for MaybeFairPoller7573<T> where T: Stream + Unpin {
     }
 }
 
-pub enum PotentialSession {
+type BeaminRequestType = Pin<Box<dyn Future<Output = Option<RecursivePartDescription>>>>;
+enum PotentialSession {
     AcceptingWebSocket(Pin<Box<dyn Future<Output = Result<WebSocketStream<TcpStream>, async_tungstenite::tungstenite::Error>>>>),
-    AwaitingHandshake(MyWebSocket)
+    AwaitingHandshake(MyWebSocket),
+    AwaitingBeamin(MyWebSocket, BeaminRequestType, Option<String>, String),
 }
 impl PotentialSession {
     pub fn new(socket: TcpStream) -> PotentialSession {
@@ -240,9 +249,13 @@ impl PotentialSession {
         PotentialSession::AcceptingWebSocket(pinbox)
     }
 }
+enum PotentialSessionEvent {
+    Msg(Vec<u8>),
+    Beamin(Option<RecursivePartDescription>),
+}
 impl Stream for PotentialSession {
-    type Item = Vec<u8>;
-    fn poll_next(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Option<Vec<u8>>> {
+    type Item = PotentialSessionEvent;
+    fn poll_next(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Option<PotentialSessionEvent>> {
         match self.deref_mut() {
             PotentialSession::AcceptingWebSocket(future) => {
                 if let Poll::Ready(result) = future.as_mut().poll(ctx) {
@@ -256,7 +269,14 @@ impl Stream for PotentialSession {
                     }
                 } else { Poll::Pending }
             },
-            PotentialSession::AwaitingHandshake(stream) => stream.poll_next_unpin(ctx)
+            PotentialSession::AwaitingHandshake(stream) => stream.poll_next_unpin(ctx).map(|dat| dat.map(|dat| PotentialSessionEvent::Msg(dat))),
+            PotentialSession::AwaitingBeamin(stream, beamin_request, _session, _name) => {
+                if let Poll::Ready(dat) = stream.poll_next_unpin(ctx) {
+                    Poll::Ready(dat.map(|dat| PotentialSessionEvent::Msg(dat)))
+                } else if let Poll::Ready(beamin) = beamin_request.as_mut().poll(ctx) {
+                    Poll::Ready(Some(PotentialSessionEvent::Beamin(beamin)))
+                } else { Poll::Pending }
+            },
         }
     }
 }
