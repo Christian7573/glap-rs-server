@@ -14,6 +14,7 @@ use async_tungstenite::tungstenite::Message; use session::MyWebSocket;
 use nalgebra::Vector2; use nalgebra::geometry::{Isometry2, UnitComplex};
 use ncollide2d::pipeline::object::CollisionGroups;
 use std::sync::Arc;
+use std::any::Any;
 
 pub mod world;
 pub mod codec;
@@ -289,16 +290,26 @@ async fn main() {
                 } else { panic!("RE Player Quit Error"); }
             },
             
-            Event::InboundEvent(NewPlayer{ id, name }) => { 
+            Event::InboundEvent(NewPlayer{ id, name, parts }) => { 
                 //Graduate session to being existant
-                let mut core = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
-                let earth_position = *simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
+                /*let mut core = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
                 let core_body = simulation.world.get_rigid_mut(MyHandle::Part(core.body_id)).unwrap();
-                simulation.colliders.get_mut(core.collider).unwrap().set_user_data(Some(Box::new(PartOfPlayer(id))));
+                simulation.colliders.get_mut(core.collider).unwrap().set_user_data(Some(Box::new(PartOfPlayer(id))));*/
                 //core_body.apply_force(0, &nphysics2d::algebra::Force2::torque(std::f32::consts::PI), nphysics2d::algebra::ForceType::VelocityChange, true);
-                let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
-                let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
-                core_body.set_position(Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0));
+                let earth_position = *simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
+                let earth_radius = simulation.planets.earth.radius;
+                let core = beamout::RecursivePartDescription::inflate_root(&parts, &mut simulation, earth_position.x, earth_position.y, Some(earth_radius), &mut rand );
+                let mut max_power = 0u32; let mut power_regen = 0u32;
+                fn recursive_part_beamin(part: &Part, player_id: u16, simulation: &mut world::Simulation, max_power: &mut u32, power_regen: &mut u32) {
+                    let collider = simulation.colliders.get_mut(part.collider).unwrap();
+                    collider.set_user_data(Some(Box::new(PartOfPlayer(player_id))));
+                    *max_power += part.kind.power_storage();
+                    *power_regen += part.kind.power_regen_per_5_ticks();
+                    for i in 0..part.attachments.len() {
+                        if let Some((attachment, _, _)) = &part.attachments[i] { recursive_part_beamin(attachment, player_id, simulation, max_power, power_regen); }
+                    };
+                }
+                recursive_part_beamin(&core, id, &mut simulation, &mut max_power, &mut power_regen);
 
                 outbound_events.push(OutboundEvent::Message(id, ToClientMsg::HandshakeAccepted{id, core_id: core.body_id}));
                 outbound_events.push(OutboundEvent::Broadcast(codec::ToClientMsg::AddPlayer { id, name: name.clone(), core_id: core.body_id }));
@@ -337,7 +348,10 @@ async fn main() {
                 }
                 
                 //Graduate to spawned player
-                let meta = PlayerMeta::new(name);
+                let mut meta = PlayerMeta::new(name);
+                meta.max_power = max_power;
+                meta.power_regen_per_5_ticks = power_regen;
+                meta.power = meta.max_power;
                 outbound_events.push(OutboundEvent::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: meta.max_power, can_beamout: meta.can_beamout }));
                 players.insert(id, (meta, core));
             },

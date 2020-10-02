@@ -17,7 +17,7 @@ use std::sync::Arc;
 use crate::codec::*;
 
 pub enum InboundEvent {
-    NewPlayer { id: u16, name: String },
+    NewPlayer { id: u16, name: String, parts: RecursivePartDescription },
     PlayerMessage { id: u16, msg: ToServerMsg },
     PlayerQuit { id: u16 }
 }
@@ -191,7 +191,8 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
             Event::PotentialSessionBeamin{ id, parts } => {
                 if let Some(PotentialSession::AwaitingBeamin(socket, _, session, name)) = pulser.potential_sessions.0.remove(&id) {
                     pulser.sessions.0.insert(id, Session{ socket, session_id: session });
-                    inbound.send(InboundEvent::NewPlayer{ id, name }).await;
+                    println!("E {}", parts.is_some());
+                    inbound.send(InboundEvent::NewPlayer{ id, name, parts: parts.unwrap_or(RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() })}).await;
                 }
             },
             Event::PotentialSessionDisconnect{ id } => { pulser.potential_sessions.0.remove(&id); },

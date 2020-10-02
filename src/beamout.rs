@@ -13,8 +13,8 @@ use std::sync::Arc;
 
 #[derive(Serialize, Deserialize)]
 pub struct RecursivePartDescription {
-    kind: PartKind,
-    attachments: Vec<Option<RecursivePartDescription>>,
+    pub kind: PartKind,
+    pub attachments: Vec<Option<RecursivePartDescription>>,
 }
 impl RecursivePartDescription {
     pub fn deflate(part: &Part, ) -> RecursivePartDescription {
@@ -33,12 +33,41 @@ impl RecursivePartDescription {
             attachments
         }
     }
-    pub fn inflate_root(&self, simulation: &mut Simulation, cx: f32, cy: f32) -> Part {
-        Self::inflate_recursive(self, simulation, cx, cy, 0.0, AttachedPartFacing::Up)
+    pub fn inflate_root(&self, simulation: &mut Simulation, cx: f32, cy: f32, planet_radius: Option<f32>, rand: &mut rand::rngs::ThreadRng) -> Part {
+        let mut margins = 0f32;
+        let part = Self::inflate_recursive(self, simulation, cx, cy, 0.0, AttachedPartFacing::Up, cx, cy, &mut margins);
+        println!("Margins: {}", margins);
+        if let Some(radius) = planet_radius {
+            use rand::Rng;
+            let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
+            let spawn_radius = radius * 1.25 + 1.0 + margins;
+            let spawn_center = (spawn_degrees.cos() * spawn_radius + cx, spawn_degrees.sin() * spawn_radius + cy);
+            let core_position = simulation.world.get_rigid(MyHandle::Part(part.body_id)).unwrap().position();
+            let core_position = (core_position.translation.x, core_position.translation.y);
+            println!("core_position: {:?}\nspawn_center: {:?}\nspawn_degrees: {}", core_position, spawn_center, spawn_degrees);
+
+            fn recursive_part_move(part: &Part, core_position: (f32, f32), spawn_center: (f32, f32), spawn_degrees: f32, simulation: &mut Simulation) {
+                let body = simulation.world.get_rigid_mut(MyHandle::Part(part.body_id)).unwrap();
+                let pos = body.position().translation;
+                let vec_from_core = (pos.x - core_position.0, pos.y - core_position.1);
+                let rotated_vec = rotate_vector_with_angle(vec_from_core.0, vec_from_core.1, spawn_degrees);
+                let new_pos = (rotated_vec.0 + spawn_center.0, rotated_vec.1 + spawn_center.1);
+                let new_rotation = body.position().rotation.angle() + spawn_degrees;
+                println!("{:?} {}", new_pos, new_rotation);
+                body.set_position(Isometry::new(Vector::new(new_pos.0, new_pos.1), new_rotation));
+                for i in 0..part.attachments.len() {
+                    if let Some((attachment, _, _)) = &part.attachments[i] { recursive_part_move(attachment, core_position, spawn_center, spawn_degrees, simulation); }
+                }
+            }
+            recursive_part_move(&part, core_position, spawn_center, spawn_radius, simulation);
+        };
+        part
     }
-    fn inflate_recursive(&self, simulation: &mut Simulation, x: f32, y: f32, rot: f32, actual_facing: AttachedPartFacing) -> Part {
+    fn inflate_recursive(&self, simulation: &mut Simulation, x: f32, y: f32, rot: f32, actual_facing: AttachedPartFacing, cx: f32, cy: f32, margins: &mut f32) -> Part {
         let mut part = Part::new(self.kind, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
         simulation.world.get_rigid_mut(MyHandle::Part(part.body_id)).unwrap().set_position(Isometry::new(Vector::new(x, y), rot));
+        *margins = margins.max((x-cx).abs()).max((y-cy).abs());
+        println!("{:?} {} {}", part.kind, x, y);
         
         for i in 0..part.attachments.len() {
             if let Some(Some(attachment)) = self.attachments.get(i) {
@@ -52,6 +81,7 @@ impl RecursivePartDescription {
                         y + rotated_attach_point.1,
                         rot + details.facing.part_rotation(),
                         new_actual_facing,
+                        cx, cy, margins,
                     );
                     let (joint1, joint2) = simulation.equip_part_constraint(part.body_id, new_part.body_id, details);
                     part.attachments[i] = Some((new_part, joint1, joint2));
