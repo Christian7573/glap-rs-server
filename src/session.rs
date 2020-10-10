@@ -189,9 +189,10 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
                 } else { pulser.potential_sessions.0.remove(&id); }
             },
             Event::PotentialSessionBeamin{ id, parts } => {
-                if let Some(PotentialSession::AwaitingBeamin(socket, _, session, name)) = pulser.potential_sessions.0.remove(&id) {
+                if let Some(PotentialSession::AwaitingBeamin(socket, _, session, mut name)) = pulser.potential_sessions.0.remove(&id) {
                     pulser.sessions.0.insert(id, Session{ socket, session_id: session });
-                    println!("E {}", parts.is_some());
+                    name = String::from(name.trim());
+                    if name.is_empty() { name = String::from("Unnamed") };
                     inbound.send(InboundEvent::NewPlayer{ id, name, parts: parts.unwrap_or(RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() })}).await;
                 }
             },

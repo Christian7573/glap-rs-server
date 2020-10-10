@@ -26,7 +26,7 @@ pub const TICKS_PER_SECOND: u8 = 20;
 pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 20;
 
 #[derive(Clone)]
-pub struct ApiDat { prefix: String, beamout: String, fetch_ship: String, beamin: String }
+pub struct ApiDat { prefix: String, beamout: String, fetch_ship: String, beamin: String, password: String }
 
 #[async_std::main]
 async fn main() {
@@ -38,6 +38,7 @@ async fn main() {
         beamout: prefix.clone() + "/beamout",
         fetch_ship: prefix.clone() + "/fetch_ship",
         beamin: prefix.clone() + "/beamin",
+        password: std::env::var("API_PASSWORD").unwrap_or(String::with_capacity(0)),
     });
 
     let api = if let Some(api) = api {
@@ -487,19 +488,7 @@ async fn main() {
                                                 rotated.1 += pos.translation.y;
                                                 if (rotated.0 - target_x).abs() <= 0.4 && (rotated.1 - target_y).abs() <= 0.4 {
                                                     let my_actual_facing = details.facing.get_actual_rotation(parent_actual_rotation);
-                                                    use world::parts::{HorizontalThrustMode, VerticalThrustMode};
-                                                    let hroizontal = match my_actual_facing {
-                                                        AttachedPartFacing::Up => if x < 0 { HorizontalThrustMode::CounterClockwise } else if x > 0 { HorizontalThrustMode::Clockwise } else { HorizontalThrustMode::None },
-                                                        AttachedPartFacing::Right => if y > 0 { HorizontalThrustMode::CounterClockwise } else { HorizontalThrustMode::Clockwise },
-                                                        AttachedPartFacing::Down => if x < 0 { HorizontalThrustMode::Clockwise } else if x > 0 { HorizontalThrustMode::CounterClockwise } else { HorizontalThrustMode::None },
-                                                        AttachedPartFacing::Left => if y > 0 { HorizontalThrustMode::Clockwise } else { HorizontalThrustMode::CounterClockwise },
-                                                    };
-                                                    let vertical = match my_actual_facing  {
-                                                        AttachedPartFacing::Up => VerticalThrustMode::Backwards,
-                                                        AttachedPartFacing::Down => VerticalThrustMode::Forwards,
-                                                        AttachedPartFacing::Left | AttachedPartFacing::Right => VerticalThrustMode::None
-                                                    };
-                                                    let thrust_mode = CompactThrustMode::new(hroizontal, vertical);
+                                                    let thrust_mode = CompactThrustMode::calculate(my_actual_facing, x, y);
                                                     return Err((part, i, *details, rotated, thrust_mode, my_actual_facing));
                                                 }
                                             }
@@ -508,9 +497,8 @@ async fn main() {
                                     for (i, subpart) in part.attachments.iter_mut().enumerate() {
                                         if let Some((part, _, _)) = subpart {
                                             let my_actual_rotation = attachments[i].unwrap().facing.get_actual_rotation(parent_actual_rotation);
-                                            let new_x = x + match my_actual_rotation { AttachedPartFacing::Left => -1, AttachedPartFacing::Right => 1, _ => 0 };
-                                            let new_y = y + match my_actual_rotation { AttachedPartFacing::Up => 1, AttachedPartFacing::Down => -1, _ => 0 };
-                                            recurse3(part, target_x, target_y, bodies, my_actual_rotation, new_x, new_y)?
+                                            let deltas = my_actual_rotation.attachment_offset();
+                                            recurse3(part, target_x, target_y, bodies, my_actual_rotation, x + deltas.0, y + deltas.1)?
                                         }
                                     }
                                     Ok(())

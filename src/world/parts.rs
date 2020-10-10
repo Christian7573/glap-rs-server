@@ -196,6 +196,11 @@ impl AttachedPartFacing {
         let num: u8 = parent_actual_rotation + my_rotation;
         if num > 3 { (num - 4).into() } else { num.into() }
     }
+    pub fn attachment_offset(&self) -> (i16,i16) {
+        let new_x = match self { AttachedPartFacing::Left => -1, AttachedPartFacing::Right => 1, _ => 0 };
+        let new_y = match self { AttachedPartFacing::Up => 1, AttachedPartFacing::Down => -1, _ => 0 };
+        (new_x, new_y)
+    }
 }
 impl Into<u8> for AttachedPartFacing {
     fn into(self) -> u8 { match self {
@@ -263,6 +268,21 @@ impl CompactThrustMode {
     pub fn set_horizontal(&mut self, horizontal: HorizontalThrustMode) { std::mem::replace::<CompactThrustMode>(self, CompactThrustMode::new(horizontal, self.get_vertical())); }
     pub fn set_vertical(&mut self, vertical: VerticalThrustMode) { std::mem::replace::<CompactThrustMode>(self, CompactThrustMode::new(self.get_horizontal(), vertical)); }
     pub fn set(&mut self, horizontal: HorizontalThrustMode, vertical: VerticalThrustMode) { std::mem::replace::<CompactThrustMode>(self, CompactThrustMode::new(horizontal, vertical)); }
+
+    pub fn calculate(my_actual_facing: AttachedPartFacing, x: i16, y: i16) -> CompactThrustMode {
+        let hroizontal = match my_actual_facing {
+            AttachedPartFacing::Up => if x < 0 { HorizontalThrustMode::CounterClockwise } else if x > 0 { HorizontalThrustMode::Clockwise } else { HorizontalThrustMode::None },
+            AttachedPartFacing::Right => if y > 0 { HorizontalThrustMode::CounterClockwise } else { HorizontalThrustMode::Clockwise },
+            AttachedPartFacing::Down => if x < 0 { HorizontalThrustMode::Clockwise } else if x > 0 { HorizontalThrustMode::CounterClockwise } else { HorizontalThrustMode::None },
+            AttachedPartFacing::Left => if y > 0 { HorizontalThrustMode::Clockwise } else { HorizontalThrustMode::CounterClockwise },
+        };
+        let vertical = match my_actual_facing  {
+            AttachedPartFacing::Up => VerticalThrustMode::Backwards,
+            AttachedPartFacing::Down => VerticalThrustMode::Forwards,
+            AttachedPartFacing::Left | AttachedPartFacing::Right => VerticalThrustMode::None
+        };
+        CompactThrustMode::new(hroizontal, vertical)
+    }
 }
 impl From<u8> for CompactThrustMode {
     fn from(byte: u8) -> CompactThrustMode { CompactThrustMode( byte ) }
