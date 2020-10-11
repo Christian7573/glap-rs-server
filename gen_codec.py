@@ -130,6 +130,10 @@ ToServerMsg.messages.append(ReleaseGrab)
 BeamOut = Message("BeamOut")
 ToServerMsg.messages.append(BeamOut)
 
+SendChatMessage = Message("SendChatMessage")
+SendChatMessage.fields.append(Field("msg", TypeString))
+ToServerMsg.messages.append(SendChatMessage)
+
 ToClientMsg = MessageCategory("ToClientMsg")
 categories.append(ToClientMsg)
 
@@ -200,6 +204,12 @@ ToClientMsg.messages.append(UpdateMyMeta)
 BeamOutAnimation = Message("BeamOutAnimation")
 BeamOutAnimation.fields.append(Field("player_id", TypeUShort))
 ToClientMsg.messages.append(BeamOutAnimation)
+
+ChatMessage = Message("ChatMessage")
+ChatMessage.fields.append(Field("username", TypeString))
+ChatMessage.fields.append(Field("msg", TypeString))
+ChatMessage.fields.append(Field("color", TypeString))
+ToClientMsg.messages.append(ChatMessage)
 
 rust_header = open("codec_header.rs", "r")
 rust_out = open("codec.rs", "w")

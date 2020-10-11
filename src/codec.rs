@@ -92,6 +92,7 @@ pub enum ToServerMsg {
 	MoveGrab { x: f32, y: f32, },
 	ReleaseGrab,
 	BeamOut,
+	SendChatMessage { msg: String, },
 }
 impl ToServerMsg {
 	pub fn serialize(&self, out: &mut Vec<u8>) {
@@ -125,6 +126,10 @@ impl ToServerMsg {
 			},
 			Self::BeamOut { } => {
 				out.push(5);
+			},
+			Self::SendChatMessage { msg} => {
+				out.push(6);
+				type_string_serialize(out, msg);
 			},
 		};
 	}
@@ -168,6 +173,11 @@ impl ToServerMsg {
 				
 				Ok(ToServerMsg::BeamOut { })
 			},
+			6 => {
+				let msg;
+				msg = type_string_deserialize(&buf, index)?;
+				Ok(ToServerMsg::SendChatMessage { msg})
+			},
 			_ => Err(())
 		}
 	}
@@ -186,6 +196,7 @@ pub enum ToClientMsg {
 	PostSimulationTick { your_power: u32, },
 	UpdateMyMeta { max_power: u32, can_beamout: bool, },
 	BeamOutAnimation { player_id: u16, },
+	ChatMessage { username: String, msg: String, color: String, },
 }
 impl ToClientMsg {
 	pub fn serialize(&self, out: &mut Vec<u8>) {
@@ -257,6 +268,12 @@ impl ToClientMsg {
 			Self::BeamOutAnimation { player_id} => {
 				out.push(11);
 				type_u16_serialize(out, player_id);
+			},
+			Self::ChatMessage { username, msg, color} => {
+				out.push(12);
+				type_string_serialize(out, username);
+				type_string_serialize(out, msg);
+				type_string_serialize(out, color);
 			},
 		};
 	}
@@ -343,6 +360,13 @@ impl ToClientMsg {
 				let player_id;
 				player_id = type_u16_deserialize(&buf, index)?;
 				Ok(ToClientMsg::BeamOutAnimation { player_id})
+			},
+			12 => {
+				let username; let msg; let color;
+				username = type_string_deserialize(&buf, index)?;
+				msg = type_string_deserialize(&buf, index)?;
+				color = type_string_deserialize(&buf, index)?;
+				Ok(ToClientMsg::ChatMessage { username, msg, color})
 			},
 			_ => Err(())
 		}

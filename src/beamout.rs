@@ -36,7 +36,6 @@ impl RecursivePartDescription {
     pub fn inflate_root(&self, simulation: &mut Simulation, cx: f32, cy: f32, planet_radius: Option<f32>, rand: &mut rand::rngs::ThreadRng) -> Part {
         let mut margins = 0f32;
         let part = Self::inflate_recursive(self, simulation, cx, cy, 0.0, AttachedPartFacing::Up, cx, cy, &mut margins, 0, 0);
-        println!("Margins: {}", margins);
         if let Some(radius) = planet_radius {
             use rand::Rng;
             let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
@@ -44,7 +43,6 @@ impl RecursivePartDescription {
             let spawn_center = (spawn_degrees.cos() * spawn_radius + cx, spawn_degrees.sin() * spawn_radius + cy);
             let core_position = simulation.world.get_rigid(MyHandle::Part(part.body_id)).unwrap().position();
             let core_position = (core_position.translation.x, core_position.translation.y);
-            println!("core_position: {:?}\nspawn_center: {:?}\nspawn_degrees: {}", core_position, spawn_center, spawn_degrees);
 
             fn recursive_part_move(part: &Part, core_position: (f32, f32), spawn_center: (f32, f32), spawn_degrees: f32, simulation: &mut Simulation) {
                 let body = simulation.world.get_rigid_mut(MyHandle::Part(part.body_id)).unwrap();
@@ -53,7 +51,6 @@ impl RecursivePartDescription {
                 let rotated_vec = rotate_vector_with_angle(vec_from_core.0, vec_from_core.1, spawn_degrees);
                 let new_pos = (rotated_vec.0 + spawn_center.0, rotated_vec.1 + spawn_center.1);
                 let new_rotation = body.position().rotation.angle() + spawn_degrees;
-                println!("{:?} {}", new_pos, new_rotation);
                 body.set_position(Isometry::new(Vector::new(new_pos.0, new_pos.1), new_rotation));
                 for i in 0..part.attachments.len() {
                     if let Some((attachment, _, _)) = &part.attachments[i] { recursive_part_move(attachment, core_position, spawn_center, spawn_degrees, simulation); }
@@ -133,5 +130,5 @@ pub async fn beamin_request(session_id: Option<String>, api: Option<Arc<ApiDat>>
     if response.status().is_success() {
         let body_json = response.body_json().await.ok()?;
         serde_json::from_value::<RecursivePartDescription>(body_json).ok()
-    } else { println!("Beamin bad {}", response.status()); None }
+    } else { eprintln!("Beamin bad {}", response.status()); None }
 }
