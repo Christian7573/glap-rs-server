@@ -10,7 +10,7 @@ use super::world::{MyHandle, MyUnits};
 use super::world::parts::{Part, PartKind};
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
-use crate::beamout::{RecursivePartDescription, beamin_request, spawn_beamout_request};
+use crate::beamout::{RecursivePartDescription, BeaminResponse, beamin_request, spawn_beamout_request};
 use crate::ApiDat;
 use std::sync::Arc;
 
@@ -33,7 +33,7 @@ pub struct WorldUpdatePartMove { pub id: u16, pub x: f32, pub y: f32, pub rot_si
 enum Event {
     NewSocket { socket: TcpStream },
     PotentialSessionMessage { id: u16, msg: Vec<u8> },
-    PotentialSessionBeamin { id: u16, parts: Option<RecursivePartDescription> },
+    PotentialSessionBeamin { id: u16, parts: Option<RecursivePartDescription>, beamout_token: Option<String> },
     PotentialSessionDisconnect { id: u16 },
     SessionMessage { id: u16, msg: Vec<u8> },
     SessionDisconnect { id: u16 },
@@ -95,7 +95,8 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
             };
             match self.potential_sessions.poll_next_unpin(ctx) {
                 Poll::Ready(Some((id, Some(PotentialSessionEvent::Msg(msg))))) => return Poll::Ready(Some(Event::PotentialSessionMessage{ id, msg })),
-                Poll::Ready(Some((id, Some(PotentialSessionEvent::Beamin(beamin))))) => return Poll::Ready(Some(Event::PotentialSessionBeamin{ id, parts: beamin })),
+                Poll::Ready(Some((id, Some(PotentialSessionEvent::Beamin(Some(beamin)))))) => return Poll::Ready(Some(Event::PotentialSessionBeamin{ id, parts: beamin.layout, beamout_token: Some(beamin.beamout_token) })),
+                Poll::Ready(Some((id, Some(PotentialSessionEvent::Beamin(None))))) => return Poll::Ready(Some(Event::PotentialSessionBeamin{ id, parts: None, beamout_token: None })),
                 Poll::Ready(Some((id, None))) => return Poll::Ready(Some(Event::PotentialSessionDisconnect{ id })),
                 Poll::Pending => (),
                 Poll::Ready(None) => panic!("I wrote this, how did we get here?")
@@ -157,13 +158,13 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
                         },
                         OutboundEvent::BeamOutPlayer(id, beamout_layout) => {
                             if let Some(session) = pulser.sessions.0.remove(&id) {
-                                let session_id = session.session_id.clone();
+                                let beamout_token = session.beamout_token.clone();
                                 async_std::task::spawn(async {
                                     let mut socket = session.socket.socket;
                                     socket.flush().await; 
                                 });
 
-                                spawn_beamout_request(session_id, beamout_layout, api.clone());
+                                spawn_beamout_request(beamout_token, beamout_layout, api.clone());
                             } 
                         },
                     };
@@ -188,9 +189,9 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
                     }
                 } else { pulser.potential_sessions.0.remove(&id); }
             },
-            Event::PotentialSessionBeamin{ id, parts } => {
-                if let Some(PotentialSession::AwaitingBeamin(socket, _, session, mut name)) = pulser.potential_sessions.0.remove(&id) {
-                    pulser.sessions.0.insert(id, Session{ socket, session_id: session });
+            Event::PotentialSessionBeamin{ id, parts, beamout_token } => {
+                if let Some(PotentialSession::AwaitingBeamin(socket, _beamin_future, _session, mut name)) = pulser.potential_sessions.0.remove(&id) {
+                    pulser.sessions.0.insert(id, Session{ socket, beamout_token });
                     name = String::from(name.trim());
                     if name.is_empty() { name = String::from("Unnamed") };
                     inbound.send(InboundEvent::NewPlayer{ id, name, parts: parts.unwrap_or(RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() })}).await;
@@ -237,7 +238,7 @@ impl<T> Stream for MaybeFairPoller7573<T> where T: Stream + Unpin {
     }
 }
 
-type BeaminRequestType = Pin<Box<dyn Future<Output = Option<RecursivePartDescription>>>>;
+type BeaminRequestType = Pin<Box<dyn Future<Output = Option<BeaminResponse>>>>;
 enum PotentialSession {
     AcceptingWebSocket(Pin<Box<dyn Future<Output = Result<WebSocketStream<TcpStream>, async_tungstenite::tungstenite::Error>>>>),
     AwaitingHandshake(MyWebSocket),
@@ -253,7 +254,7 @@ impl PotentialSession {
 }
 enum PotentialSessionEvent {
     Msg(Vec<u8>),
-    Beamin(Option<RecursivePartDescription>),
+    Beamin(Option<BeaminResponse>),
 }
 impl Stream for PotentialSession {
     type Item = PotentialSessionEvent;
@@ -283,7 +284,7 @@ impl Stream for PotentialSession {
     }
 }
 
-pub struct Session { socket: MyWebSocket, session_id: Option<String> }
+pub struct Session { socket: MyWebSocket, beamout_token: Option<String> }
 impl Stream for Session {
     type Item = Vec<u8>;
     fn poll_next(

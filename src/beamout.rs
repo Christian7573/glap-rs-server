@@ -104,10 +104,10 @@ impl<'de> Deserialize<'de> for PartKind {
     }
 }
 
-pub fn spawn_beamout_request(session_id: Option<String>, beamout_layout: RecursivePartDescription, api: Option<Arc<ApiDat>>) {
+pub fn spawn_beamout_request(beamout_token: Option<String>, beamout_layout: RecursivePartDescription, api: Option<Arc<ApiDat>>) {
     if let Some(api) = &api {
-        if let Some(session_id) = session_id {
-            let uri = api.beamout.clone() + "?session=" + &session_id;
+        if let Some(beamout_token) = beamout_token {
+            let uri = api.beamout.clone() + "?beamout_token=" + &beamout_token;
             let password = api.password.clone();
             async_std::task::spawn(async {
                 let beamout_layout = beamout_layout;
@@ -117,18 +117,24 @@ pub fn spawn_beamout_request(session_id: Option<String>, beamout_layout: Recursi
                     _ => {}
                 };
             });
-        }
+        } else { println!("Session didn't have beamout token"); }
     } 
 }
 
-pub async fn beamin_request(session_id: Option<String>, api: Option<Arc<ApiDat>>) -> Option<RecursivePartDescription> {
+#[derive(Serialize, Deserialize)]
+pub struct BeaminResponse {
+    pub beamout_token: String,
+    pub layout: Option<RecursivePartDescription>
+}
+
+pub async fn beamin_request(session: Option<String>, api: Option<Arc<ApiDat>>) -> Option<BeaminResponse> {
     let api = api.as_ref()?;
-    let session_id = session_id?;
-    let uri = api.beamin.clone() + "?session=" + &session_id;
+    let session = session?;
+    let uri = api.beamin.clone() + "?session=" + &session;
     let password = api.password.clone();
     let mut response = surf::get(uri).header("password", password).await.ok()?;
     if response.status().is_success() {
         let body_json = response.body_json().await.ok()?;
-        serde_json::from_value::<RecursivePartDescription>(body_json).ok()
+        serde_json::from_value::<BeaminResponse>(body_json).ok()
     } else { eprintln!("Beamin bad {}", response.status()); None }
 }
