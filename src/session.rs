@@ -190,19 +190,28 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
             },
             Event::PotentialSessionBeamin{ id, parts } => {
                 if let Some(PotentialSession::AwaitingBeamin(socket, _, session, mut name)) = pulser.potential_sessions.0.remove(&id) {
-                    pulser.sessions.0.insert(id, Session{ socket, session_id: session });
                     name = String::from(name.trim());
                     if name.is_empty() { name = String::from("Unnamed") };
+                    pulser.sessions.0.insert(id, Session{ socket, session_id: session, name: name.clone() });
                     inbound.send(InboundEvent::NewPlayer{ id, name, parts: parts.unwrap_or(RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() })}).await;
                 }
             },
             Event::PotentialSessionDisconnect{ id } => { pulser.potential_sessions.0.remove(&id); },
             Event::SessionMessage{ id, msg } => {
-                if let Ok(msg) = ToServerMsg::deserialize(msg.as_ref(), &mut 0) { inbound.send(InboundEvent::PlayerMessage{ id, msg }).await; }
-                else {
-                    pulser.sessions.0.remove(&id);
-                    inbound.send(InboundEvent::PlayerQuit{ id }).await;
-                }
+                match ToServerMsg::deserialize(msg.as_ref(), &mut 0) {
+                    Ok(ToServerMsg::SendChatMessage{ msg }) => {
+                        ToClientMsg::ChatMessage{ username: pulser.sessions.0.get(&id).unwrap().name.clone(), msg: msg, color: String::from("white") }.serialize(&mut serialization_vec);
+                        for (_id, session) in &mut pulser.sessions.0 {
+                            session.socket.queue_send(Message::Binary(serialization_vec.clone()));
+                        };
+                        serialization_vec.clear();
+                    },
+                    Ok(msg) => { inbound.send(InboundEvent::PlayerMessage{ id, msg }).await; }
+                    Err(_) => {
+                        pulser.sessions.0.remove(&id);
+                        inbound.send(InboundEvent::PlayerQuit{ id }).await;
+                    }
+                };
             },
             Event::SessionDisconnect{ id } => {
                 pulser.sessions.0.remove(&id);
@@ -283,7 +292,7 @@ impl Stream for PotentialSession {
     }
 }
 
-pub struct Session { socket: MyWebSocket, session_id: Option<String> }
+pub struct Session { socket: MyWebSocket, session_id: Option<String>, name: String }
 impl Stream for Session {
     type Item = Vec<u8>;
     fn poll_next(
