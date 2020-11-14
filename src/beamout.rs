@@ -104,10 +104,16 @@ impl<'de> Deserialize<'de> for PartKind {
     }
 }
 
+/*macro_rules! FormatWithString {
+    ($format_input:ident) => { {
+        
+    } }
+}*/
+
 pub fn spawn_beamout_request(beamout_token: Option<String>, beamout_layout: RecursivePartDescription, api: Option<Arc<ApiDat>>) {
     if let Some(api) = &api {
         if let Some(beamout_token) = beamout_token {
-            let uri = api.beamout.clone() + "?beamout_token=" + &beamout_token;
+            let uri = api.beamout.replacen("^^^^", &beamout_token, 1);
             let password = api.password.clone();
             async_std::task::spawn(async {
                 let beamout_layout = beamout_layout;
@@ -130,7 +136,7 @@ pub struct BeaminResponse {
 pub async fn beamin_request(session: Option<String>, api: Option<Arc<ApiDat>>) -> Option<BeaminResponse> {
     let api = api.as_ref()?;
     let session = session?;
-    let uri = api.beamin.clone() + "?session=" + &session;
+    let uri = api.beamin.replacen("^^^^", &session, 1);
     let password = api.password.clone();
     let mut response = surf::get(uri).header("password", password).await.ok()?;
     if response.status().is_success() {
