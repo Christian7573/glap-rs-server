@@ -4,6 +4,7 @@ use nphysics2d::object::ColliderDesc;
 use ncollide2d::shape::{Ball, ShapeHandle};
 use nalgebra::Vector2;
 use nphysics2d::material::{BasicMaterial, MaterialHandle};
+use rand::Rng;
 
 pub struct Planets {
     pub earth: CelestialObject,
@@ -23,10 +24,11 @@ impl Planets {
     pub fn new(colliders: &mut super::MyColliderSet, bodies: &mut super::World) -> Planets {
         const EARTH_MASS: f32 = 600.0;
         const EARTH_SIZE: f32 = 25.0;
+        let earth_pos = Vector2::new(planet_location(500.0), planet_location(500.0));
         let planet_material = MaterialHandle::new(BasicMaterial::new(0.0, 1.0));
         let earth = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(1000.0, 1000.0))
+            .translation(earth_pos.clone())
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS)
@@ -54,7 +56,7 @@ impl Planets {
 
         let moon = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(1100.0,1100.0))
+            .translation(Vector2::new(planet_location(100.0), planet_location(100.0)) + earth_pos.clone())
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 35.0)
@@ -364,4 +366,11 @@ pub struct CelestialObject {
     pub id: u16,
     pub cargo_upgrade: Option<super::parts::PartKind>,
     pub can_beamout: bool,
+}
+
+pub fn planet_location(radius: f32) -> f32 {
+    let mut rng = rand::thread_rng();
+    let angle = rng.gen_range(0.0, 360.0);
+    let x = (radius * f32::cos(angle * std::f32::consts::PI / 180.0));
+    x
 }
