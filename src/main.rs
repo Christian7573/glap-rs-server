@@ -263,7 +263,7 @@ async fn main() {
                         rot_cos: position.rotation.re, rot_sin: position.rotation.im,
                     }
                 }).collect::<Vec<_>>();
-                outbound_events.push(OutboundEvent::WorldUpdate(move_messages));
+                //outbound_events.push(OutboundEvent::WorldUpdate(move_messages));
                 for (id, (player, _core)) in &players {
                     outbound_events.push(OutboundEvent::Message(*id, ToClientMsg::PostSimulationTick{ your_power: player.power }));
                 }

@@ -16,6 +16,8 @@ use std::sync::Arc;
 
 use crate::codec::*;
 
+mod websocket;
+
 pub enum InboundEvent {
     NewPlayer { id: u16, name: String, parts: RecursivePartDescription },
     PlayerMessage { id: u16, msg: ToServerMsg },
@@ -146,13 +148,13 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
                         OutboundEvent::WorldUpdate(player_movements, free_part_movements) => {
                             for player in &player_movements {
                                 if let Some(session) = pulser.sessions.0.get_mut(&player.id) {
-                                    session.player_x = player.x;
-                                    session.player_y = player.y;
+                                    session.player_x = player.core_x;
+                                    session.player_y = player.core_y;
                                 }
                             }
                             for player in &player_movements {
                                 ToClientMsg::MessagePack { count: player.parts.len() as u16 }.serialize(&mut serialization_vec);
-                                for part in player.parts {
+                                for part in &player.parts {
                                     ToClientMsg::MovePart{
                                         id: part.id,
                                         x: part.x, y: part.y,
@@ -161,12 +163,12 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
                                     }.serialize(&mut serialization_vec);
                                 }
                             }
-                            for part_moved in part_movements {
+                            /*for part_moved in part_movements {
                                 for session in pulser.sessions.0.values_mut() {
                                     session.socket.queue_send(Message::Binary(serialization_vec.clone()));
                                 }
                                 serialization_vec.clear();
-                            }
+                            }*/
                         },
                         OutboundEvent::BeamOutPlayer(id, beamout_layout) => {
                             if let Some(session) = pulser.sessions.0.remove(&id) {
