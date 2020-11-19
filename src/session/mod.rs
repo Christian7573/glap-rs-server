@@ -215,7 +215,7 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
             Event::SessionMessage{ id, msg } => {
                 match ToServerMsg::deserialize(msg.as_ref(), &mut 0) {
                     Ok(ToServerMsg::SendChatMessage{ msg }) => {
-                        ToClientMsg::ChatMessage{ username: pulser.sessions.0.get(&id).unwrap().name.clone(), msg, color: String::from("white") }.serialize(&mut serialization_vec);
+                        ToClientMsg::ChatMessage{ username: pulser.sessions.0.get(&id).unwrap().name.clone(), msg, color: String::from("#dd55ff") }.serialize(&mut serialization_vec);
                         for (_id, session) in &mut pulser.sessions.0 {
                             session.socket.queue_send(Message::Binary(serialization_vec.clone()));
                         };
