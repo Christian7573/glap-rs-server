@@ -24,7 +24,7 @@ impl Planets {
     pub fn new(colliders: &mut super::MyColliderSet, bodies: &mut super::World) -> Planets {
         const EARTH_MASS: f32 = 600.0;
         const EARTH_SIZE: f32 = 25.0;
-        let earth_pos = Vector2::new(planet_location(500.0), planet_location(500.0));
+        let earth_pos = Vector2::new(planet_location(1500.0), planet_location(1500.0));
         let planet_material = MaterialHandle::new(BasicMaterial::new(0.0, 1.0));
         let earth = {
             let body = RigidBodyDesc::new()
@@ -84,7 +84,7 @@ impl Planets {
 
         let mars = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(1500.0,-1000.0))
+                .translation(Vector2::new(planet_location(2000.0),planet_location(2000.0)))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 4.0)
@@ -112,7 +112,7 @@ impl Planets {
 
         let mercury = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(-1600.0,267.0))
+                .translation(Vector2::new(planet_location(500.0), planet_location(500.0)))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 25.0)
@@ -140,7 +140,7 @@ impl Planets {
 
         let jupiter = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(2500.0, 1000.0))
+                .translation(Vector2::new(planet_location(3500.0), planet_location(3500.0)))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 10.0)
@@ -168,10 +168,10 @@ impl Planets {
 
         let pluto = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(-2000.0, -2000.0))
+                .translation(Vector2::new(planet_location(6000.0), 6000.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
-                .mass(EARTH_SIZE / 35.0)
+                .mass(EARTH_MASS / 10.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE / 4.0;
@@ -196,13 +196,13 @@ impl Planets {
 
         let saturn = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(-100.0, -1305.0))
+                .translation(Vector2::new(planet_location(4000.0), planet_location(4000.0)))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
-                .mass(EARTH_SIZE / 35.0)
+                .mass(EARTH_MASS * 10.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE / 4.0;
+            const RADIUS: f32 = EARTH_SIZE * 2.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -224,13 +224,13 @@ impl Planets {
 
         let neptune = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(-1700.0, 2000.0))
+                .translation(Vector2::new(planet_location(5500.0), planet_location(5500.0)))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
-                .mass(EARTH_SIZE / 35.0)
+                .mass(EARTH_MASS * 4.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE / 4.0;
+            const RADIUS: f32 = EARTH_SIZE * 1.5;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -252,13 +252,13 @@ impl Planets {
 
         let venus = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(1700.0, -300.0))
+                .translation(Vector2::new(planet_location(1000.0), planet_location(1000.0)))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
-                .mass(EARTH_SIZE / 35.0)
+                .mass(EARTH_SIZE)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE / 4.0;
+            const RADIUS: f32 = EARTH_SIZE;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -280,13 +280,13 @@ impl Planets {
 
         let uranus = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(500.0, 1500.0))
+                .translation(Vector2::new(planet_location(4800.0), planet_location(4800.0)))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
-                .mass(EARTH_SIZE / 35.0)
+                .mass(EARTH_MASS * 4.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE / 4.0;
+            const RADIUS: f32 = EARTH_SIZE * 2.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -314,7 +314,7 @@ impl Planets {
                 .mass(EARTH_MASS * 20.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE * 7.0;
+            const RADIUS: f32 = EARTH_SIZE * 6.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
