@@ -24,7 +24,7 @@ impl Planets {
     pub fn new(colliders: &mut super::MyColliderSet, bodies: &mut super::World) -> Planets {
         const EARTH_MASS: f32 = 600.0;
         const EARTH_SIZE: f32 = 25.0;
-        let earth_pos = Vector2::new(planet_location(1500.0), planet_location(1500.0));
+        let earth_pos = planet_location(1500.0);
         let planet_material = MaterialHandle::new(BasicMaterial::new(0.0, 1.0));
         let earth = {
             let body = RigidBodyDesc::new()
@@ -56,7 +56,7 @@ impl Planets {
 
         let moon = {
             let body = RigidBodyDesc::new()
-            .translation(Vector2::new(planet_location(100.0), planet_location(100.0)) + earth_pos.clone())
+            .translation(planet_location(100.0) + earth_pos.clone())
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 35.0)
@@ -84,7 +84,7 @@ impl Planets {
 
         let mars = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(planet_location(2000.0),planet_location(2000.0)))
+                .translation(planet_location(2000.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 4.0)
@@ -112,7 +112,7 @@ impl Planets {
 
         let mercury = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(planet_location(500.0), planet_location(500.0)))
+                .translation(planet_location(500.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 25.0)
@@ -140,7 +140,7 @@ impl Planets {
 
         let jupiter = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(planet_location(3500.0), planet_location(3500.0)))
+                .translation(planet_location(3500.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 10.0)
@@ -161,14 +161,14 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: Some(super::parts::PartKind::Hub),
+                cargo_upgrade: None,
                 can_beamout: false,
             }
         };
 
         let pluto = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(planet_location(6000.0), 6000.0))
+                .translation(planet_location(6000.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 10.0)
@@ -189,14 +189,14 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: Some(super::parts::PartKind::Hub),
+                cargo_upgrade: None,
                 can_beamout: false,
             }
         };
 
         let saturn = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(planet_location(4000.0), planet_location(4000.0)))
+                .translation(planet_location(4000.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 10.0)
@@ -217,14 +217,14 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: Some(super::parts::PartKind::Hub),
+                cargo_upgrade: None,
                 can_beamout: false,
             }
         };
 
         let neptune = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(planet_location(5500.0), planet_location(5500.0)))
+                .translation(planet_location(5500.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 4.0)
@@ -245,14 +245,14 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: Some(super::parts::PartKind::Hub),
+                cargo_upgrade: None,
                 can_beamout: false,
             }
         };
 
         let venus = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(planet_location(1000.0), planet_location(1000.0)))
+                .translation(planet_location(1000.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_SIZE)
@@ -273,14 +273,14 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: Some(super::parts::PartKind::Hub),
+                cargo_upgrade: None,
                 can_beamout: false,
             }
         };
 
         let uranus = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(planet_location(4800.0), planet_location(4800.0)))
+                .translation(planet_location(4800.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 4.0)
@@ -301,7 +301,7 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: Some(super::parts::PartKind::Hub),
+                cargo_upgrade: None,
                 can_beamout: false,
             }
         };
@@ -368,9 +368,9 @@ pub struct CelestialObject {
     pub can_beamout: bool,
 }
 
-pub fn planet_location(radius: f32) -> f32 {
+pub fn planet_location(radius: f32) -> nalgebra::Matrix<f32, nalgebra::U2, nalgebra::U1, nalgebra::ArrayStorage<f32, nalgebra::U2, nalgebra::U1>> {
     let mut rng = rand::thread_rng();
-    let angle = rng.gen_range(0.0, 360.0);
-    let x = (radius * f32::cos(angle * std::f32::consts::PI / 180.0));
-    x
+    let angle: f32 = rng.gen::<f32>() * std::f32::consts::PI * 2.0;
+    let pos = Vector2::new(f32::cos(angle) * radius, f32::sin(angle) * radius);
+    pos
 }
