@@ -115,7 +115,7 @@ impl Planets {
                 .translation(planet_location(500.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
-                .mass(EARTH_MASS / 25.0)
+                .mass(EARTH_MASS / 15.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE * 0.38;
@@ -311,10 +311,10 @@ impl Planets {
                 .translation(Vector2::new(0.0,0.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
-                .mass(EARTH_MASS * 20.0)
+                .mass(EARTH_MASS * 50.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE * 6.0;
+            const RADIUS: f32 = EARTH_SIZE * 4.7;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
