@@ -16,6 +16,8 @@ use std::sync::Arc;
 
 use crate::codec::*;
 
+mod websocket;
+
 pub enum InboundEvent {
     NewPlayer { id: u16, name: String, parts: RecursivePartDescription },
     PlayerMessage { id: u16, msg: ToServerMsg },
@@ -24,10 +26,11 @@ pub enum InboundEvent {
 pub enum OutboundEvent {
     Message (u16, ToClientMsg),
     Broadcast (ToClientMsg),
-    WorldUpdate (Vec<WorldUpdatePartMove>),
+    WorldUpdate (Vec<WorldUpdatePlayerUpdate>, Vec<WorldUpdatePartMove>),
     SessionBad(u16),
     BeamOutPlayer(u16, RecursivePartDescription),
 }
+pub struct WorldUpdatePlayerUpdate { pub id: u16, pub core_x: f32, pub core_y: f32, pub parts: Vec<WorldUpdatePartMove> }
 pub struct WorldUpdatePartMove { pub id: u16, pub x: f32, pub y: f32, pub rot_sin: f32, pub rot_cos: f32 }
 
 enum Event {
@@ -142,19 +145,30 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
                             pulser.sessions.0.remove(&id);
                             inbound.send(InboundEvent::PlayerQuit{ id }).await;
                         },
-                        OutboundEvent::WorldUpdate(part_movements) => {
-                            for part_moved in part_movements {
-                                ToClientMsg::MovePart{
-                                    id: part_moved.id,
-                                    x: part_moved.x, y: part_moved.y,
-                                    rotation_i: part_moved.rot_sin,
-                                    rotation_n: part_moved.rot_cos,
-                                }.serialize(&mut serialization_vec);
+                        OutboundEvent::WorldUpdate(player_movements, free_part_movements) => {
+                            for player in &player_movements {
+                                if let Some(session) = pulser.sessions.0.get_mut(&player.id) {
+                                    session.player_x = player.core_x;
+                                    session.player_y = player.core_y;
+                                }
+                            }
+                            for player in &player_movements {
+                                ToClientMsg::MessagePack { count: player.parts.len() as u16 }.serialize(&mut serialization_vec);
+                                for part in &player.parts {
+                                    ToClientMsg::MovePart{
+                                        id: part.id,
+                                        x: part.x, y: part.y,
+                                        rotation_i: part.rot_sin,
+                                        rotation_n: part.rot_cos,
+                                    }.serialize(&mut serialization_vec);
+                                }
+                            }
+                            /*for part_moved in part_movements {
                                 for session in pulser.sessions.0.values_mut() {
                                     session.socket.queue_send(Message::Binary(serialization_vec.clone()));
                                 }
                                 serialization_vec.clear();
-                            }
+                            }*/
                         },
                         OutboundEvent::BeamOutPlayer(id, beamout_layout) => {
                             if let Some(session) = pulser.sessions.0.remove(&id) {
@@ -193,7 +207,7 @@ async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<Inboun
                 if let Some(PotentialSession::AwaitingBeamin(socket, _beamin_future, _session, mut name)) = pulser.potential_sessions.0.remove(&id) {
                     name = String::from(name.trim());
                     if name.is_empty() { name = String::from("Unnamed") };
-                    pulser.sessions.0.insert(id, Session{ socket, beamout_token, name: name.clone() });
+                    pulser.sessions.0.insert(id, Session{ socket, beamout_token, name: name.clone(), player_x: 0.0, player_y: 0.0 });
                     inbound.send(InboundEvent::NewPlayer{ id, name, parts: parts.unwrap_or(RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() })}).await;
                 }
             },
@@ -293,7 +307,7 @@ impl Stream for PotentialSession {
     }
 }
 
-pub struct Session { socket: MyWebSocket, beamout_token: Option<String>, name: String }
+pub struct Session { socket: MyWebSocket, player_x: f32, player_y: f32, beamout_token: Option<String>, name: String }
 impl Stream for Session {
     type Item = Vec<u8>;
     fn poll_next(

@@ -134,8 +134,13 @@ SendChatMessage = Message("SendChatMessage")
 SendChatMessage.fields.append(Field("msg", TypeString))
 ToServerMsg.messages.append(SendChatMessage)
 
+
 ToClientMsg = MessageCategory("ToClientMsg")
 categories.append(ToClientMsg)
+
+MessagePack = Message("MessagePack");
+MessagePack.fields.append(Field("count", TypeUShort))
+ToClientMsg.messages.append(MessagePack)
 
 HandshakeAccepted = Message("HandshakeAccepted")
 HandshakeAccepted.fields.append(Field("id", TypeUShort))

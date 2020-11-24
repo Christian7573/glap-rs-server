@@ -26,7 +26,7 @@ pub const TICKS_PER_SECOND: u8 = 20;
 pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 20;
 
 #[derive(Clone)]
-pub struct ApiDat { prefix: String, beamout: String, fetch_ship: String, beamin: String, password: String }
+pub struct ApiDat { prefix: String, beamout: String, beamin: String, password: String }
 
 #[async_std::main]
 async fn main() {
@@ -35,9 +35,8 @@ async fn main() {
 
     let api = std::env::var("API").ok().map(|prefix| ApiDat {
         prefix: prefix.clone(),
-        beamout: prefix.clone() + "/beamout",
-        fetch_ship: prefix.clone() + "/fetch_ship",
-        beamin: prefix.clone() + "/beamin",
+        beamout: prefix.clone() + "/user/^^^^/beamout",
+        beamin: prefix.clone() + "/session/^^^^/beamin",
         password: std::env::var("API_PASSWORD").unwrap_or(String::with_capacity(0)),
     });
 
@@ -264,7 +263,7 @@ async fn main() {
                         rot_cos: position.rotation.re, rot_sin: position.rotation.im,
                     }
                 }).collect::<Vec<_>>();
-                outbound_events.push(OutboundEvent::WorldUpdate(move_messages));
+                //outbound_events.push(OutboundEvent::WorldUpdate(move_messages));
                 for (id, (player, _core)) in &players {
                     outbound_events.push(OutboundEvent::Message(*id, ToClientMsg::PostSimulationTick{ your_power: player.power }));
                 }

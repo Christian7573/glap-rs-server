@@ -184,6 +184,7 @@ impl ToServerMsg {
 }
 
 pub enum ToClientMsg {
+	MessagePack { count: u16, },
 	HandshakeAccepted { id: u16, core_id: u16, },
 	AddCelestialObject { name: String, display_name: String, radius: f32, id: u16, position: (f32,f32), },
 	AddPart { id: u16, kind: PartKind, },
@@ -201,13 +202,17 @@ pub enum ToClientMsg {
 impl ToClientMsg {
 	pub fn serialize(&self, out: &mut Vec<u8>) {
 		match self {
-			Self::HandshakeAccepted { id, core_id} => {
+			Self::MessagePack { count} => {
 				out.push(0);
+				type_u16_serialize(out, count);
+			},
+			Self::HandshakeAccepted { id, core_id} => {
+				out.push(1);
 				type_u16_serialize(out, id);
 				type_u16_serialize(out, core_id);
 			},
 			Self::AddCelestialObject { name, display_name, radius, id, position} => {
-				out.push(1);
+				out.push(2);
 				type_string_serialize(out, name);
 				type_string_serialize(out, display_name);
 				type_float_serialize(out, radius);
@@ -215,12 +220,12 @@ impl ToClientMsg {
 				type_float_pair_serialize(out, position);
 			},
 			Self::AddPart { id, kind} => {
-				out.push(2);
+				out.push(3);
 				type_u16_serialize(out, id);
 				kind.serialize(out);
 			},
 			Self::MovePart { id, x, y, rotation_n, rotation_i} => {
-				out.push(3);
+				out.push(4);
 				type_u16_serialize(out, id);
 				type_float_serialize(out, x);
 				type_float_serialize(out, y);
@@ -228,23 +233,23 @@ impl ToClientMsg {
 				type_float_serialize(out, rotation_i);
 			},
 			Self::UpdatePartMeta { id, owning_player, thrust_mode} => {
-				out.push(4);
+				out.push(5);
 				type_u16_serialize(out, id);
 				if let Some(tmp) = owning_player {out.push(1); type_u16_serialize(out, tmp);} else {out.push(0);}
 				type_u8_serialize(out, thrust_mode);
 			},
 			Self::RemovePart { id} => {
-				out.push(5);
+				out.push(6);
 				type_u16_serialize(out, id);
 			},
 			Self::AddPlayer { id, core_id, name} => {
-				out.push(6);
+				out.push(7);
 				type_u16_serialize(out, id);
 				type_u16_serialize(out, core_id);
 				type_string_serialize(out, name);
 			},
 			Self::UpdatePlayerMeta { id, thrust_forward, thrust_backward, thrust_clockwise, thrust_counter_clockwise, grabed_part} => {
-				out.push(7);
+				out.push(8);
 				type_u16_serialize(out, id);
 				type_bool_serialize(out, thrust_forward);
 				type_bool_serialize(out, thrust_backward);
@@ -253,24 +258,24 @@ impl ToClientMsg {
 				if let Some(tmp) = grabed_part {out.push(1); type_u16_serialize(out, tmp);} else {out.push(0);}
 			},
 			Self::RemovePlayer { id} => {
-				out.push(8);
+				out.push(9);
 				type_u16_serialize(out, id);
 			},
 			Self::PostSimulationTick { your_power} => {
-				out.push(9);
+				out.push(10);
 				type_u32_serialize(out, your_power);
 			},
 			Self::UpdateMyMeta { max_power, can_beamout} => {
-				out.push(10);
+				out.push(11);
 				type_u32_serialize(out, max_power);
 				type_bool_serialize(out, can_beamout);
 			},
 			Self::BeamOutAnimation { player_id} => {
-				out.push(11);
+				out.push(12);
 				type_u16_serialize(out, player_id);
 			},
 			Self::ChatMessage { username, msg, color} => {
-				out.push(12);
+				out.push(13);
 				type_string_serialize(out, username);
 				type_string_serialize(out, msg);
 				type_string_serialize(out, color);
@@ -282,12 +287,17 @@ impl ToClientMsg {
 		*index += 1;
 		match buf[i] {
 			0 => {
+				let count;
+				count = type_u16_deserialize(&buf, index)?;
+				Ok(ToClientMsg::MessagePack { count})
+			},
+			1 => {
 				let id; let core_id;
 				id = type_u16_deserialize(&buf, index)?;
 				core_id = type_u16_deserialize(&buf, index)?;
 				Ok(ToClientMsg::HandshakeAccepted { id, core_id})
 			},
-			1 => {
+			2 => {
 				let name; let display_name; let radius; let id; let position;
 				name = type_string_deserialize(&buf, index)?;
 				display_name = type_string_deserialize(&buf, index)?;
@@ -296,13 +306,13 @@ impl ToClientMsg {
 				position = type_float_pair_deserialize(&buf, index)?;
 				Ok(ToClientMsg::AddCelestialObject { name, display_name, radius, id, position})
 			},
-			2 => {
+			3 => {
 				let id; let kind;
 				id = type_u16_deserialize(&buf, index)?;
 				kind = PartKind::deserialize(&buf, index)?;
 				Ok(ToClientMsg::AddPart { id, kind})
 			},
-			3 => {
+			4 => {
 				let id; let x; let y; let rotation_n; let rotation_i;
 				id = type_u16_deserialize(&buf, index)?;
 				x = type_float_deserialize(&buf, index)?;
@@ -311,26 +321,26 @@ impl ToClientMsg {
 				rotation_i = type_float_deserialize(&buf, index)?;
 				Ok(ToClientMsg::MovePart { id, x, y, rotation_n, rotation_i})
 			},
-			4 => {
+			5 => {
 				let id; let owning_player; let thrust_mode;
 				id = type_u16_deserialize(&buf, index)?;
 				owning_player = {if buf[*index] > 0 {*index += 1; let tmp; tmp = type_u16_deserialize(&buf, index)?; Some(tmp)} else {*index += 1; None}};
 				thrust_mode = type_u8_deserialize(&buf, index)?;
 				Ok(ToClientMsg::UpdatePartMeta { id, owning_player, thrust_mode})
 			},
-			5 => {
+			6 => {
 				let id;
 				id = type_u16_deserialize(&buf, index)?;
 				Ok(ToClientMsg::RemovePart { id})
 			},
-			6 => {
+			7 => {
 				let id; let core_id; let name;
 				id = type_u16_deserialize(&buf, index)?;
 				core_id = type_u16_deserialize(&buf, index)?;
 				name = type_string_deserialize(&buf, index)?;
 				Ok(ToClientMsg::AddPlayer { id, core_id, name})
 			},
-			7 => {
+			8 => {
 				let id; let thrust_forward; let thrust_backward; let thrust_clockwise; let thrust_counter_clockwise; let grabed_part;
 				id = type_u16_deserialize(&buf, index)?;
 				thrust_forward = type_bool_deserialize(&buf, index)?;
@@ -340,28 +350,28 @@ impl ToClientMsg {
 				grabed_part = {if buf[*index] > 0 {*index += 1; let tmp; tmp = type_u16_deserialize(&buf, index)?; Some(tmp)} else {*index += 1; None}};
 				Ok(ToClientMsg::UpdatePlayerMeta { id, thrust_forward, thrust_backward, thrust_clockwise, thrust_counter_clockwise, grabed_part})
 			},
-			8 => {
+			9 => {
 				let id;
 				id = type_u16_deserialize(&buf, index)?;
 				Ok(ToClientMsg::RemovePlayer { id})
 			},
-			9 => {
+			10 => {
 				let your_power;
 				your_power = type_u32_deserialize(&buf, index)?;
 				Ok(ToClientMsg::PostSimulationTick { your_power})
 			},
-			10 => {
+			11 => {
 				let max_power; let can_beamout;
 				max_power = type_u32_deserialize(&buf, index)?;
 				can_beamout = type_bool_deserialize(&buf, index)?;
 				Ok(ToClientMsg::UpdateMyMeta { max_power, can_beamout})
 			},
-			11 => {
+			12 => {
 				let player_id;
 				player_id = type_u16_deserialize(&buf, index)?;
 				Ok(ToClientMsg::BeamOutAnimation { player_id})
 			},
-			12 => {
+			13 => {
 				let username; let msg; let color;
 				username = type_string_deserialize(&buf, index)?;
 				msg = type_string_deserialize(&buf, index)?;
