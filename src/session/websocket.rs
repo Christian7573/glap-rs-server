@@ -1,10 +1,113 @@
 use async_std::net::TcpStream;
 use std::collections::VecDeque;
-use futures::{Future, AsyncRead, AsyncWrite};
+use futures::{Future, AsyncRead, AsyncWrite, Stream, Sink};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
+
+pub struct TcpStreamWrapper {
+    socket: TcpStream,
+    input_buf: [u8; 64],
+    input_slice: Option<(usize, usize)>,
+    output: VecDeque<Arc<Vec<u8>>>,
+    output_index: Option<usize>,
+}
+
+impl From<TcpStream> for TcpStreamWrapper {
+    fn from(socket: TcpStream) -> TcpStreamWrapper {
+        TcpStreamWrapper {
+            socket,
+            input_buf: [0; 64],
+            input_slice: None,
+            output: VecDeque::new(),
+            output_index: None
+        }
+    }
+}
+
+impl Stream for TcpStreamWrapper {
+    type Item = u8;
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<u8>> {
+        //Reading
+        //Data is waiting to surface to the user
+        if let Some((input_index, input_end)) = self.input_slice {
+            let byte = self.input_buf[input_index];
+            input_index += 1;
+            //Finished with this data or not
+            if input_index >= input_end { self.input_slice = None; }
+            else { self.input_slice = Some((input_index, input_end)); };
+            //Wake incase there's more work to do
+            cx.waker().wake_by_ref();
+            Poll::Ready(Some(byte))
+        } else {
+            match Pin::new(&mut self.socket).poll_read(cx, &mut self.input_buf) {
+                //Length of 0 indicates end of stream
+                Poll::Ready(Ok(0)) | Poll::Ready(Err(_)) => return Poll::Ready(None),
+                Poll::Ready(Ok(bytes_read)) => {
+                    //Return first byte right away
+                    let byte = self.input_buf[0];
+                    self.input_slice = Some((1, bytes_read));
+                    //Wake incase there's more work to do
+                    cx.waker().wake_by_ref();
+                    Poll::Ready(Some(byte))
+                },
+                Poll::Pending => Poll::Pending,
+            }
+        }
+    }
+}
+
+impl TcpStreamWrapper {
+    fn queue_output(&mut self, dat: Arc<Vec<u8>>) {
+        self.output.push_back(dat);
+    }
+    
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(),()>> {
+        //Writing
+        if !self.output.is_empty() {
+            //Position where the past write finished
+            let mut output_index = if let Some(output_index) = self.output_index { output_index } else { 0 };
+            match Pin::new(&mut self.socket).poll_write(cx, &self.output.get(0).unwrap()[output_index..]) {
+                //Bytes were successfully written
+                Poll::Ready(Ok(bytes_written)) => {
+                    output_index += bytes_written;
+                    if output_index >= self.output.get(0).unwrap().len() {
+                        //This message is finished
+                        self.output.pop_front();
+                        //If there are more messages, reset output_index to 0
+                        if self.output.len() > 0 { self.output_index = Some(0); }
+                        else { self.output_index = None; }
+                    } else {
+                        self.output_index = Some(output_index);
+                    }
+                    //Wake incase there is more work to do
+                    cx.waker().wake_by_ref();
+                    Poll::Ready(Ok(()))
+                },
+                Poll::Ready(Err(_)) => Poll::Ready(Err(())),
+                Poll::Pending => Poll::Pending
+            }
+        } else {
+            Poll::Ready(Ok(()))
+        }
+    }
+}
+
+struct TcpStreamWrapperFlushFuture<'a> ( &'a mut TcpStreamWrapper );
+impl<'a> Future for TcpStreamWrapperFlushFuture<'a> {
+    type Output = ();
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<()> {
+        match Pin::new(&mut self.0).poll_write(cx) {
+            Poll::Ready(Ok(())) => {
+                if !self.0.output.is_empty() { Poll::Ready(()) }
+                else { Poll::Pending }
+            },
+            Poll::Ready(Err(())) => Poll::Ready(()),
+            Poll::Pending => Poll::Pending
+    }
+}
+
 
 pub struct PotentialWebsocket {
     socket: Option<TcpStream>,
