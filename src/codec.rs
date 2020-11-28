@@ -1,19 +1,15 @@
 use byte::{BytesExt, BE};
+use futures::{Stream, StreamExt};
 
 fn type_string_serialize(out: &mut Vec<u8>, string: &str) {
     if string.len() > 255 { out.push(0); }
     else { out.push(string.len() as u8); for cha in string.chars() { out.push(cha as u8); } }
 }
-fn type_string_deserialize(buf: &[u8], index: &mut usize) -> Result<String, ()> {
-    let size = *buf.get(*index).ok_or(())?;
-    *index += 1;
+async fn type_string_deserialize<S: Stream<Item=u8>+Unpin>(stream: &mut S) -> Result<String,()> {
+    let size = stream.next().await.ok_or(())?;
     let mut string = String::with_capacity(size as usize);
-    let mut my_index = *index;
-    *index += size as usize;
-    if buf.len() >= *index {
-        while my_index < *index { string.push(buf[my_index] as char); my_index += 1; }
-        Ok(string)
-    } else { Err(()) }
+    for _ in 0..size { string.push(stream.next().await.ok_or(())? as char); }
+    Ok(string)
 }
 
 fn type_float_serialize(out: &mut Vec<u8>, float: &f32) {
@@ -21,8 +17,14 @@ fn type_float_serialize(out: &mut Vec<u8>, float: &f32) {
     out.push(0); out.push(0); out.push(0); out.push(0);
     out.write_with::<f32>(&mut index, *float, BE);
 }
-fn type_float_deserialize(buf: &[u8], index: &mut usize) -> Result<f32, ()> {
-    buf.read_with(index, BE).or(Err(()))
+async fn type_float_deserialize<S: Stream<Item=u8>+Unpin>(stream: &mut S) -> Result<f32, ()> {
+    let buf = [
+        stream.next().await.ok_or(())?,
+        stream.next().await.ok_or(())?,
+        stream.next().await.ok_or(())?,
+        stream.next().await.ok_or(())?,
+    ];
+    buf.read_with(&mut 0, byte::BE).or(Err(()))
 }
 
 fn type_u16_serialize(out: &mut Vec<u8>, ushort: &u16) {
@@ -30,8 +32,12 @@ fn type_u16_serialize(out: &mut Vec<u8>, ushort: &u16) {
     out.push(0); out.push(0);
     out.write_with::<u16>(&mut index, *ushort, byte::BE);
 }
-fn type_u16_deserialize(buf: &[u8], index: &mut usize) -> Result<u16, ()> {
-    buf.read_with(index, byte::BE).or(Err(()))
+async fn type_u16_deserialize<S: Stream<Item=u8>+Unpin>(stream: &mut S) -> Result<u16, ()> {
+    let buf = [
+        stream.next().await.ok_or(())?,
+        stream.next().await.ok_or(())?,
+    ];
+    buf.read_with(&mut 0, byte::BE).or(Err(()))
 }
 
 fn type_u32_serialize(out: &mut Vec<u8>, uint: &u32) {
@@ -39,30 +45,32 @@ fn type_u32_serialize(out: &mut Vec<u8>, uint: &u32) {
     out.push(0); out.push(0); out.push(0); out.push(0);
     out.write_with::<u32>(&mut index, *uint, byte::BE);
 }
-fn type_u32_deserialize(buf: &[u8], index: &mut usize) -> Result<u32, ()> {
-    buf.read_with(index, byte::BE).or(Err(()))
+async fn type_u32_deserialize<S: Stream<Item=u8>+Unpin>(stream: &mut S) -> Result<u32, ()> {
+    let buf = [
+        stream.next().await.ok_or(())?,
+        stream.next().await.ok_or(())?,
+        stream.next().await.ok_or(())?,
+        stream.next().await.ok_or(())?,
+    ];
+    buf.read_with(&mut 0, byte::BE).or(Err(()))
 }
 
 fn type_float_pair_serialize(out: &mut Vec<u8>, pair: &(f32, f32)) {
     type_float_serialize(out, &pair.0);
     type_float_serialize(out, &pair.1);
 }
-fn type_float_pair_deserialize(buf: &[u8], index: &mut usize) -> Result<(f32,f32),()> {
-    Ok((type_float_deserialize(buf, index)?, type_float_deserialize(buf, index)?))
+async fn type_float_pair_deserialize<S: Stream<Item=u8>+Unpin>(stream: &mut S) -> Result<(f32, f32), ()> {
+    Ok((type_float_deserialize(stream).await?, type_float_deserialize(stream).await?))
 }
 
 fn type_u8_serialize(out: &mut Vec<u8>, ubyte: &u8) { out.push(*ubyte); }
-fn type_u8_deserialize(buf: &[u8], index: &mut usize) -> Result<u8, ()> {
-    let i = *index;
-    *index += 1;
-    buf.get(i).map(|val| *val).ok_or(())
+async fn type_u8_deserialize<S: Stream<Item=u8>+Unpin>(stream: &mut S) -> Result<u8,()> {
+    stream.next().await.ok_or(())
 }
 
 fn type_bool_serialize(out: &mut Vec<u8>, boolean: &bool) { out.push(if *boolean { 1 } else { 0 }); }
-fn type_bool_deserialize(buf: &[u8], index: &mut usize) -> Result<bool, ()> {
-    let i = *index;
-    *index += 1;
-    buf.get(i).map(|val| *val > 0).ok_or(())
+async fn type_bool_deserialize<S: Stream<Item=u8>+Unpin>(stream: &mut S) -> Result<bool,()> {
+    stream.next().await.map(|val| val > 0).ok_or(())
 }
 
 
@@ -76,8 +84,8 @@ impl PartKind {
 	pub fn serialize(&self, buf: &mut Vec<u8>) {
 		buf.push(self.val_of());
 	}
-	pub fn deserialize(buf: &[u8], index: &mut usize) -> Result<Self, ()> {
-		let me = buf[*index]; *index += 1;
+	pub async fn deserialize<S: Stream<Item=u8>+Unpin>(stream: &mut S) -> Result<Self, ()> {
+		let me = stream.next().await.ok_or(())?;
 		match me {
 			0 => Ok(Self::Core), 1 => Ok(Self::Cargo), 2 => Ok(Self::LandingThruster), 3 => Ok(Self::Hub), 4 => Ok(Self::SolarPanel),
 			_ => Err(())
@@ -133,36 +141,34 @@ impl ToServerMsg {
 			},
 		};
 	}
-	pub fn deserialize(buf: &[u8], index: &mut usize) -> Result<Self,()> {
-		let i = *index;
-		*index += 1;
-		match buf[i] {
+	pub async fn deserialize<S: Stream<Item=u8>+Unpin>(stream: &mut S) -> Result<Self, ()> {
+		match stream.next().await.ok_or(())? {
 			0 => {
 				let client; let session; let name;
-				client = type_string_deserialize(&buf, index)?;
-				session = {if buf[*index] > 0 {*index += 1; let tmp; tmp = type_string_deserialize(&buf, index)?; Some(tmp)} else {*index += 1; None}};
-				name = type_string_deserialize(&buf, index)?;
+				client = type_string_deserialize(stream).await?;
+				session = {if stream.next().await.ok_or(())? > 0 { let tmp; tmp = type_string_deserialize(stream).await?; Some(tmp)} else { None }};
+				name = type_string_deserialize(stream).await?;
 				Ok(ToServerMsg::Handshake { client, session, name})
 			},
 			1 => {
 				let forward; let backward; let clockwise; let counter_clockwise;
-				forward = type_bool_deserialize(&buf, index)?;
-				backward = type_bool_deserialize(&buf, index)?;
-				clockwise = type_bool_deserialize(&buf, index)?;
-				counter_clockwise = type_bool_deserialize(&buf, index)?;
+				forward = type_bool_deserialize(stream).await?;
+				backward = type_bool_deserialize(stream).await?;
+				clockwise = type_bool_deserialize(stream).await?;
+				counter_clockwise = type_bool_deserialize(stream).await?;
 				Ok(ToServerMsg::SetThrusters { forward, backward, clockwise, counter_clockwise})
 			},
 			2 => {
 				let grabbed_id; let x; let y;
-				grabbed_id = type_u16_deserialize(&buf, index)?;
-				x = type_float_deserialize(&buf, index)?;
-				y = type_float_deserialize(&buf, index)?;
+				grabbed_id = type_u16_deserialize(stream).await?;
+				x = type_float_deserialize(stream).await?;
+				y = type_float_deserialize(stream).await?;
 				Ok(ToServerMsg::CommitGrab { grabbed_id, x, y})
 			},
 			3 => {
 				let x; let y;
-				x = type_float_deserialize(&buf, index)?;
-				y = type_float_deserialize(&buf, index)?;
+				x = type_float_deserialize(stream).await?;
+				y = type_float_deserialize(stream).await?;
 				Ok(ToServerMsg::MoveGrab { x, y})
 			},
 			4 => {
@@ -175,7 +181,7 @@ impl ToServerMsg {
 			},
 			6 => {
 				let msg;
-				msg = type_string_deserialize(&buf, index)?;
+				msg = type_string_deserialize(stream).await?;
 				Ok(ToServerMsg::SendChatMessage { msg})
 			},
 			_ => Err(())
@@ -282,100 +288,98 @@ impl ToClientMsg {
 			},
 		};
 	}
-	pub fn deserialize(buf: &[u8], index: &mut usize) -> Result<Self,()> {
-		let i = *index;
-		*index += 1;
-		match buf[i] {
+	pub async fn deserialize<S: Stream<Item=u8>+Unpin>(stream: &mut S) -> Result<Self, ()> {
+		match stream.next().await.ok_or(())? {
 			0 => {
 				let count;
-				count = type_u16_deserialize(&buf, index)?;
+				count = type_u16_deserialize(stream).await?;
 				Ok(ToClientMsg::MessagePack { count})
 			},
 			1 => {
 				let id; let core_id;
-				id = type_u16_deserialize(&buf, index)?;
-				core_id = type_u16_deserialize(&buf, index)?;
+				id = type_u16_deserialize(stream).await?;
+				core_id = type_u16_deserialize(stream).await?;
 				Ok(ToClientMsg::HandshakeAccepted { id, core_id})
 			},
 			2 => {
 				let name; let display_name; let radius; let id; let position;
-				name = type_string_deserialize(&buf, index)?;
-				display_name = type_string_deserialize(&buf, index)?;
-				radius = type_float_deserialize(&buf, index)?;
-				id = type_u16_deserialize(&buf, index)?;
-				position = type_float_pair_deserialize(&buf, index)?;
+				name = type_string_deserialize(stream).await?;
+				display_name = type_string_deserialize(stream).await?;
+				radius = type_float_deserialize(stream).await?;
+				id = type_u16_deserialize(stream).await?;
+				position = type_float_pair_deserialize(stream).await?;
 				Ok(ToClientMsg::AddCelestialObject { name, display_name, radius, id, position})
 			},
 			3 => {
 				let id; let kind;
-				id = type_u16_deserialize(&buf, index)?;
-				kind = PartKind::deserialize(&buf, index)?;
+				id = type_u16_deserialize(stream).await?;
+				kind = PartKind::deserialize(stream).await?;
 				Ok(ToClientMsg::AddPart { id, kind})
 			},
 			4 => {
 				let id; let x; let y; let rotation_n; let rotation_i;
-				id = type_u16_deserialize(&buf, index)?;
-				x = type_float_deserialize(&buf, index)?;
-				y = type_float_deserialize(&buf, index)?;
-				rotation_n = type_float_deserialize(&buf, index)?;
-				rotation_i = type_float_deserialize(&buf, index)?;
+				id = type_u16_deserialize(stream).await?;
+				x = type_float_deserialize(stream).await?;
+				y = type_float_deserialize(stream).await?;
+				rotation_n = type_float_deserialize(stream).await?;
+				rotation_i = type_float_deserialize(stream).await?;
 				Ok(ToClientMsg::MovePart { id, x, y, rotation_n, rotation_i})
 			},
 			5 => {
 				let id; let owning_player; let thrust_mode;
-				id = type_u16_deserialize(&buf, index)?;
-				owning_player = {if buf[*index] > 0 {*index += 1; let tmp; tmp = type_u16_deserialize(&buf, index)?; Some(tmp)} else {*index += 1; None}};
-				thrust_mode = type_u8_deserialize(&buf, index)?;
+				id = type_u16_deserialize(stream).await?;
+				owning_player = {if stream.next().await.ok_or(())? > 0 { let tmp; tmp = type_u16_deserialize(stream).await?; Some(tmp)} else { None }};
+				thrust_mode = type_u8_deserialize(stream).await?;
 				Ok(ToClientMsg::UpdatePartMeta { id, owning_player, thrust_mode})
 			},
 			6 => {
 				let id;
-				id = type_u16_deserialize(&buf, index)?;
+				id = type_u16_deserialize(stream).await?;
 				Ok(ToClientMsg::RemovePart { id})
 			},
 			7 => {
 				let id; let core_id; let name;
-				id = type_u16_deserialize(&buf, index)?;
-				core_id = type_u16_deserialize(&buf, index)?;
-				name = type_string_deserialize(&buf, index)?;
+				id = type_u16_deserialize(stream).await?;
+				core_id = type_u16_deserialize(stream).await?;
+				name = type_string_deserialize(stream).await?;
 				Ok(ToClientMsg::AddPlayer { id, core_id, name})
 			},
 			8 => {
 				let id; let thrust_forward; let thrust_backward; let thrust_clockwise; let thrust_counter_clockwise; let grabed_part;
-				id = type_u16_deserialize(&buf, index)?;
-				thrust_forward = type_bool_deserialize(&buf, index)?;
-				thrust_backward = type_bool_deserialize(&buf, index)?;
-				thrust_clockwise = type_bool_deserialize(&buf, index)?;
-				thrust_counter_clockwise = type_bool_deserialize(&buf, index)?;
-				grabed_part = {if buf[*index] > 0 {*index += 1; let tmp; tmp = type_u16_deserialize(&buf, index)?; Some(tmp)} else {*index += 1; None}};
+				id = type_u16_deserialize(stream).await?;
+				thrust_forward = type_bool_deserialize(stream).await?;
+				thrust_backward = type_bool_deserialize(stream).await?;
+				thrust_clockwise = type_bool_deserialize(stream).await?;
+				thrust_counter_clockwise = type_bool_deserialize(stream).await?;
+				grabed_part = {if stream.next().await.ok_or(())? > 0 { let tmp; tmp = type_u16_deserialize(stream).await?; Some(tmp)} else { None }};
 				Ok(ToClientMsg::UpdatePlayerMeta { id, thrust_forward, thrust_backward, thrust_clockwise, thrust_counter_clockwise, grabed_part})
 			},
 			9 => {
 				let id;
-				id = type_u16_deserialize(&buf, index)?;
+				id = type_u16_deserialize(stream).await?;
 				Ok(ToClientMsg::RemovePlayer { id})
 			},
 			10 => {
 				let your_power;
-				your_power = type_u32_deserialize(&buf, index)?;
+				your_power = type_u32_deserialize(stream).await?;
 				Ok(ToClientMsg::PostSimulationTick { your_power})
 			},
 			11 => {
 				let max_power; let can_beamout;
-				max_power = type_u32_deserialize(&buf, index)?;
-				can_beamout = type_bool_deserialize(&buf, index)?;
+				max_power = type_u32_deserialize(stream).await?;
+				can_beamout = type_bool_deserialize(stream).await?;
 				Ok(ToClientMsg::UpdateMyMeta { max_power, can_beamout})
 			},
 			12 => {
 				let player_id;
-				player_id = type_u16_deserialize(&buf, index)?;
+				player_id = type_u16_deserialize(stream).await?;
 				Ok(ToClientMsg::BeamOutAnimation { player_id})
 			},
 			13 => {
 				let username; let msg; let color;
-				username = type_string_deserialize(&buf, index)?;
-				msg = type_string_deserialize(&buf, index)?;
-				color = type_string_deserialize(&buf, index)?;
+				username = type_string_deserialize(stream).await?;
+				msg = type_string_deserialize(stream).await?;
+				color = type_string_deserialize(stream).await?;
 				Ok(ToClientMsg::ChatMessage { username, msg, color})
 			},
 			_ => Err(())
