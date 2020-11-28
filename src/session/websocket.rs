@@ -6,35 +6,32 @@ use std::task::{Context, Poll};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-pub struct TcpStreamWrapper {
-    socket: TcpStream,
-    input_buf: [u8; 64],
-    input_slice: Option<(usize, usize)>,
-    output: VecDeque<Arc<Vec<u8>>>,
-    output_index: Option<usize>,
-}
-
-impl From<TcpStream> for TcpStreamWrapper {
-    fn from(socket: TcpStream) -> TcpStreamWrapper {
-        TcpStreamWrapper {
-            socket,
-            input_buf: [0; 64],
-            input_slice: None,
+pub fn wrap_tcp_stream(socket: TcpStream) -> (TcpReader, TcpWriter) {
+    (
+        TcpReader {
+            socket: socket.clone(),
+            input_buf: [0u8; 64],
+            input_slice: None
+        },
+        TcpWriter {
+            socket: socket.clone(),
             output: VecDeque::new(),
             output_index: None
         }
-    }
+    )
 }
 
-impl Stream for TcpStreamWrapper {
+pub struct TcpReader {
+    socket: TcpStream,
+    input_buf: [u8; 64],
+    input_slice: Option<(usize, usize)>,
+}
+impl Stream for TcpReader {
     type Item = u8;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<u8>> {
-        //Writing
-        self.async_write(cx);
-
         //Reading
         //Data is waiting to surface to the user
-        if let Some((input_index, input_end)) = self.input_slice {
+        if let Some((mut input_index, input_end)) = self.input_slice {
             let byte = self.input_buf[input_index];
             input_index += 1;
             //Finished with this data or not
@@ -44,7 +41,8 @@ impl Stream for TcpStreamWrapper {
             cx.waker().wake_by_ref();
             Poll::Ready(Some(byte))
         } else {
-            match Pin::new(&mut self.socket).poll_read(cx, &mut self.input_buf) {
+            let myself = self.deref_mut();
+            match Pin::new(&mut myself.socket).poll_read(cx, &mut myself.input_buf) {
                 //Length of 0 indicates end of stream
                 Poll::Ready(Ok(0)) | Poll::Ready(Err(_)) => return Poll::Ready(None),
                 Poll::Ready(Ok(bytes_read)) => {
@@ -61,17 +59,25 @@ impl Stream for TcpStreamWrapper {
     }
 }
 
-impl TcpStreamWrapper {
+pub struct TcpWriter {
+    socket: TcpStream,
+    output: VecDeque<Arc<Vec<u8>>>,
+    output_index: Option<usize>,
+}
+impl TcpWriter {
     pub fn queue_send(&mut self, dat: Arc<Vec<u8>>) {
         self.output.push_back(dat);
     }
-    
-    fn async_write(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(),()>> {
+}
+impl Future for TcpWriter {
+    type Output = Result<(),()>;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(),()>> {
         //Writing
         if !self.output.is_empty() {
             //Position where the past write finished
             let mut output_index = if let Some(output_index) = self.output_index { output_index } else { 0 };
-            match Pin::new(&mut self.socket).poll_write(cx, &self.output.get(0).unwrap()[output_index..]) {
+            let myself = self.deref_mut();
+            match Pin::new(&mut myself.socket).poll_write(cx, &myself. output.get(0).unwrap()[output_index..]) {
                 //Bytes were successfully written
                 Poll::Ready(Ok(bytes_written)) => {
                     output_index += bytes_written;
@@ -86,7 +92,7 @@ impl TcpStreamWrapper {
                     }
                     //Wake incase there is more work to do
                     cx.waker().wake_by_ref();
-                    Poll::Ready(Ok(()))
+                    Poll::Pending //Only return Poll::Ready when there is no data left to write
                 },
                 Poll::Ready(Err(_)) => Poll::Ready(Err(())),
                 Poll::Pending => Poll::Pending
@@ -95,31 +101,11 @@ impl TcpStreamWrapper {
             Poll::Ready(Ok(()))
         }
     }
-
-    pub fn flush(&mut self) -> TcpStreamWrapperFlushFuture {
-        TcpStreamWrapperFlushFuture ( self )
-    }
-
-    pub fn unwarp(self) -> TcpStream { self.socket }
-}
-
-pub struct TcpStreamWrapperFlushFuture<'a> ( &'a mut TcpStreamWrapper );
-impl<'a> Future for TcpStreamWrapperFlushFuture<'a> {
-    type Output = ();
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<()> {
-        match Pin::new(self.0).async_write(cx) {
-            Poll::Ready(Ok(())) => {
-                if !self.0.output.is_empty() { Poll::Ready(()) }
-                else { Poll::Pending }
-            },
-            Poll::Ready(Err(())) => Poll::Ready(()),
-            Poll::Pending => Poll::Pending
-        }
-    }
 }
 
 fn assert_or_error(dat: bool) -> Result<(),()> { if dat { Ok(()) } else { Err(()) } }
-pub async fn open_websocket(mut socket: TcpStreamWrapper) -> Result<Websocket, ()> {
+pub async fn open_websocket(socket: TcpStream) -> Result<(TcpReader, TcpWriter), ()> {
+    let (mut socket, mut socket_out) = wrap_tcp_stream(socket);
     //Status line
     assert_or_error(socket.next().await.ok_or(())? as char == 'G')?;
     assert_or_error(socket.next().await.ok_or(())? as char == 'E')?;
@@ -197,41 +183,160 @@ pub async fn open_websocket(mut socket: TcpStreamWrapper) -> Result<Websocket, (
         "HTTP/1.1 101 Upgrade\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-Websocket-Accept: {}\r\n\r\n",
         encryption_response
     ).as_bytes().to_vec();
-    socket.queue_send(Arc::new(response));
-    socket.flush().await;
-    todo!("We made it!");
+    socket_out.queue_send(Arc::new(response));
+    (&mut socket_out).await?;
+    Ok((socket, socket_out))
 }
 
-pub struct Websocket {
-    socket: TcpStreamWrapper,
-}
+const OP_CONTINUE: u8 = 0;
+const OP_TEXT: u8 = 1;
+const OP_BINARY: u8 = 2;
+const OP_CLOSE: u8 = 8;
+const OP_PING: u8 = 9;
+const OP_PONG: u8 = 10;
 
-pub enum WebsocketOpCode {
-    Continuation,
-    Text,
-    Binary,
-    Close,
+pub enum WsEvent<'a> {
+    Message(WsMessageStream<'a>),
     Ping,
-    Pong,
+    Pong
 }
 
-pub struct WebsocketIncoming {
-    buf: [u8; 128],
-    buf_len: usize,
+pub type WsMessageStream<'a> = WsByteMaskMap<futures::stream::Take<&'a mut TcpReader>>;
+pub struct WsByteMaskMap<S: Stream<Item=u8>> {
+    mask: [u8; 4],
     i: usize,
-    state: WebsocketIncomingState,
-
-    op_code: WebsocketOpCode,
-    is_final_frame: bool,
-    data_is_masked: bool,
-    payload_length: u64,
+    stream: S,
+}
+impl<S: Stream<Item=u8> + Unpin> Stream for WsByteMaskMap<S> {
+    type Item = u8;
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<u8>> {
+        match Pin::new(&mut self.stream).poll_next(cx) {
+            Poll::Ready(Some(byte)) => {
+                let byte = byte ^ self.mask[self.i % 4];
+                self.i += 1;
+                Poll::Ready(Some(byte))
+            },
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending
+        }
+    }
+}
+impl<S: Stream<Item=u8>> WsByteMaskMap<S> {
+    fn new(stream: S, mask: [u8; 4]) -> WsByteMaskMap<S> {
+        WsByteMaskMap {
+            mask,
+            i: 0,
+            stream
+        }
+    }
 }
 
-pub enum WebsocketIncomingState {
-    WaitingForPacket,
-    
-    ReadingPayloadLength,
-    ReadingPayloadLengthMultiple { i: u8, bytes: [u8; 8] },
-    ReadingMaskKey { i: u8, bytes: [u8; 4] },
-    ReadingPayloadData { bytes_remaining: u64 },
+pub async fn read_ws_message<'a>/*<F: Future<Output=()>, C: Fn(u8) -> F>*/(socket: &'a mut TcpReader,) -> Result<WsEvent<'a>, ()> {
+    use byte::BytesExt;
+    //let mut is_first_frame = true;
+    //loop {
+        let first_byte = socket.next().await.ok_or(())?;
+        let is_final_frame = first_byte & 0b10000000 > 0;
+        if !is_final_frame { return Err(()) };
+        let op_code = first_byte & 0b00001111;
+
+        /*if (op_code == OP_CONTINUE && is_first_frame)
+        || (op_code != OP_CONTINUE && !is_first_frame)
+        { return Err(()) };*/
+
+        let second_byte = socket.next().await.ok_or(())?;
+        let is_masked = second_byte & 0b10000000 > 0;
+        if !is_masked { return Err(()) };
+        let payload_len = second_byte & 0b01111111;
+        let payload_len = match payload_len {
+            126 => {
+                [
+                    socket.next().await.ok_or(())?,
+                    socket.next().await.ok_or(())?
+                ].read_with::<u16>(&mut 0, byte::ctx::NETWORK).or(Err(()))? as usize
+            },
+            127 => {
+                [
+                    socket.next().await.ok_or(())?,
+                    socket.next().await.ok_or(())?,
+                    socket.next().await.ok_or(())?,
+                    socket.next().await.ok_or(())?,
+                    socket.next().await.ok_or(())?,
+                    socket.next().await.ok_or(())?,
+                    socket.next().await.ok_or(())?,
+                    socket.next().await.ok_or(())?,
+                ].read_with::<u64>(&mut 0, byte::ctx::NETWORK).or(Err(()))? as usize
+            },
+            _ => payload_len as usize,
+        };
+
+        let mask = [
+            socket.next().await.ok_or(())?,
+            socket.next().await.ok_or(())?,
+            socket.next().await.ok_or(())?,
+            socket.next().await.ok_or(())?,
+        ]; //.read_with::<u32>(&mut 0, NETWORK).or(Err(()))?;
+
+        match op_code {
+            OP_BINARY => {
+                Ok(WsEvent::Message(WsByteMaskMap::new(socket.take(payload_len), mask)))
+                //Ok(WsEvent::Message(socket.take(payload_len).enumerate().map(|(i, byte)| byte ^ mask[i % 4])))
+                /*for i in 0..payload_len {
+                    execute(socket.next().await.ok_or(())? ^ mask[i % 4]).await;
+                }*/
+            },
+            OP_PING => return Ok(WsEvent::Ping),
+            OP_PONG => return Ok(WsEvent::Pong),
+            _ => return Err(()),
+        }
+
+        //if is_final_frame { break };
+        //is_first_frame = false;
+    //}
+}
+
+pub struct OutboundWsMessage ( pub Arc<Vec<u8>> );
+impl From<&Vec<u8>> for OutboundWsMessage {
+    fn from(dat: &Vec<u8>) -> OutboundWsMessage {
+        use byte::BytesExt;
+        use byte::ctx::NETWORK;
+        let mut out = Vec::new();
+        let mut bytes_read = 0;
+        let mut is_first_frame = true;
+        while bytes_read < dat.len() {
+            let remaining = dat.len() - bytes_read;
+            out.push(
+               if remaining > (2usize.pow(63)) - 1 { 0b00000000 } else { 0b10000000 } //FINISHED bit
+             | if is_first_frame { OP_BINARY } else { OP_CONTINUE } //OP Code
+            );
+
+            let payload_size = remaining.max(2usize.pow(63) - 1);
+            if payload_size >= 2usize.pow(16) {
+                out.push(127);
+                let i = out.len();
+                out.push(0);
+                out.push(0);
+                out.push(0);
+                out.push(0);
+                out.push(0);
+                out.push(0);
+                out.push(0);
+                out.push(0);
+                (&mut out[i..i+8]).write_with::<u64>(&mut 0, payload_size as u64, NETWORK).unwrap();
+            } else if payload_size > 125 {
+                out.push(126);
+                let i = out.len();
+                out.push(0);
+                out.push(0);
+                (&mut out[i..i+2]).write_with::<u16>(&mut 0, payload_size as u16, NETWORK).unwrap();
+            } else {
+                out.push(payload_size as u8);
+            }
+
+            out.extend_from_slice(&dat[bytes_read..bytes_read+payload_size]);
+            bytes_read += payload_size;
+            is_first_frame = false;
+        }
+        OutboundWsMessage ( Arc::new(out) )
+    }
 }
