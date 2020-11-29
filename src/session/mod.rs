@@ -2,6 +2,7 @@ use std::pin::Pin;
 use std::task::{Poll, Context};
 use async_std::prelude::*;
 use async_std::net::{TcpStream, TcpListener};
+use async_std::sync::{Sender, Reciever, channel};
 use async_tungstenite::WebSocketStream;
 use async_tungstenite::tungstenite::{Error as WsError, Message};
 use futures::{Sink, SinkExt, Stream, StreamExt, FutureExt};
@@ -76,6 +77,23 @@ impl Future for SessionDInit {
 }
 
 async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<InboundEvent>, outbound: async_std::sync::Receiver<Vec<OutboundEvent>>, api: Option<Arc<ApiDat>>) {
+    let mut next_client_id: u16 = 1;
+    while let Ok((socket, addr)) = listener.accept().await {
+        let client_id = next_client_id;
+        next_client_id += 1;
+        let outbound = outbound.clone();
+        let (inbound, to_task) = channel();
+        async_std::task::Builder::new()
+            .name(format!("inbound_{:?}", addr).to_string())
+            .spawn(async move {
+                if let Ok((socket_in, socket_out)) = websocket::accept_websocket(socket).await {
+                    
+                }
+            });
+    }
+}
+
+/*async fn sessiond_old(listener: TcpListener, inbound: async_std::sync::Sender<InboundEvent>, outbound: async_std::sync::Receiver<Vec<OutboundEvent>>, api: Option<Arc<ApiDat>>) {
     struct Pulser {
         listener: TcpListener,
         potential_sessions: MaybeFairPoller7573<PotentialSession>,
@@ -344,7 +362,7 @@ impl MyWebSocket {
             _ => ()
         };
     }
-}
+}*/
 
 // struct FairPoller7573<T: Stream + Unpin> {
 //     stuff: Vec<T>,

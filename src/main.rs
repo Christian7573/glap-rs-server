@@ -10,7 +10,7 @@ use std::task::Poll;
 use rand::Rng;
 use world::MyHandle;
 use world::parts::{Part, AttachedPartFacing};
-use async_tungstenite::tungstenite::Message; use session::MyWebSocket;
+use async_tungstenite::tungstenite::Message;
 use nalgebra::Vector2; use nalgebra::geometry::{Isometry2, UnitComplex};
 use ncollide2d::pipeline::object::CollisionGroups;
 use std::sync::Arc;
@@ -55,8 +55,8 @@ async fn main() {
     let (sessiond_inbound, inbound) = async_std::sync::channel(10000);
     let (outbound, sessiond_outbound) = async_std::sync::channel(10000);
     let _sessiond_task = async_std::task::Builder::new()
-    .name("sessiond".to_string())
-    .spawn(session::SessionDInit::InitPloz(listener, sessiond_inbound, sessiond_outbound, api.clone()));
+        .name("sessiond".to_string())
+        .spawn(session::SessionDInit::InitPloz(listener, sessiond_inbound, sessiond_outbound, api.clone()));
 
     const TIMESTEP: f32 = 1.0/(TICKS_PER_SECOND as f32);
     let ticker = async_std::stream::interval(std::time::Duration::from_secs_f32(TIMESTEP));

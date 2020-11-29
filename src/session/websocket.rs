@@ -104,7 +104,7 @@ impl Future for TcpWriter {
 }
 
 fn assert_or_error(dat: bool) -> Result<(),()> { if dat { Ok(()) } else { Err(()) } }
-pub async fn open_websocket(socket: TcpStream) -> Result<(TcpReader, TcpWriter), ()> {
+pub async fn accept_websocket(socket: TcpStream) -> Result<(TcpReader, TcpWriter), ()> {
     let (mut socket, mut socket_out) = wrap_tcp_stream(socket);
     //Status line
     assert_or_error(socket.next().await.ok_or(())? as char == 'G')?;
@@ -295,6 +295,7 @@ pub async fn read_ws_message<'a>/*<F: Future<Output=()>, C: Fn(u8) -> F>*/(socke
     //}
 }
 
+#[derive(Clone)]
 pub struct OutboundWsMessage ( pub Arc<Vec<u8>> );
 impl From<&Vec<u8>> for OutboundWsMessage {
     fn from(dat: &Vec<u8>) -> OutboundWsMessage {
@@ -340,3 +341,8 @@ impl From<&Vec<u8>> for OutboundWsMessage {
         OutboundWsMessage ( Arc::new(out) )
     }
 }
+
+pub static PongMessage: OutboundWsMessage = OutboundWsMessage ( Arc::new(vec! [
+    0b10001010,
+    0b00000000,
+]) );
