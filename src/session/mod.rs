@@ -145,12 +145,12 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
                     Ok(ToServerMsg::SendChatMessage { msg }) => {
                         todo!("Chat");
                     },
-                    Ok(ToServerMsg::RequestUpdate) => { println!("Requestd update"); to_serializer.send(vec! [ToSerializerEvent::RequestUpdate(id)]).await; },
+                    Ok(ToServerMsg::RequestUpdate) => { to_serializer.send(vec! [ToSerializerEvent::RequestUpdate(id)]).await; },
                     Ok(msg) => { to_game.send(ToGameEvent::PlayerMessage { id, msg }).await; },
                     Err(_) => break,
                 };
             },
-            Ok(WsEvent::Ping) => { to_serializer.send(vec! [ToSerializerEvent::SendPong(id)]).await; },
+            Ok(WsEvent::Ping) => { println!("Ponged"); to_serializer.send(vec! [ToSerializerEvent::SendPong(id)]).await; },
             Ok(WsEvent::Pong) | Err(_) => break,
         };
     };
@@ -269,7 +269,7 @@ async fn socket_writer(_id: u16, mut out: TcpWriter, mut from_serializer: Receiv
             }
         };
         if let Some(messages) = from_serializer.next().await {
-            for msg in messages { out.queue_send(msg.0.clone()); };
+            for msg in messages {  out.queue_send(msg.0.clone()); };
         } else {
             break;
         }
