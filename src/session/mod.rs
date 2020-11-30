@@ -32,6 +32,7 @@ pub enum ToSerializerEvent {
 
     NewWriter (u16, Sender<Vec<OutboundWsMessage>>),
     RequestUpdate (u16),
+    SendPong (u16),
     //BeamoutWriter (u16, RecursivePartDescription),
     DeleteWriter (u16),
 }
@@ -99,12 +100,12 @@ pub async fn incoming_connection_acceptor(listener: TcpListener, to_game: Sender
 }
 
 async fn socket_reader(id: u16, socket: TcpStream, _addr: async_std::net::SocketAddr, to_game: Sender<ToGameEvent>, to_serializer: Sender<Vec<ToSerializerEvent>>, api: Option<Arc<ApiDat>>) -> Result<(),()> {
-    let (mut socket_in, mut socket_out) = websocket::accept_websocket(socket).await?;
+    let (mut socket_in, mut socket_out) = accept_websocket(socket).await?;
     let mut first_msg = loop {
-        match websocket::read_ws_message(&mut socket_in).await {
-            Ok(websocket::WsEvent::Ping) => { socket_out.queue_send(websocket::PongMessage.0.clone()); },
-            Ok(websocket::WsEvent::Message(msg)) => break Ok(msg),
-            Ok(websocket::WsEvent::Pong) | Err(_) => break Err(()),
+        match read_ws_message(&mut socket_in).await {
+            Ok(WsEvent::Ping) => { socket_out.queue_send(pong_message().0); },
+            Ok(WsEvent::Message(msg)) => break Ok(msg),
+            Ok(WsEvent::Pong) | Err(_) => break Err(()),
         }
     }?;
     let first_msg = ToServerMsg::deserialize(&mut first_msg).await?;
@@ -130,8 +131,8 @@ async fn socket_reader(id: u16, socket: TcpStream, _addr: async_std::net::Socket
     let (to_writer, from_serializer) = channel::<Vec<OutboundWsMessage>>(50);
     async_std::task::Builder::new()
         .name(format!("outbound_${}", id))
-        .spawn(socket_writer(id, socket_out, from_serializer));
-    to_serializer.send(vec! [ToSerializerEvent::NewWriter(id, to_writer.clone())]).await;
+        .spawn(socket_writer(id, socket_out, from_serializer)).expect("Failed to launch outbound");
+    to_serializer.send(vec! [ToSerializerEvent::NewWriter(id, to_writer)]).await;
 
     loop {
         match read_ws_message(&mut socket_in).await {
@@ -141,12 +142,12 @@ async fn socket_reader(id: u16, socket: TcpStream, _addr: async_std::net::Socket
                     Ok(ToServerMsg::SendChatMessage { msg }) => {
                         todo!("Chat");
                     },
-                    Ok(ToServerMsg::RequestUpdate) => { to_serializer.send(ToSerializerEvent::RequestUpdate(id)).await; },
+                    Ok(ToServerMsg::RequestUpdate) => { to_serializer.send(vec! [ToSerializerEvent::RequestUpdate(id)]).await; },
                     Ok(msg) => { to_game.send(ToGameEvent::PlayerMessage { id, msg }).await; },
                     Err(_) => break,
                 };
             },
-            Ok(WsEvent::Ping) => { to_writer.send(vec! [PongMessage.clone()]); },
+            Ok(WsEvent::Ping) => { to_serializer.send(vec! [ToSerializerEvent::SendPong(id)]).await; },
             Ok(WsEvent::Pong) | Err(_) => break,
         };
     };
@@ -155,7 +156,7 @@ async fn socket_reader(id: u16, socket: TcpStream, _addr: async_std::net::Socket
     Ok(())
 }
 
-async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Sender<ToGameEvent>) {
+pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Sender<ToGameEvent>) {
     let mut writers: BTreeMap<u16, (Sender<Vec<OutboundWsMessage>>, Vec<OutboundWsMessage>, bool)> = BTreeMap::new();
     while let Some(events) = to_me.next().await {
         for event in events {
@@ -170,6 +171,11 @@ async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Sender
                 ToSerializerEvent::RequestUpdate(id) => {
                     if let Some((_to_writer, _queue, request_update)) = writers.get_mut(&id) {
                         *request_update = true;
+                    }
+                },
+                ToSerializerEvent::SendPong(id) => {
+                    if let Some((to_writer, _queue, _request_update)) = writers.get_mut(&id) {
+                        to_writer.send(vec! [pong_message()]).await;
                     }
                 },
 
@@ -201,7 +207,7 @@ async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Sender
                 },
                 ToSerializerEvent::WorldUpdate(players, free_parts) => {
                     for (_id, ((x, y), parts)) in &players {
-                        let msg = Vec::new();
+                        let mut msg = Vec::new();
                         ToClientMsg::MessagePack { count: parts.len() as u16 }.serialize(&mut msg);
                         for part in parts {
                             ToClientMsg::MovePart {
@@ -220,17 +226,18 @@ async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Sender
                             }
                         }
                     };
-                    let messages = free_parts.iter().map(|part| {
-                        let msg = Vec::new();
+                    let mut msg = Vec::new();
+                    ToClientMsg::MessagePack { count: free_parts.len() as u16 }.serialize(&mut msg);
+                    for part in free_parts {
                         ToClientMsg::MovePart {
                             id: part.id, x: part.x, y: part.y,
                             rotation_n: part.rot_cos, rotation_i: part.rot_sin,
                         }.serialize(&mut msg);
-                        OutboundWsMessage::from(&msg)
-                    }).collect::<Vec<_>>();
+                    };
+                    let msg = OutboundWsMessage::from(&msg);
                     for (_to_writer, queue, request_update) in writers.values_mut() {
                         if *request_update {
-                            queue.extend(messages.iter().map(|msg| msg.clone()));
+                            queue.push(msg.clone());
                         }
                         *request_update = false;
                     };
@@ -243,7 +250,7 @@ async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Sender
     };
 }
 
-async fn socket_writer(id: u16, mut out: TcpWriter, mut from_serializer: Receiver<Vec<OutboundWsMessage>>) {
+async fn socket_writer(_id: u16, mut out: TcpWriter, mut from_serializer: Receiver<Vec<OutboundWsMessage>>) {
     loop {
         select_biased! {
             messages = from_serializer.next().fuse() => {

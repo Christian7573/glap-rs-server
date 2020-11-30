@@ -566,7 +566,8 @@ async fn main() {
                                 simulation.world.remove_part(MyHandle::Part(part.body_id));
                             }
                             recursive_beamout_remove(&core, &mut simulation);
-                            outbound_events.push(ToSerializer::BeamoutWriter(id, beamout_layout));
+                            //outbound_events.push(ToSerializer::BeamoutWriter(id, beamout_layout));
+                            panic!("Beamout unimplemented");
                         }
                     },
                     _ => { outbound_events.push(ToSerializer::DeleteWriter(id)); }

@@ -1,6 +1,6 @@
 use async_std::net::TcpStream;
 use std::collections::VecDeque;
-use futures::{Future, AsyncRead, AsyncWrite, Stream, Sink, StreamExt};
+use futures::{Future, AsyncRead, AsyncWrite, Stream, StreamExt};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::ops::{Deref, DerefMut};
@@ -342,7 +342,9 @@ impl From<&Vec<u8>> for OutboundWsMessage {
     }
 }
 
-pub static PongMessage: OutboundWsMessage = OutboundWsMessage ( Arc::new(vec! [
-    0b10001010,
-    0b00000000,
-]) );
+pub fn pong_message() -> OutboundWsMessage {
+    OutboundWsMessage ( Arc::new(vec! [
+        0b10001010,
+        0b00000000,
+    ]) )
+}
