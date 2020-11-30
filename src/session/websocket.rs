@@ -85,8 +85,8 @@ impl Future for TcpWriter {
                         //This message is finished
                         self.output.pop_front();
                         //If there are more messages, reset output_index to 0
-                        if self.output.len() > 0 { self.output_index = Some(0); }
-                        else { self.output_index = None; }
+                        if !self.output.is_empty() { self.output_index = Some(0); }
+                        else { self.output_index = None;  }
                     } else {
                         self.output_index = Some(output_index);
                     }
@@ -263,7 +263,7 @@ pub async fn read_ws_message<'a>/*<F: Future<Output=()>, C: Fn(u8) -> F>*/(socke
                 [
                     socket.next().await.ok_or(())?,
                     socket.next().await.ok_or(())?
-                ].read_with::<u16>(&mut 0, byte::ctx::NETWORK).or(Err(()))? as usize
+                ].read_with::<u16>(&mut 0, byte::ctx::BE).or(Err(()))? as usize
             },
             127 => {
                 [
@@ -275,7 +275,7 @@ pub async fn read_ws_message<'a>/*<F: Future<Output=()>, C: Fn(u8) -> F>*/(socke
                     socket.next().await.ok_or(())?,
                     socket.next().await.ok_or(())?,
                     socket.next().await.ok_or(())?,
-                ].read_with::<u64>(&mut 0, byte::ctx::NETWORK).or(Err(()))? as usize
+                ].read_with::<u64>(&mut 0, byte::ctx::BE).or(Err(()))? as usize
             },
             _ => payload_len as usize,
         };
@@ -285,7 +285,7 @@ pub async fn read_ws_message<'a>/*<F: Future<Output=()>, C: Fn(u8) -> F>*/(socke
             socket.next().await.ok_or(())?,
             socket.next().await.ok_or(())?,
             socket.next().await.ok_or(())?,
-        ]; //.read_with::<u32>(&mut 0, NETWORK).or(Err(()))?;
+        ]; //.read_with::<u32>(&mut 0, BE).or(Err(()))?;
 
         match op_code {
             OP_BINARY => {
@@ -310,7 +310,7 @@ pub struct OutboundWsMessage ( pub Arc<Vec<u8>> );
 impl From<&Vec<u8>> for OutboundWsMessage {
     fn from(dat: &Vec<u8>) -> OutboundWsMessage {
         use byte::BytesExt;
-        use byte::ctx::NETWORK;
+        use byte::ctx::BE;
         let mut out = Vec::new();
         let mut bytes_read = 0;
         let mut is_first_frame = true;
@@ -333,13 +333,13 @@ impl From<&Vec<u8>> for OutboundWsMessage {
                 out.push(0);
                 out.push(0);
                 out.push(0);
-                (&mut out[i..i+8]).write_with::<u64>(&mut 0, payload_size as u64, NETWORK).unwrap();
+                (&mut out[i..i+8]).write_with::<u64>(&mut 0, payload_size as u64, BE).unwrap();
             } else if payload_size > 125 {
                 out.push(126);
                 let i = out.len();
                 out.push(0);
                 out.push(0);
-                (&mut out[i..i+2]).write_with::<u16>(&mut 0, payload_size as u16, NETWORK).unwrap();
+                (&mut out[i..i+2]).write_with::<u16>(&mut 0, payload_size as u16, BE).unwrap();
             } else {
                 out.push(payload_size as u8);
             }
