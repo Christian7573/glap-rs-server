@@ -1,6 +1,7 @@
 use std::pin::Pin;
 use std::task::{Poll, Context};
 use async_std::prelude::*;
+use futures::select_biased;
 use async_std::net::{TcpStream, TcpListener};
 use async_std::sync::{Sender, Receiver, channel};
 use futures::{Sink, SinkExt, Stream, StreamExt, FutureExt};
@@ -127,7 +128,7 @@ async fn socket_reader(id: u16, socket: TcpStream, _addr: async_std::net::Socket
     let (to_writer, from_serializer) = channel::<Vec<OutboundWsMessage>>(50);
     async_std::task::Builder::new()
         .name(format!("outbound_${}", id))
-        .spawn(socket_writer(id, beamout_token, socket_out, from_serializer));
+        .spawn(socket_writer(id, socket_out, from_serializer));
     to_serializer.send(vec! [ToSerializerEvent::NewWriter(id, to_writer.clone())]).await;
 
     loop {
@@ -155,8 +156,27 @@ async fn serializer(to_me: Receiver<Vec<ToSerializerEvent>>) {
     
 }
 
-async fn socket_writer(id: u16, beamout_token: Option<String>, out: TcpWriter, from_serializer: Receiver<Vec<OutboundWsMessage>>) {
-
+async fn socket_writer(id: u16, mut out: TcpWriter, mut from_serializer: Receiver<Vec<OutboundWsMessage>>) {
+    loop {
+        select_biased! {
+            messages = from_serializer.next().fuse() => {
+                if let Some(messages) = messages {
+                    for msg in messages { out.queue_send(msg.0.clone()); };
+                } else {
+                    break;
+                };
+            },
+            writing = (&mut out).fuse() => {
+                if writing.is_err() { break; }
+            }
+        };
+        if let Some(messages) = from_serializer.next().await {
+            for msg in messages { out.queue_send(msg.0.clone()); };
+        } else {
+            break;
+        }
+    }
+    out.await; //Flush
 }
 
 /*async fn sessiond_old(listener: TcpListener, inbound: async_std::sync::Sender<InboundEvent>, outbound: async_std::sync::Receiver<Vec<OutboundEvent>>, api: Option<Arc<ApiDat>>) {
