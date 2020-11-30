@@ -134,6 +134,9 @@ SendChatMessage = Message("SendChatMessage")
 SendChatMessage.fields.append(Field("msg", TypeString))
 ToServerMsg.messages.append(SendChatMessage)
 
+RequestUpdate = Message("RequestUpdate")
+ToServerMsg.messages.append(RequestUpdate)
+
 
 ToClientMsg = MessageCategory("ToClientMsg")
 categories.append(ToClientMsg)

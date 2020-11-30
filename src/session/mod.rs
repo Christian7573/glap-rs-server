@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::pin::Pin;
 use std::task::{Poll, Context};
 use async_std::prelude::*;
@@ -27,10 +28,11 @@ pub enum ToSerializerEvent {
     Message (u16, ToClientMsg),
     MulticastMessage (Vec<u16>, ToClientMsg),
     Broadcast (ToClientMsg),
-    WorldUpdate (Vec<WorldUpdatePlayerUpdate>, Vec<WorldUpdatePartMove>),
+    WorldUpdate (BTreeMap<u16, ((f32,f32), Vec<WorldUpdatePartMove>)>, Vec<WorldUpdatePartMove>),
 
     NewWriter (u16, Sender<Vec<OutboundWsMessage>>),
-    BeamoutWriter (u16, RecursivePartDescription),
+    RequestUpdate (u16),
+    //BeamoutWriter (u16, RecursivePartDescription),
     DeleteWriter (u16),
 }
 
@@ -139,6 +141,7 @@ async fn socket_reader(id: u16, socket: TcpStream, _addr: async_std::net::Socket
                     Ok(ToServerMsg::SendChatMessage { msg }) => {
                         todo!("Chat");
                     },
+                    Ok(ToServerMsg::RequestUpdate) => { to_serializer.send(ToSerializerEvent::RequestUpdate(id)).await; },
                     Ok(msg) => { to_game.send(ToGameEvent::PlayerMessage { id, msg }).await; },
                     Err(_) => break,
                 };
@@ -152,8 +155,92 @@ async fn socket_reader(id: u16, socket: TcpStream, _addr: async_std::net::Socket
     Ok(())
 }
 
-async fn serializer(to_me: Receiver<Vec<ToSerializerEvent>>) {
-    
+async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Sender<ToGameEvent>) {
+    let mut writers: BTreeMap<u16, (Sender<Vec<OutboundWsMessage>>, Vec<OutboundWsMessage>, bool)> = BTreeMap::new();
+    while let Some(events) = to_me.next().await {
+        for event in events {
+            match event {
+                ToSerializerEvent::NewWriter(id, to_writer) => {
+                    writers.insert(id, (to_writer, Vec::new(), true));
+                },
+                ToSerializerEvent::DeleteWriter(id) => {
+                    writers.remove(&id);
+                    to_game.send(ToGameEvent::PlayerQuit { id }).await;
+                },
+                ToSerializerEvent::RequestUpdate(id) => {
+                    if let Some((_to_writer, _queue, request_update)) = writers.get_mut(&id) {
+                        *request_update = true;
+                    }
+                },
+
+                ToSerializerEvent::Message(id, msg) => {
+                    if let Some((_writer, queue, _request_update)) = writers.get_mut(&id) {
+                        let mut out = Vec::new();
+                        msg.serialize(&mut out);
+                        let out = (&out).into();
+                        queue.push(out);
+                    }
+                },
+                ToSerializerEvent::MulticastMessage(ids, msg) => {
+                    let mut out = Vec::new();
+                    msg.serialize(&mut out);
+                    let out = OutboundWsMessage::from(&out);
+                    for id in ids {
+                        if let Some((_writer, queue, _request_update)) = writers.get_mut(&id) {
+                            queue.push(out.clone());
+                        }
+                    }
+                },
+                ToSerializerEvent::Broadcast(msg) => {
+                    let mut out = Vec::new();
+                    msg.serialize(&mut out);
+                    let out = OutboundWsMessage::from(&out);
+                    for (_writer, queue, _request_update) in writers.values_mut() {
+                        queue.push(out.clone());
+                    }
+                },
+                ToSerializerEvent::WorldUpdate(players, free_parts) => {
+                    for (_id, ((x, y), parts)) in &players {
+                        let msg = Vec::new();
+                        ToClientMsg::MessagePack { count: parts.len() as u16 }.serialize(&mut msg);
+                        for part in parts {
+                            ToClientMsg::MovePart {
+                                id: part.id, x: part.x, y: part.y,
+                                rotation_n: part.rot_cos, rotation_i: part.rot_sin,
+                            }.serialize(&mut msg);
+                        };
+                        let msg = OutboundWsMessage::from(&msg);
+                        for (id, (_to_writer, queue, request_update)) in &mut writers {
+                            if *request_update {
+                                if let Some(((player_x, player_y), _parts)) = players.get(&id) {
+                                    if (player_x - x).abs() <= 200.0 && (player_y - y).abs() <= 200.0 {
+                                        queue.push(msg.clone());
+                                    }
+                                }
+                            }
+                        }
+                    };
+                    let messages = free_parts.iter().map(|part| {
+                        let msg = Vec::new();
+                        ToClientMsg::MovePart {
+                            id: part.id, x: part.x, y: part.y,
+                            rotation_n: part.rot_cos, rotation_i: part.rot_sin,
+                        }.serialize(&mut msg);
+                        OutboundWsMessage::from(&msg)
+                    }).collect::<Vec<_>>();
+                    for (_to_writer, queue, request_update) in writers.values_mut() {
+                        if *request_update {
+                            queue.extend(messages.iter().map(|msg| msg.clone()));
+                        }
+                        *request_update = false;
+                    };
+                },
+            }
+        }
+        for (to_writer, queue, _needs_update) in writers.values_mut() {
+            to_writer.send(std::mem::replace(queue, Vec::new())).await;
+        }
+    };
 }
 
 async fn socket_writer(id: u16, mut out: TcpWriter, mut from_serializer: Receiver<Vec<OutboundWsMessage>>) {

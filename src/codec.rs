@@ -101,6 +101,7 @@ pub enum ToServerMsg {
 	ReleaseGrab,
 	BeamOut,
 	SendChatMessage { msg: String, },
+	RequestUpdate,
 }
 impl ToServerMsg {
 	pub fn serialize(&self, out: &mut Vec<u8>) {
@@ -138,6 +139,9 @@ impl ToServerMsg {
 			Self::SendChatMessage { msg} => {
 				out.push(6);
 				type_string_serialize(out, msg);
+			},
+			Self::RequestUpdate { } => {
+				out.push(7);
 			},
 		};
 	}
@@ -183,6 +187,10 @@ impl ToServerMsg {
 				let msg;
 				msg = type_string_deserialize(stream).await?;
 				Ok(ToServerMsg::SendChatMessage { msg})
+			},
+			7 => {
+				
+				Ok(ToServerMsg::RequestUpdate { })
 			},
 			_ => Err(())
 		}
