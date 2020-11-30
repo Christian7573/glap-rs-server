@@ -161,20 +161,30 @@ pub async fn accept_websocket(socket: TcpStream) -> Result<(TcpReader, TcpWriter
                         if value.trim() != "13" { return Err(()) };
                         wants_websocket_13 = true;
                     } else if header_name == SECURITY {
-                        if let Ok(result) = base64::decode(value) {
+                        if let Ok(result) = base64::decode(value.trim()) {
                             if result.len() == 16 {
                                 let mut out = [0u8; 16];
                                 for i in 0..16 { out[i] = result[i] };
                                 security_thing = Some(out);
-                            } else { return Err(()) }
-                        } else { return Err(()) }
+                            } else { break 'header_loop; }
+                        } else { break 'header_loop; }
                     }
                     break;
                 }
+            } else {
+                loop {
+                    if socket.next().await.ok_or(())? as char == '\n' { break };
+                };
+                break;
             }
         }
     }
-    if !wants_upgrade || !wants_websocket || !wants_websocket_13 || security_thing.is_none() { return Err(()) };
+    
+    if !wants_upgrade || !wants_websocket || !wants_websocket_13 || security_thing.is_none() { 
+        socket_out.queue_send(Arc::new("HTTP/1.1 400 Bad Request\r\n\r\n".as_bytes().to_vec()));
+        socket_out.await;
+        return Err(())
+    };
 
     use sha::utils::{Digest, DigestExt};
     let encryption_response = base64::encode(security_thing.unwrap()).to_string() + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -311,7 +321,7 @@ impl From<&Vec<u8>> for OutboundWsMessage {
              | if is_first_frame { OP_BINARY } else { OP_CONTINUE } //OP Code
             );
 
-            let payload_size = remaining.max(2usize.pow(63) - 1);
+            let payload_size = remaining.min(2usize.pow(63) - 1);
             if payload_size >= 2usize.pow(16) {
                 out.push(127);
                 let i = out.len();

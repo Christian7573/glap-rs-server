@@ -71,9 +71,13 @@ async fn main() {
 
     let (to_game, to_me) = channel::<session::ToGameEvent>(1024);
     let (to_serializer, to_me_serializer) = channel::<Vec<session::ToSerializerEvent>>(256);
-    let _sessiond_task = async_std::task::Builder::new()
+    println!("Hello from game task");
+    let _incoming_connection_acceptor = async_std::task::Builder::new()
         .name("incoming_connection_acceptor".to_string())
         .spawn(session::incoming_connection_acceptor(listener, to_game.clone(), to_serializer.clone(), api.clone()));
+    let _serializer = async_std::task::Builder::new()
+        .name("serializer".to_string())
+        .spawn(session::serializer(to_me_serializer, to_game.clone()));
 
     const TIMESTEP: f32 = 1.0/(TICKS_PER_SECOND as f32);
     let ticker = async_std::stream::interval(std::time::Duration::from_secs_f32(TIMESTEP));
@@ -272,15 +276,39 @@ async fn main() {
                     }
                 }
 
-                let move_messages = simulation.world.get_parts().iter().map(|(id, part)| {
-                    let position = part.position();
-                    session::WorldUpdatePartMove {
-                        id: *id,
-                        x: position.translation.x, y: position.translation.y,
-                        rot_cos: position.rotation.re, rot_sin: position.rotation.im,
-                    }
-                }).collect::<Vec<_>>();
-                //outbound_events.push(ToSerializer::WorldUpdate(move_messages));
+                outbound_events.push(ToSerializer::WorldUpdate(
+                    {
+                        let mut out = BTreeMap::new();
+                        for (id, player) in &players {
+                            let mut parts = Vec::new();
+                            fn recursive_part_move(parts: &mut Vec<session::WorldUpdatePartMove>, part: &Part, simulation: &world::Simulation) {
+                                let body = simulation.world.get_rigid(MyHandle::Part(part.body_id)).unwrap();
+                                let position = body.position();
+                                parts.push(session::WorldUpdatePartMove {
+                                    id: part.body_id,
+                                    x: position.translation.x, y: position.translation.y,
+                                    rot_cos: position.rotation.re, rot_sin: position.rotation.im
+                                });
+                                for i in 0..part.attachments.len() {
+                                    if let Some((part, _, _)) = &part.attachments[i] { recursive_part_move(parts, part, simulation); };
+                                };
+                            }
+                            recursive_part_move(&mut parts, &player.1, &simulation);
+                            out.insert(*id, ((parts[0].x, parts[0].y), parts));
+                        }
+                        out
+                    },
+                    free_parts.iter().map(|(id, _)| {
+                        let body = simulation.world.get_rigid(MyHandle::Part(*id)).unwrap();
+                        let position = body.position();
+                        session::WorldUpdatePartMove {
+                            id: *id,
+                            x: position.translation.x, y: position.translation.y,
+                            rot_cos: position.rotation.re, rot_sin: position.rotation.im
+                        }
+                    }).collect::<Vec<_>>()
+                ));
+
                 for (id, (player, _core)) in &players {
                     outbound_events.push(ToSerializer::Message(*id, ToClientMsg::PostSimulationTick{ your_power: player.power }));
                 }

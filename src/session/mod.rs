@@ -83,6 +83,7 @@ impl Future for GuarenteeOnePoll {
 }*/
 
 pub async fn incoming_connection_acceptor(listener: TcpListener, to_game: Sender<ToGameEvent>, to_serializer: Sender<Vec<ToSerializerEvent>>, api: Option<Arc<ApiDat>>) {
+    println!("Hello from incomming connection acceptor");
     let mut next_client_id: u16 = 1;
     while let Ok((socket, addr)) = listener.accept().await {
         let client_id = next_client_id;
@@ -94,13 +95,15 @@ pub async fn incoming_connection_acceptor(listener: TcpListener, to_game: Sender
 
         async_std::task::Builder::new()
             .name(format!("inbound_{:?}", addr).to_string())
-            .spawn(socket_reader(client_id, socket, addr, to_game, to_serializer, api));
+            .spawn(socket_reader(client_id, socket, addr, to_game, to_serializer, api)).expect("Failed to launch inbound");
     }
     panic!("Incoming connections closed");
 }
 
-async fn socket_reader(id: u16, socket: TcpStream, _addr: async_std::net::SocketAddr, to_game: Sender<ToGameEvent>, to_serializer: Sender<Vec<ToSerializerEvent>>, api: Option<Arc<ApiDat>>) -> Result<(),()> {
+async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketAddr, to_game: Sender<ToGameEvent>, to_serializer: Sender<Vec<ToSerializerEvent>>, api: Option<Arc<ApiDat>>) -> Result<(),()> {
+    println!("New socket from {:?}", addr);
     let (mut socket_in, mut socket_out) = accept_websocket(socket).await?;
+    println!("Accepted websocket");
     let mut first_msg = loop {
         match read_ws_message(&mut socket_in).await {
             Ok(WsEvent::Ping) => { socket_out.queue_send(pong_message().0); },
@@ -142,7 +145,7 @@ async fn socket_reader(id: u16, socket: TcpStream, _addr: async_std::net::Socket
                     Ok(ToServerMsg::SendChatMessage { msg }) => {
                         todo!("Chat");
                     },
-                    Ok(ToServerMsg::RequestUpdate) => { to_serializer.send(vec! [ToSerializerEvent::RequestUpdate(id)]).await; },
+                    Ok(ToServerMsg::RequestUpdate) => { println!("Requestd update"); to_serializer.send(vec! [ToSerializerEvent::RequestUpdate(id)]).await; },
                     Ok(msg) => { to_game.send(ToGameEvent::PlayerMessage { id, msg }).await; },
                     Err(_) => break,
                 };
@@ -157,6 +160,7 @@ async fn socket_reader(id: u16, socket: TcpStream, _addr: async_std::net::Socket
 }
 
 pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Sender<ToGameEvent>) {
+    println!("Hello from serializer task");
     let mut writers: BTreeMap<u16, (Sender<Vec<OutboundWsMessage>>, Vec<OutboundWsMessage>, bool)> = BTreeMap::new();
     while let Some(events) = to_me.next().await {
         for event in events {
