@@ -10,6 +10,7 @@ use nphysics2d::object::{RigidBody, BodyPart, Body};
 use nphysics2d::math::{Isometry, Vector};
 use crate::rotate_vector_with_angle;
 use std::sync::Arc;
+use futures::FutureExt;
 
 #[derive(Serialize, Deserialize)]
 pub struct RecursivePartDescription {
@@ -99,15 +100,24 @@ impl Serialize for PartKind {
 }
 impl<'de> Deserialize<'de> for PartKind {
     fn deserialize<D: Deserializer<'de>>(deserilizer: D) -> Result<Self, D::Error> {
-        let dat = [ u8::deserialize(deserilizer)? ];
-        Self::deserialize(&dat, &mut 0).map_err(|_| D::Error::custom("Failed to deserialize PartKind"))
+        let dat = u8::deserialize(deserilizer)?;
+        match Self::deserialize(&mut futures::stream::once(futures::future::ready(dat))).now_or_never() {
+            Some(Ok(kind)) => Ok(kind),
+            _ => Err(D::Error::custom("Failed to deserialize PartKind"))
+        }
     }
 }
+
+/*macro_rules! FormatWithString {
+    ($format_input:ident) => { {
+        
+    } }
+}*/
 
 pub fn spawn_beamout_request(beamout_token: Option<String>, beamout_layout: RecursivePartDescription, api: Option<Arc<ApiDat>>) {
     if let Some(api) = &api {
         if let Some(beamout_token) = beamout_token {
-            let uri = api.beamout.clone() + "?beamout_token=" + &beamout_token;
+            let uri = api.beamout.replacen("^^^^", &beamout_token, 1);
             let password = api.password.clone();
             async_std::task::spawn(async {
                 let beamout_layout = beamout_layout;
@@ -123,6 +133,7 @@ pub fn spawn_beamout_request(beamout_token: Option<String>, beamout_layout: Recu
 
 #[derive(Serialize, Deserialize)]
 pub struct BeaminResponse {
+    pub is_admin: bool,
     pub beamout_token: String,
     pub layout: Option<RecursivePartDescription>
 }
@@ -130,7 +141,7 @@ pub struct BeaminResponse {
 pub async fn beamin_request(session: Option<String>, api: Option<Arc<ApiDat>>) -> Option<BeaminResponse> {
     let api = api.as_ref()?;
     let session = session?;
-    let uri = api.beamin.clone() + "?session=" + &session;
+    let uri = api.beamin.replacen("^^^^", &session, 1);
     let password = api.password.clone();
     let mut response = surf::get(uri).header("password", password).await.ok()?;
     if response.status().is_success() {

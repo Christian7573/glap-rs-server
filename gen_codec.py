@@ -2,7 +2,7 @@ class BasicType:
     def __init__(self, rust_name, rust_method, typescript_name, typescript_method):
         self._rust_signature = rust_name
         self._rust_serialize = "type_%s_serialize(out, %%s);" % rust_method
-        self._rust_deserialize = "%%s = type_%s_deserialize(&buf, index)?;" % rust_method
+        self._rust_deserialize = "%%s = type_%s_deserialize(stream).await?;" % rust_method
         self._typescript_signature = typescript_name
         self._typescript_serialize = "type_%s_serialize(out, %%s);" % typescript_method
         self._typescript_deserialize = "%%s = type_%s_deserialize(buf, index);" % typescript_method
@@ -23,7 +23,7 @@ class OptionType:
         self.inner = inner
         self._rust_signature = "Option<%s>" % inner.rust_signature()
         self._rust_serialize = "if let Some(tmp) = %%s {out.push(1); %s} else {out.push(0);}" % inner.rust_serialize("tmp")
-        self._rust_deserialize = "%%s = {if buf[*index] > 0 {*index += 1; let tmp; %s Some(tmp)} else {*index += 1; None}};" % inner.rust_deserialize("tmp")
+        self._rust_deserialize = "%%s = {if stream.next().await.ok_or(())? > 0 { let tmp; %s Some(tmp)} else { None }};" % inner.rust_deserialize("tmp")
         self._typescript_signature = "%s|null" % inner.typescript_signature()
     def rust_signature(self):
         return self._rust_signature
@@ -41,7 +41,7 @@ class EnumType:
     def __init__(self, name):
         self._rust_signature = name
         self._rust_serialize = "%s.serialize(out);"
-        self._rust_deserialize = "%%s = %s::deserialize(&buf, index)?;" % name
+        self._rust_deserialize = "%%s = %s::deserialize(stream).await?;" % name
         self._typescript_signature = name
         self._typescript_serialize = "enum_%s_serialize(out, %%s);" % name
         self._typescript_deserialize = "%%s = enum_%s_deserialize(buf, index);" % name
@@ -134,8 +134,16 @@ SendChatMessage = Message("SendChatMessage")
 SendChatMessage.fields.append(Field("msg", TypeString))
 ToServerMsg.messages.append(SendChatMessage)
 
+RequestUpdate = Message("RequestUpdate")
+ToServerMsg.messages.append(RequestUpdate)
+
+
 ToClientMsg = MessageCategory("ToClientMsg")
 categories.append(ToClientMsg)
+
+MessagePack = Message("MessagePack");
+MessagePack.fields.append(Field("count", TypeUShort))
+ToClientMsg.messages.append(MessagePack)
 
 HandshakeAccepted = Message("HandshakeAccepted")
 HandshakeAccepted.fields.append(Field("id", TypeUShort))
@@ -219,7 +227,7 @@ rust_header.close()
 for enum in enums:
     rust_out.write("#[derive(Copy, Clone, Eq, PartialEq, Debug)] pub enum %s {\n\t%s\n}\n" % (enum.name, ", ".join(enum.varriants)))
     rust_out.write("impl %s {\n\tpub fn val_of(&self) -> u8 { match self {\n\t\t\t%s\n\t\t} }\n\tpub fn serialize(&self, buf: &mut Vec<u8>) {\n\t\tbuf.push(self.val_of());\n\t}\n" % (enum.name, ", ".join(map(lambda varriant: "Self::%s => %s" % (varriant[1], varriant[0]), enumerate(enum.varriants)))))
-    rust_out.write("\tpub fn deserialize(buf: &[u8], index: &mut usize) -> Result<Self, ()> {\n\t\tlet me = buf[*index]; *index += 1;\n\t\tmatch me {\n\t\t\t%s,\n\t\t\t_ => Err(())\n\t\t}\n\t}\n}\n" % ", ".join(map(lambda varriant: "%s => Ok(Self::%s)" % (varriant[0], varriant[1]), enumerate(enum.varriants))))
+    rust_out.write("\tpub async fn deserialize<S: Stream<Item=u8>+Unpin>(stream: &mut S) -> Result<Self, ()> {\n\t\tlet me = stream.next().await.ok_or(())?;\n\t\tmatch me {\n\t\t\t%s,\n\t\t\t_ => Err(())\n\t\t}\n\t}\n}\n" % ", ".join(map(lambda varriant: "%s => Ok(Self::%s)" % (varriant[0], varriant[1]), enumerate(enum.varriants))))
 rust_out.write("\n")
 for category in categories:
     rust_out.write("pub enum %s {\n" % category.name)
@@ -237,7 +245,7 @@ for category in categories:
         for field in message.fields:
             rust_out.write("\t\t\t\t%s\n" % field.kind.rust_serialize(field.name))
         rust_out.write("\t\t\t},\n")
-    rust_out.write("\t\t};\n\t}\n\tpub fn deserialize(buf: &[u8], index: &mut usize) -> Result<Self,()> {\n\t\tlet i = *index;\n\t\t*index += 1;\n\t\tmatch buf[i] {\n")
+    rust_out.write("\t\t};\n\t}\n\tpub async fn deserialize<S: Stream<Item=u8>+Unpin>(stream: &mut S) -> Result<Self, ()> {\n\t\tmatch stream.next().await.ok_or(())? {\n")
     for i, message in enumerate(category.messages):
         rust_out.write("\t\t\t%s => {\n\t\t\t\t%s\n" % (str(i), " ".join(map(lambda field: ("let %s;" % field.name), message.fields))))
         for field in message.fields:
