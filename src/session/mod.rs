@@ -2,14 +2,11 @@ use std::pin::Pin;
 use std::task::{Poll, Context};
 use async_std::prelude::*;
 use async_std::net::{TcpStream, TcpListener};
-use async_std::sync::{Sender, Reciever, channel};
-use async_tungstenite::WebSocketStream;
-use async_tungstenite::tungstenite::{Error as WsError, Message};
+use async_std::sync::{Sender, Receiver, channel};
 use futures::{Sink, SinkExt, Stream, StreamExt, FutureExt};
 use nphysics2d::object::{Body, BodySet, RigidBody};
 use super::world::{MyHandle, MyUnits};
 use super::world::parts::{Part, PartKind};
-use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use crate::beamout::{RecursivePartDescription, BeaminResponse, beamin_request, spawn_beamout_request};
 use crate::ApiDat;
@@ -17,24 +14,29 @@ use std::sync::Arc;
 
 use crate::codec::*;
 
-mod websocket;
+pub mod websocket;
+use websocket::*;
 
-pub enum InboundEvent {
+pub enum ToGameEvent {
     NewPlayer { id: u16, name: String, parts: RecursivePartDescription },
     PlayerMessage { id: u16, msg: ToServerMsg },
     PlayerQuit { id: u16 }
 }
-pub enum OutboundEvent {
+pub enum ToSerializerEvent {
     Message (u16, ToClientMsg),
+    MulticastMessage (Vec<u16>, ToClientMsg),
     Broadcast (ToClientMsg),
     WorldUpdate (Vec<WorldUpdatePlayerUpdate>, Vec<WorldUpdatePartMove>),
-    SessionBad(u16),
-    BeamOutPlayer(u16, RecursivePartDescription),
+
+    NewWriter (u16, Sender<Vec<OutboundWsMessage>>),
+    BeamoutWriter (u16, RecursivePartDescription),
+    DeleteWriter (u16),
 }
+
 pub struct WorldUpdatePlayerUpdate { pub id: u16, pub core_x: f32, pub core_y: f32, pub parts: Vec<WorldUpdatePartMove> }
 pub struct WorldUpdatePartMove { pub id: u16, pub x: f32, pub y: f32, pub rot_sin: f32, pub rot_cos: f32 }
 
-enum Event {
+/*enum Event {
     NewSocket { socket: TcpStream },
     PotentialSessionMessage { id: u16, msg: Vec<u8> },
     PotentialSessionBeamin { id: u16, parts: Option<RecursivePartDescription>, beamout_token: Option<String> },
@@ -42,7 +44,7 @@ enum Event {
     SessionMessage { id: u16, msg: Vec<u8> },
     SessionDisconnect { id: u16 },
     OutboundEvent(Vec<OutboundEvent>)
-}
+}*/
 
 pub enum GuarenteeOnePoll {
     Yesnt, Yes
@@ -57,9 +59,9 @@ impl Future for GuarenteeOnePoll {
     }
 }
 
-pub enum SessionDInit { InitPloz (TcpListener, async_std::sync::Sender<InboundEvent>, async_std::sync::Receiver<Vec<OutboundEvent>>, Option<Arc<ApiDat>>), IntermediateState, Inited(Pin<Box<dyn Future<Output = ()>>>) }
-unsafe impl Send for SessionDInit {}
-impl Future for SessionDInit {
+//pub enum SessionDInit { InitPloz (TcpListener, async_std::sync::Sender<InboundEvent>, async_std::sync::Receiver<Vec<OutboundEvent>>, Option<Arc<ApiDat>>), IntermediateState, Inited(Pin<Box<dyn Future<Output = ()>>>) }
+//unsafe impl Send for SessionDInit {}
+/*impl Future for SessionDInit {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.deref_mut() {
@@ -74,23 +76,87 @@ impl Future for SessionDInit {
             SessionDInit::IntermediateState => panic!()
         }
     }
-}
+}*/
 
-async fn sessiond(listener: TcpListener, inbound: async_std::sync::Sender<InboundEvent>, outbound: async_std::sync::Receiver<Vec<OutboundEvent>>, api: Option<Arc<ApiDat>>) {
+pub async fn incoming_connection_acceptor(listener: TcpListener, to_game: Sender<ToGameEvent>, to_serializer: Sender<Vec<ToSerializerEvent>>, api: Option<Arc<ApiDat>>) {
     let mut next_client_id: u16 = 1;
     while let Ok((socket, addr)) = listener.accept().await {
         let client_id = next_client_id;
         next_client_id += 1;
-        let outbound = outbound.clone();
-        let (inbound, to_task) = channel();
+
+        let to_game = to_game.clone();
+        let to_serializer = to_serializer.clone();
+        let api = api.clone();
+
         async_std::task::Builder::new()
             .name(format!("inbound_{:?}", addr).to_string())
-            .spawn(async move {
-                if let Ok((socket_in, socket_out)) = websocket::accept_websocket(socket).await {
-                    
-                }
-            });
+            .spawn(socket_reader(client_id, socket, addr, to_game, to_serializer, api));
     }
+    panic!("Incoming connections closed");
+}
+
+async fn socket_reader(id: u16, socket: TcpStream, _addr: async_std::net::SocketAddr, to_game: Sender<ToGameEvent>, to_serializer: Sender<Vec<ToSerializerEvent>>, api: Option<Arc<ApiDat>>) -> Result<(),()> {
+    let (mut socket_in, mut socket_out) = websocket::accept_websocket(socket).await?;
+    let mut first_msg = loop {
+        match websocket::read_ws_message(&mut socket_in).await {
+            Ok(websocket::WsEvent::Ping) => { socket_out.queue_send(websocket::PongMessage.0.clone()); },
+            Ok(websocket::WsEvent::Message(msg)) => break Ok(msg),
+            Ok(websocket::WsEvent::Pong) | Err(_) => break Err(()),
+        }
+    }?;
+    let first_msg = ToServerMsg::deserialize(&mut first_msg).await?;
+    let (session, name) = if let ToServerMsg::Handshake{ session, client, name} = first_msg { (session, name) }
+    else { return Err(()) };
+    let beamin_data = beamin_request(session.clone(), api.clone()).await;
+
+    let layout: Option<RecursivePartDescription>;
+    let is_admin: bool;
+    let beamout_token: Option<String>;
+    if let Some(beamin_data) = beamin_data {
+        layout = beamin_data.layout;
+        is_admin = beamin_data.is_admin;
+        beamout_token = Some(beamin_data.beamout_token);
+    } else {
+        layout = None;
+        is_admin = false;
+        beamout_token = None;
+    }
+    let layout = layout.unwrap_or( RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() } );                                                                                                                                                        
+
+    to_game.send(ToGameEvent::NewPlayer { id, name, parts: layout }).await;
+    let (to_writer, from_serializer) = channel::<Vec<OutboundWsMessage>>(50);
+    async_std::task::Builder::new()
+        .name(format!("outbound_${}", id))
+        .spawn(socket_writer(id, beamout_token, socket_out, from_serializer));
+    to_serializer.send(vec! [ToSerializerEvent::NewWriter(id, to_writer.clone())]).await;
+
+    loop {
+        match read_ws_message(&mut socket_in).await {
+            Ok(WsEvent::Message(mut msg)) => {
+                let msg = ToServerMsg::deserialize(&mut msg).await;
+                match msg {
+                    Ok(ToServerMsg::SendChatMessage { msg }) => {
+                        todo!("Chat");
+                    },
+                    Ok(msg) => { to_game.send(ToGameEvent::PlayerMessage { id, msg }).await; },
+                    Err(_) => break,
+                };
+            },
+            Ok(WsEvent::Ping) => { to_writer.send(vec! [PongMessage.clone()]); },
+            Ok(WsEvent::Pong) | Err(_) => break,
+        };
+    };
+
+    to_serializer.send(vec! [ToSerializerEvent::DeleteWriter(id)]).await;
+    Ok(())
+}
+
+async fn serializer(to_me: Receiver<Vec<ToSerializerEvent>>) {
+    
+}
+
+async fn socket_writer(id: u16, beamout_token: Option<String>, out: TcpWriter, from_serializer: Receiver<Vec<OutboundWsMessage>>) {
+
 }
 
 /*async fn sessiond_old(listener: TcpListener, inbound: async_std::sync::Sender<InboundEvent>, outbound: async_std::sync::Receiver<Vec<OutboundEvent>>, api: Option<Arc<ApiDat>>) {

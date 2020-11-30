@@ -133,6 +133,7 @@ pub fn spawn_beamout_request(beamout_token: Option<String>, beamout_layout: Recu
 
 #[derive(Serialize, Deserialize)]
 pub struct BeaminResponse {
+    pub is_admin: bool,
     pub beamout_token: String,
     pub layout: Option<RecursivePartDescription>
 }
