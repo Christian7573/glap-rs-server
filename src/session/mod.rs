@@ -130,7 +130,7 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
     }
     let layout = layout.unwrap_or( RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() } );                                                                                                                                                        
 
-    to_game.send(ToGameEvent::NewPlayer { id, name, parts: layout }).await;
+    to_game.send(ToGameEvent::NewPlayer { id, name: name.clone(), parts: layout }).await;
     let (to_writer, from_serializer) = channel::<Vec<OutboundWsMessage>>(50);
     async_std::task::Builder::new()
         .name(format!("outbound_${}", id))
@@ -143,7 +143,7 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
                 let msg = ToServerMsg::deserialize(&mut msg).await;
                 match msg {
                     Ok(ToServerMsg::SendChatMessage { msg }) => {
-                        todo!("Chat");
+                        to_serializer.send(vec! [ToSerializerEvent::Broadcast(ToClientMsg::ChatMessage{ username: name.clone(), msg, color: String::from("#dd55ff") })]).await;
                     },
                     Ok(ToServerMsg::RequestUpdate) => { to_serializer.send(vec! [ToSerializerEvent::RequestUpdate(id)]).await; },
                     Ok(msg) => { to_game.send(ToGameEvent::PlayerMessage { id, msg }).await; },
