@@ -10,6 +10,7 @@ use nphysics2d::object::{RigidBody, BodyPart, Body};
 use nphysics2d::math::{Isometry, Vector};
 use crate::rotate_vector_with_angle;
 use std::sync::Arc;
+use futures::FutureExt;
 
 #[derive(Serialize, Deserialize)]
 pub struct RecursivePartDescription {
@@ -99,8 +100,11 @@ impl Serialize for PartKind {
 }
 impl<'de> Deserialize<'de> for PartKind {
     fn deserialize<D: Deserializer<'de>>(deserilizer: D) -> Result<Self, D::Error> {
-        let dat = [ u8::deserialize(deserilizer)? ];
-        Self::deserialize(&dat, &mut 0).map_err(|_| D::Error::custom("Failed to deserialize PartKind"))
+        let dat = u8::deserialize(deserilizer)?;
+        match Self::deserialize(&mut futures::stream::once(futures::future::ready(dat))).now_or_never() {
+            Some(Ok(kind)) => Ok(kind),
+            _ => Err(D::Error::custom("Failed to deserialize PartKind"))
+        }
     }
 }
 
@@ -129,6 +133,7 @@ pub fn spawn_beamout_request(beamout_token: Option<String>, beamout_layout: Recu
 
 #[derive(Serialize, Deserialize)]
 pub struct BeaminResponse {
+    pub is_admin: bool,
     pub beamout_token: String,
     pub layout: Option<RecursivePartDescription>
 }
