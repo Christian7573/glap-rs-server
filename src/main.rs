@@ -279,7 +279,7 @@ async fn main() {
                 outbound_events.push(ToSerializer::WorldUpdate(
                     {
                         let mut out = BTreeMap::new();
-                        for (id, player) in &players {
+                        for (id, (player, core)) in &players {
                             let mut parts = Vec::new();
                             fn recursive_part_move(parts: &mut Vec<session::WorldUpdatePartMove>, part: &Part, simulation: &world::Simulation) {
                                 let body = simulation.world.get_rigid(MyHandle::Part(part.body_id)).unwrap();
@@ -293,8 +293,8 @@ async fn main() {
                                     if let Some((part, _, _)) = &part.attachments[i] { recursive_part_move(parts, part, simulation); };
                                 };
                             }
-                            recursive_part_move(&mut parts, &player.1, &simulation);
-                            out.insert(*id, ((parts[0].x, parts[0].y), parts));
+                            recursive_part_move(&mut parts, core, &simulation);
+                            out.insert(*id, ((parts[0].x, parts[0].y), parts, ToClientMsg::PostSimulationTick{ your_power: player.power }));
                         }
                         out
                     },
@@ -308,10 +308,6 @@ async fn main() {
                         }
                     }).collect::<Vec<_>>()
                 ));
-
-                for (id, (player, _core)) in &players {
-                    outbound_events.push(ToSerializer::Message(*id, ToClientMsg::PostSimulationTick{ your_power: player.power }));
-                }
             },
 
 

@@ -28,7 +28,7 @@ pub enum ToSerializerEvent {
     Message (u16, ToClientMsg),
     MulticastMessage (Vec<u16>, ToClientMsg),
     Broadcast (ToClientMsg),
-    WorldUpdate (BTreeMap<u16, ((f32,f32), Vec<WorldUpdatePartMove>)>, Vec<WorldUpdatePartMove>),
+    WorldUpdate (BTreeMap<u16, ((f32,f32), Vec<WorldUpdatePartMove>, ToClientMsg)>, Vec<WorldUpdatePartMove>),
 
     NewWriter (u16, Sender<Vec<OutboundWsMessage>>),
     RequestUpdate (u16),
@@ -130,7 +130,7 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
     }
     let layout = layout.unwrap_or( RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() } );                                                                                                                                                        
 
-    to_game.send(ToGameEvent::NewPlayer { id, name, parts: layout }).await;
+    to_game.send(ToGameEvent::NewPlayer { id, name: name.clone(), parts: layout }).await;
     let (to_writer, from_serializer) = channel::<Vec<OutboundWsMessage>>(50);
     async_std::task::Builder::new()
         .name(format!("outbound_${}", id))
@@ -143,7 +143,7 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
                 let msg = ToServerMsg::deserialize(&mut msg).await;
                 match msg {
                     Ok(ToServerMsg::SendChatMessage { msg }) => {
-                        todo!("Chat");
+                        to_serializer.send(vec! [ToSerializerEvent::Broadcast(ToClientMsg::ChatMessage{ username: name.clone(), msg, color: String::from("#dd55ff") })]).await;
                     },
                     Ok(ToServerMsg::RequestUpdate) => { to_serializer.send(vec! [ToSerializerEvent::RequestUpdate(id)]).await; },
                     Ok(msg) => { to_game.send(ToGameEvent::PlayerMessage { id, msg }).await; },
@@ -210,7 +210,7 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
                     }
                 },
                 ToSerializerEvent::WorldUpdate(players, free_parts) => {
-                    for (_id, ((x, y), parts)) in &players {
+                    for (id, ((x, y), parts, post_simulation)) in &players {
                         let mut msg = Vec::new();
                         ToClientMsg::MessagePack { count: parts.len() as u16 }.serialize(&mut msg);
                         for part in parts {
@@ -222,13 +222,20 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
                         let msg = OutboundWsMessage::from(&msg);
                         for (id, (_to_writer, queue, request_update)) in &mut writers {
                             if *request_update {
-                                if let Some(((player_x, player_y), _parts)) = players.get(&id) {
+                                if let Some(((player_x, player_y), _parts, _post_simulation)) = players.get(&id) {
                                     if (player_x - x).abs() <= 200.0 && (player_y - y).abs() <= 200.0 {
                                         queue.push(msg.clone());
                                     }
                                 }
                             }
-                        }
+                        };
+                        if let Some((_to_writer, queue, request_update)) = writers.get_mut(id) {
+                            if *request_update {
+                                let mut msg = Vec::new();
+                                post_simulation.serialize(&mut msg);
+                                queue.push(OutboundWsMessage::from(&msg));
+                            }
+                        };
                     };
                     let mut msg = Vec::new();
                     ToClientMsg::MessagePack { count: free_parts.len() as u16 }.serialize(&mut msg);
