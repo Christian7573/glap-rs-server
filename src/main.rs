@@ -328,6 +328,7 @@ async fn main() {
                             simulation.release_constraint(constraint_id);
                         }
                     }
+                    outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage{ username: String::from("Server"), msg: player.name.clone() + " left the game", color: String::from("#dd55ff") }));
                 } else { panic!("RE Player Quit Error"); }
             },
             
@@ -389,12 +390,13 @@ async fn main() {
                 }
                 
                 //Graduate to spawned player
-                let mut meta = PlayerMeta::new(name);
+                let mut meta = PlayerMeta::new(name.clone());
                 meta.max_power = max_power;
                 meta.power_regen_per_5_ticks = power_regen;
                 meta.power = meta.max_power;
                 outbound_events.push(ToSerializer::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: meta.max_power, can_beamout: meta.can_beamout }));
                 players.insert(id, (meta, core));
+                outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage{ username: String::from("Server"), msg: name + " joined the game", color: String::from("#dd55ff") }));
             },
 
             Event::InboundEvent(PlayerMessage{ id, msg }) => {
