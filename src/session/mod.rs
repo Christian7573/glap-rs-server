@@ -22,7 +22,8 @@ use websocket::*;
 pub enum ToGameEvent {
     NewPlayer { id: u16, name: String, parts: RecursivePartDescription },
     PlayerMessage { id: u16, msg: ToServerMsg },
-    PlayerQuit { id: u16 }
+    PlayerQuit { id: u16 },
+    AdminCommand { id: u16, command: String }
 }
 pub enum ToSerializerEvent {
     Message (u16, ToClientMsg),
@@ -117,7 +118,7 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
     let beamin_data = beamin_request(session.clone(), api.clone()).await;
 
     let layout: Option<RecursivePartDescription>;
-    let is_admin: bool;
+    let mut is_admin: bool;
     let beamout_token: Option<String>;
     if let Some(beamin_data) = beamin_data {
         layout = beamin_data.layout;
@@ -128,6 +129,7 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
         is_admin = false;
         beamout_token = None;
     }
+    is_admin = true; //remove this
     let layout = layout.unwrap_or( RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() } );                                                                                                                                                        
 
     to_game.send(ToGameEvent::NewPlayer { id, name: name.clone(), parts: layout }).await;
@@ -144,10 +146,7 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
                 match msg {
                     Ok(ToServerMsg::SendChatMessage { msg }) => {
                         if is_admin && msg.chars().nth(0).unwrap() == '/' {
-                            match msg.as_str() {
-                                "test" => println!("test");
-                                "/test2" => println!("test 2");
-                            }
+                            to_game.send(ToGameEvent::AdminCommand { id, command: msg.clone() }).await;
                         } else {
                             to_serializer.send(vec! [ToSerializerEvent::Broadcast(ToClientMsg::ChatMessage{ username: name.clone(), msg, color: String::from("#dd55ff") })]).await;
                         }
