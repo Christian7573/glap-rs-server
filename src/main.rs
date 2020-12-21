@@ -19,6 +19,7 @@ pub mod codec;
 pub mod session;
 pub mod beamout;
 use codec::*;
+use session::ToSerializerEvent;
 
 pub const TICKS_PER_SECOND: u8 = 20;
 pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 20;
@@ -272,8 +273,15 @@ async fn main() {
                                 }
                             }
                         },
-                        PartDetach{ parent_part, detached_part, player } => todo!()
                     }
+                }
+
+                for (player, core) in players.values_mut() { 
+                    let mut max_power_lost = 0;
+                    let mut regen_lost = 0;
+                    recursive_broken_check(core, &mut simulation, &mut free_parts, &mut outbound_events, &mut max_power_lost, &mut regen_lost);
+                    player.max_power -= max_power_lost;
+                    player.power_regen_per_5_ticks -= regen_lost;
                 }
 
                 outbound_events.push(ToSerializer::WorldUpdate(
@@ -432,21 +440,6 @@ async fn main() {
                                         for slot in part.attachments.iter_mut() {
                                             if let Some((part, connection, connection2)) = slot {
                                                 if part.body_id == target_part {
-                                                    fn recursive_detatch(part: &mut Part, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation, out: &mut Vec<ToSerializer>, max_power_lost: &mut u32, regen_lost: &mut u32) {
-                                                        for slot in part.attachments.iter_mut() {
-                                                            if let Some((part, connection, connection2)) = slot {
-                                                                simulation.release_constraint(*connection);
-                                                                simulation.release_constraint(*connection2);
-                                                                *max_power_lost += part.kind.power_storage();
-                                                                *regen_lost += part.kind.power_regen_per_5_ticks();
-                                                                recursive_detatch(part, free_parts, simulation, out, max_power_lost, regen_lost);
-                                                                if let Some((part, _, _)) = std::mem::replace(slot, None) {
-                                                                    out.push(ToSerializer::Broadcast(codec::ToClientMsg::UpdatePartMeta{ id: part.body_id, owning_player: None, thrust_mode: 0 }));
-                                                                    free_parts.insert(part.body_id, FreePart::Decaying(part, DEFAULT_PART_DECAY_TICKS));
-                                                                }
-                                                            }
-                                                        }
-                                                    }
                                                     let mut max_power_lost: u32 = 0;
                                                     let mut regen_lost: u32 = 0;
                                                     recursive_detatch(part, free_parts, simulation, out, &mut max_power_lost, &mut regen_lost);
@@ -603,6 +596,45 @@ async fn main() {
             },
         }
         to_serializer.send(outbound_events).await;
+    }
+}
+
+
+//TODO: parallelize
+fn recursive_broken_check(part: &mut Part, simulation: &mut world::Simulation, free_parts: &mut BTreeMap<u16, FreePart>, out: &mut Vec<ToSerializerEvent>, max_power_lost: &mut u32, regen_lost: &mut u32) {
+    for i in 0..part.attachments.len() {
+        if let Some((attachment, joint1, joint2)) = &mut part.attachments[i] {
+            if simulation.is_constraint_broken(*joint1) || simulation.is_constraint_broken(*joint2) {
+                simulation.release_constraint(*joint1);
+                simulation.release_constraint(*joint2);
+                *max_power_lost += attachment.kind.power_storage();
+                *regen_lost += attachment.kind.power_regen_per_5_ticks();
+                recursive_detatch(attachment, free_parts, simulation, out, max_power_lost, regen_lost);
+                if let Some((part, _, _)) = std::mem::replace(&mut part.attachments[i], None) {
+                    out.push(ToSerializerEvent::Broadcast(codec::ToClientMsg::UpdatePartMeta{ id: part.body_id, owning_player: None, thrust_mode: 0 }));
+                    free_parts.insert(part.body_id, FreePart::Decaying(part, DEFAULT_PART_DECAY_TICKS));
+                }
+            } else {
+                recursive_broken_check(attachment, simulation, free_parts, out, max_power_lost, regen_lost);
+            }
+        }
+    }
+}
+
+
+fn recursive_detatch(part: &mut Part, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation, out: &mut Vec<ToSerializerEvent>, max_power_lost: &mut u32, regen_lost: &mut u32) {
+    for slot in part.attachments.iter_mut() {
+        if let Some((part, connection, connection2)) = slot {
+            simulation.release_constraint(*connection);
+            simulation.release_constraint(*connection2);
+            *max_power_lost += part.kind.power_storage();
+            *regen_lost += part.kind.power_regen_per_5_ticks();
+            recursive_detatch(part, free_parts, simulation, out, max_power_lost, regen_lost);
+            if let Some((part, _, _)) = std::mem::replace(slot, None) {
+                out.push(ToSerializerEvent::Broadcast(codec::ToClientMsg::UpdatePartMeta{ id: part.body_id, owning_player: None, thrust_mode: 0 }));
+                free_parts.insert(part.body_id, FreePart::Decaying(part, DEFAULT_PART_DECAY_TICKS));
+            }
+        }
     }
 }
 
