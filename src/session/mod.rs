@@ -37,8 +37,14 @@ pub enum ToSerializerEvent {
     DeleteWriter (u16),
 }
 
+pub struct WorldUpdatePartMove {
+    pub id: u16,
+    pub x: f32,
+    pub y: f32,
+    pub rot_sin: f32,
+    pub rot_cos: f32,
+}
 pub struct WorldUpdatePlayerUpdate { pub id: u16, pub core_x: f32, pub core_y: f32, pub parts: Vec<WorldUpdatePartMove> }
-pub struct WorldUpdatePartMove { pub id: u16, pub x: f32, pub y: f32, pub rot_sin: f32, pub rot_cos: f32 }
 
 /*enum Event {
     NewSocket { socket: TcpStream },
