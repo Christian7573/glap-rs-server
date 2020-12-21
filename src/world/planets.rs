@@ -4,6 +4,7 @@ use nphysics2d::object::ColliderDesc;
 use ncollide2d::shape::{Ball, ShapeHandle};
 use nalgebra::Vector2;
 use nphysics2d::material::{BasicMaterial, MaterialHandle};
+use rand::Rng;
 
 pub struct Planets {
     pub earth: CelestialObject,
@@ -11,20 +12,29 @@ pub struct Planets {
     pub planet_material: MaterialHandle<MyUnits>,
     pub mars: CelestialObject,
     pub mercury: CelestialObject,
+    pub jupiter: CelestialObject,
+    pub pluto: CelestialObject,
+    pub saturn: CelestialObject,
+    pub neptune: CelestialObject,
+    pub venus: CelestialObject,
+    pub uranus: CelestialObject,
+    pub sun: CelestialObject
 }
 impl Planets {
     pub fn new(colliders: &mut super::MyColliderSet, bodies: &mut super::World) -> Planets {
         const EARTH_MASS: f32 = 600.0;
+        const EARTH_SIZE: f32 = 25.0;
+        let earth_pos = planet_location(1500.0);
         let planet_material = MaterialHandle::new(BasicMaterial::new(0.0, 1.0));
         let earth = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(0.0,0.0))
+            .translation(earth_pos.clone())
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = 25.0;
+            const RADIUS: f32 = EARTH_SIZE;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -46,13 +56,13 @@ impl Planets {
 
         let moon = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(42.4530083832,69.2770133538))
+            .translation(planet_location(100.0) + earth_pos.clone())
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 35.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = 25.0 / 4.0;
+            const RADIUS: f32 = EARTH_SIZE / 4.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -74,13 +84,13 @@ impl Planets {
 
         let mars = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(-128.0,-1000.0))
+                .translation(planet_location(2000.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 4.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = 25.0 / 2.0;
+            const RADIUS: f32 = EARTH_SIZE / 2.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -102,13 +112,13 @@ impl Planets {
 
         let mercury = {
             let body = RigidBodyDesc::new()
-                .translation(Vector2::new(-1600.0,267.0))
+                .translation(planet_location(500.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
-                .mass(EARTH_MASS / 25.0)
+                .mass(EARTH_MASS / 15.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = 25.0 * 0.38;
+            const RADIUS: f32 = EARTH_SIZE * 0.38;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -128,19 +138,222 @@ impl Planets {
             }
         };
 
+        let jupiter = {
+            let body = RigidBodyDesc::new()
+                .translation(planet_location(3500.0))
+                .gravity_enabled(false)
+                .status(BodyStatus::Static)
+                .mass(EARTH_MASS * 10.0)
+                .build();
+            let body_handle = bodies.add_celestial_object(body);
+            const RADIUS: f32 = EARTH_SIZE * 2.0;
+            let shape = ShapeHandle::new(Ball::new(RADIUS));
+            let collider = ColliderDesc::new(shape)
+                .material(planet_material.clone())
+                .build(BodyPartHandle(body_handle, 0));
+            colliders.insert(collider);
+
+            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+
+            CelestialObject {
+                name: String::from("jupiter"),
+                display_name: String::from("jupiter"),
+                radius: RADIUS,
+                body: body_handle,
+                id,
+                cargo_upgrade: None,
+                can_beamout: false,
+            }
+        };
+
+        let pluto = {
+            let body = RigidBodyDesc::new()
+                .translation(planet_location(6000.0))
+                .gravity_enabled(false)
+                .status(BodyStatus::Static)
+                .mass(EARTH_MASS / 10.0)
+                .build();
+            let body_handle = bodies.add_celestial_object(body);
+            const RADIUS: f32 = EARTH_SIZE / 4.0;
+            let shape = ShapeHandle::new(Ball::new(RADIUS));
+            let collider = ColliderDesc::new(shape)
+                .material(planet_material.clone())
+                .build(BodyPartHandle(body_handle, 0));
+            colliders.insert(collider);
+
+            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+
+            CelestialObject {
+                name: String::from("pluto"),
+                display_name: String::from("pluto"),
+                radius: RADIUS,
+                body: body_handle,
+                id,
+                cargo_upgrade: None,
+                can_beamout: false,
+            }
+        };
+
+        let saturn = {
+            let body = RigidBodyDesc::new()
+                .translation(planet_location(4000.0))
+                .gravity_enabled(false)
+                .status(BodyStatus::Static)
+                .mass(EARTH_MASS * 10.0)
+                .build();
+            let body_handle = bodies.add_celestial_object(body);
+            const RADIUS: f32 = EARTH_SIZE * 2.0;
+            let shape = ShapeHandle::new(Ball::new(RADIUS));
+            let collider = ColliderDesc::new(shape)
+                .material(planet_material.clone())
+                .build(BodyPartHandle(body_handle, 0));
+            colliders.insert(collider);
+
+            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+
+            CelestialObject {
+                name: String::from("saturn"),
+                display_name: String::from("saturn"),
+                radius: RADIUS,
+                body: body_handle,
+                id,
+                cargo_upgrade: None,
+                can_beamout: false,
+            }
+        };
+
+        let neptune = {
+            let body = RigidBodyDesc::new()
+                .translation(planet_location(5500.0))
+                .gravity_enabled(false)
+                .status(BodyStatus::Static)
+                .mass(EARTH_MASS * 4.0)
+                .build();
+            let body_handle = bodies.add_celestial_object(body);
+            const RADIUS: f32 = EARTH_SIZE * 1.5;
+            let shape = ShapeHandle::new(Ball::new(RADIUS));
+            let collider = ColliderDesc::new(shape)
+                .material(planet_material.clone())
+                .build(BodyPartHandle(body_handle, 0));
+            colliders.insert(collider);
+
+            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+
+            CelestialObject {
+                name: String::from("neptune"),
+                display_name: String::from("neptune"),
+                radius: RADIUS,
+                body: body_handle,
+                id,
+                cargo_upgrade: None,
+                can_beamout: false,
+            }
+        };
+
+        let venus = {
+            let body = RigidBodyDesc::new()
+                .translation(planet_location(1000.0))
+                .gravity_enabled(false)
+                .status(BodyStatus::Static)
+                .mass(EARTH_SIZE)
+                .build();
+            let body_handle = bodies.add_celestial_object(body);
+            const RADIUS: f32 = EARTH_SIZE;
+            let shape = ShapeHandle::new(Ball::new(RADIUS));
+            let collider = ColliderDesc::new(shape)
+                .material(planet_material.clone())
+                .build(BodyPartHandle(body_handle, 0));
+            colliders.insert(collider);
+
+            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+
+            CelestialObject {
+                name: String::from("venus"),
+                display_name: String::from("venus"),
+                radius: RADIUS,
+                body: body_handle,
+                id,
+                cargo_upgrade: None,
+                can_beamout: false,
+            }
+        };
+
+        let uranus = {
+            let body = RigidBodyDesc::new()
+                .translation(planet_location(4800.0))
+                .gravity_enabled(false)
+                .status(BodyStatus::Static)
+                .mass(EARTH_MASS * 4.0)
+                .build();
+            let body_handle = bodies.add_celestial_object(body);
+            const RADIUS: f32 = EARTH_SIZE * 2.0;
+            let shape = ShapeHandle::new(Ball::new(RADIUS));
+            let collider = ColliderDesc::new(shape)
+                .material(planet_material.clone())
+                .build(BodyPartHandle(body_handle, 0));
+            colliders.insert(collider);
+
+            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+
+            CelestialObject {
+                name: String::from("uranus"),
+                display_name: String::from("uranus"),
+                radius: RADIUS,
+                body: body_handle,
+                id,
+                cargo_upgrade: None,
+                can_beamout: false,
+            }
+        };
+
+        let sun = {
+            let body = RigidBodyDesc::new()
+                .translation(Vector2::new(0.0,0.0))
+                .gravity_enabled(false)
+                .status(BodyStatus::Static)
+                .mass(EARTH_MASS * 50.0)
+                .build();
+            let body_handle = bodies.add_celestial_object(body);
+            const RADIUS: f32 = EARTH_SIZE * 4.7;
+            let shape = ShapeHandle::new(Ball::new(RADIUS));
+            let collider = ColliderDesc::new(shape)
+                .material(planet_material.clone())
+                .build(BodyPartHandle(body_handle, 0));
+            colliders.insert(collider);
+
+            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+            
+            CelestialObject {
+                name: String::from("sun"),
+                display_name: String::from("sun"),
+                radius: RADIUS,
+                body: body_handle,
+                id,
+                cargo_upgrade: None,
+                can_beamout: false,
+            }
+        };
+
         Planets {
-            earth, moon, planet_material, mars, mercury,
+            earth, moon, planet_material, mars, mercury, jupiter, pluto, saturn, neptune, venus, uranus, sun,
         }
     }
 
-    pub fn celestial_objects<'a>(&'a self) -> [&'a CelestialObject; 4] {
-        [&self.earth, &self.moon, &self.mars, &self.mercury]
+    pub fn celestial_objects<'a>(&'a self) -> [&'a CelestialObject; 11] {
+        [&self.earth, &self.moon, &self.mars, &self.mercury, &self.jupiter, &self.pluto, &self.saturn, &self.neptune, &self.venus, &self.uranus, &self.sun]
     }
     pub fn get_celestial_object<'a>(&'a self, id: u16) -> Result<&'a CelestialObject, ()> {
         if id == self.earth.id { Ok(&self.earth) }
         else if id == self.moon.id { Ok(&self.moon) }
         else if id == self.mars.id { Ok(&self.mars) }
         else if id == self.mercury.id { Ok(&self.mercury) }
+        else if id == self.jupiter.id { Ok(&self.jupiter) }
+        else if id == self.pluto.id { Ok(&self.pluto) }
+        else if id == self.saturn.id { Ok(&self.saturn) }
+        else if id == self.neptune.id { Ok(&self.neptune) }
+        else if id == self.venus.id { Ok(&self.venus) }
+        else if id == self.uranus.id { Ok(&self.uranus) }
+        else if id == self.sun.id { Ok(&self.sun) }
         else { Err(()) }
     }
 }
@@ -153,4 +366,11 @@ pub struct CelestialObject {
     pub id: u16,
     pub cargo_upgrade: Option<super::parts::PartKind>,
     pub can_beamout: bool,
+}
+
+pub fn planet_location(radius: f32) -> nalgebra::Matrix<f32, nalgebra::U2, nalgebra::U1, nalgebra::ArrayStorage<f32, nalgebra::U2, nalgebra::U1>> {
+    let mut rng = rand::thread_rng();
+    let angle: f32 = rng.gen::<f32>() * std::f32::consts::PI * 2.0;
+    let pos = Vector2::new(f32::cos(angle) * radius, f32::sin(angle) * radius);
+    pos
 }
