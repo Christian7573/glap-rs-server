@@ -328,10 +328,10 @@ async fn main() {
                             simulation.release_constraint(constraint_id);
                         }
                     }
-                } else { panic!("RE Player Quit Error"); }
+                } 
             },
             
-            Event::InboundEvent(NewPlayer{ id, name, parts }) => { 
+            Event::InboundEvent(NewPlayer{ id, name, parts, beamout_token }) => { 
                 //Graduate session to being existant
                 /*let mut core = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
                 let core_body = simulation.world.get_rigid_mut(MyHandle::Part(core.body_id)).unwrap();
@@ -352,7 +352,7 @@ async fn main() {
                 }
                 recursive_part_beamin(&core, id, &mut simulation, &mut max_power, &mut power_regen);
 
-                outbound_events.push(ToSerializer::Message(id, ToClientMsg::HandshakeAccepted{id, core_id: core.body_id}));
+                outbound_events.push(ToSerializer::Message(id, ToClientMsg::HandshakeAccepted{ id, core_id: core.body_id, can_beamout: beamout_token.is_some() }));
                 outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::AddPlayer { id, name: name.clone(), core_id: core.body_id }));
 
                 //Send over celestial object locations
@@ -389,7 +389,7 @@ async fn main() {
                 }
                 
                 //Graduate to spawned player
-                let mut meta = PlayerMeta::new(name);
+                let mut meta = PlayerMeta::new(name, beamout_token);
                 meta.max_power = max_power;
                 meta.power_regen_per_5_ticks = power_regen;
                 meta.power = meta.max_power;
@@ -576,7 +576,7 @@ async fn main() {
                         }
                     },
                     ToServerMsg::BeamOut => {
-                        if let Some((_player, core)) = players.remove(&id) {
+                        if let Some((player, core)) = players.remove(&id) {
                             let beamout_layout = beamout::RecursivePartDescription::deflate(&core);
                             outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::BeamOutAnimation { player_id: id }));
                             fn recursive_beamout_remove(part: &Part, simulation: &mut world::Simulation) {
@@ -590,8 +590,12 @@ async fn main() {
                                 simulation.world.remove_part(MyHandle::Part(part.body_id));
                             }
                             recursive_beamout_remove(&core, &mut simulation);
-                            //outbound_events.push(ToSerializer::BeamoutWriter(id, beamout_layout));
-                            panic!("Beamout unimplemented");
+                            beamout::spawn_beamout_request(player.beamout_token, beamout_layout, api.clone());
+                            let my_to_serializer = to_serializer.clone();
+                            async_std::task::spawn(async move {
+                                futures_timer::Delay::new(std::time::Duration::from_millis(2500)).await;
+                                my_to_serializer.send(vec![ ToSerializer::DeleteWriter(id) ]).await;
+                            });
                         }
                     },
                     _ => { outbound_events.push(ToSerializer::DeleteWriter(id)); }
@@ -668,6 +672,8 @@ pub fn rotate_vector(x: f32, y: f32, theta_sin: f32, theta_cos: f32) -> (f32, f3
 
 pub struct PlayerMeta {
     pub name: String,
+    pub beamout_token: Option<String>, 
+
     pub thrust_forwards: bool,
     pub thrust_backwards: bool,
     pub thrust_clockwise: bool,
@@ -685,8 +691,9 @@ pub struct PlayerMeta {
     can_beamout: bool,
 }
 impl PlayerMeta {
-    fn new(name: String) -> PlayerMeta { PlayerMeta {
+    fn new(name: String, beamout_token: Option<String>) -> PlayerMeta { PlayerMeta {
         name,
+        beamout_token,
         thrust_backwards: false, thrust_clockwise: false, thrust_counterclockwise: false, thrust_forwards: false,
         power: 100 * crate::TICKS_PER_SECOND as u32, max_power: 100 * crate::TICKS_PER_SECOND as u32,
         power_regen_per_5_ticks: 0,
