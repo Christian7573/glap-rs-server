@@ -145,8 +145,19 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
                 let msg = ToServerMsg::deserialize(&mut msg).await;
                 match msg {
                     Ok(ToServerMsg::SendChatMessage { msg }) => {
-                        if is_admin && msg.chars().nth(0).unwrap() == '/' {
-                            to_game.send(ToGameEvent::AdminCommand { id, command: msg.clone() }).await;
+                        if msg.chars().nth(0).unwrap() == '/' {
+                            let chunks: Vec<String> = msg.split_whitespace().map(|s| s.to_string()).collect();
+                            match chunks[0].as_str() {
+                                "/shrug" => {
+                                    to_serializer.send(vec! [ToSerializerEvent::Broadcast(ToClientMsg::ChatMessage{ username: name.clone(), msg: String::from("¯\\_(ツ)_/¯"), color: String::from("#dd55ff") })]).await;
+                                },
+                                
+                                _ => {
+                                    if is_admin {
+                                        to_game.send(ToGameEvent::AdminCommand { id, command: msg.clone() }).await;
+                                    }
+                                }
+                            }
                         } else {
                             to_serializer.send(vec! [ToSerializerEvent::Broadcast(ToClientMsg::ChatMessage{ username: name.clone(), msg, color: String::from("#dd55ff") })]).await;
                         }
