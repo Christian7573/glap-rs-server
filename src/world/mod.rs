@@ -7,6 +7,7 @@ use nphysics2d::algebra::{Force2, ForceType, Inertia2};
 use nphysics2d::joint::{DefaultJointConstraintHandle, MouseConstraint, JointConstraint};
 use nphysics2d::math::Point;
 use ncollide2d::pipeline::ContactEvent;
+use crate::PartOfPlayer;
 
 pub mod planets;
 pub mod parts;
@@ -32,7 +33,6 @@ pub struct Simulation {
 pub enum SimulationEvent {
     PlayerTouchPlanet { player: u16, part: u16, planet: u16, },
     PlayerUntouchPlanet { player: u16, part: u16, planet: u16 },
-    PartDetach { player: u16, parent_part: u16, detached_part: u16 }
 }
 
 
@@ -94,7 +94,7 @@ impl Simulation {
                     } else { continue; }
                     let part_coll = self.colliders.get(other).unwrap();
                     if let MyHandle::Part(part_id) = part_coll.body() {
-                        if let Some(crate::PartOfPlayer(player_id)) = part_coll.user_data().map(|dat| dat.downcast_ref()).flatten() {
+                        if let Some(PartOfPlayer(player_id)) = part_coll.user_data().map(|dat| dat.downcast_ref()).flatten() {
                             events.push(SimulationEvent::PlayerTouchPlanet{ player: *player_id, part: part_id, planet: planet });
                         }
                     }
@@ -109,7 +109,7 @@ impl Simulation {
                     } else { continue; }
                     let part_coll = self.colliders.get(other).unwrap();
                     if let MyHandle::Part(part_id) = part_coll.body() {
-                        if let Some(crate::PartOfPlayer(player_id)) = part_coll.user_data().map(|dat| dat.downcast_ref()).flatten() {
+                        if let Some(PartOfPlayer(player_id)) = part_coll.user_data().map(|dat| dat.downcast_ref()).flatten() {
                             events.push(SimulationEvent::PlayerUntouchPlanet{ player: *player_id, part: part_id, planet: planet });
                         }
                     }
@@ -156,7 +156,16 @@ impl Simulation {
             Point::new(attachment.x - offset.0, attachment.y - offset.1),
             Point::new(-0.2, 0.0)
         );
+        const MAX_TORQUE: f32 = 100.0;
+        const MAX_FORCE: f32 = MAX_TORQUE * 3.0;
+        constraint1.set_break_torque(MAX_TORQUE);
+        constraint1.set_break_force(MAX_FORCE);
+        constraint2.set_break_torque(MAX_TORQUE);
+        constraint2.set_break_force(MAX_FORCE);
         (self.joints.insert(constraint1), self.joints.insert(constraint2))
+    }
+    pub fn is_constraint_broken(&self, handle: DefaultJointConstraintHandle) -> bool {
+        self.joints.get(handle).map(|joint| joint.is_broken()).unwrap_or(true)
     }
 
     pub fn geometrical_world(&self) -> &MyGeometricalWorld { &self.geometry }

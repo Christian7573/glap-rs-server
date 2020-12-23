@@ -12,7 +12,7 @@ use crate::rotate_vector_with_angle;
 use std::sync::Arc;
 use futures::FutureExt;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct RecursivePartDescription {
     pub kind: PartKind,
     pub attachments: Vec<Option<RecursivePartDescription>>,
@@ -131,7 +131,7 @@ pub fn spawn_beamout_request(beamout_token: Option<String>, beamout_layout: Recu
     } 
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct BeaminResponse {
     pub is_admin: bool,
     pub beamout_token: String,

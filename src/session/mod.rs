@@ -13,6 +13,7 @@ use std::ops::{Deref, DerefMut};
 use crate::beamout::{RecursivePartDescription, BeaminResponse, beamin_request, spawn_beamout_request};
 use crate::ApiDat;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::codec::*;
 
@@ -20,7 +21,7 @@ pub mod websocket;
 use websocket::*;
 
 pub enum ToGameEvent {
-    NewPlayer { id: u16, name: String, parts: RecursivePartDescription },
+    NewPlayer { id: u16, name: String, parts: RecursivePartDescription, beamout_token: Option<String> },
     PlayerMessage { id: u16, msg: ToServerMsg },
     PlayerQuit { id: u16 },
     AdminCommand { id: u16, command: String }
@@ -38,8 +39,14 @@ pub enum ToSerializerEvent {
     DeleteWriter (u16),
 }
 
+pub struct WorldUpdatePartMove {
+    pub id: u16,
+    pub x: f32,
+    pub y: f32,
+    pub rot_sin: f32,
+    pub rot_cos: f32,
+}
 pub struct WorldUpdatePlayerUpdate { pub id: u16, pub core_x: f32, pub core_y: f32, pub parts: Vec<WorldUpdatePartMove> }
-pub struct WorldUpdatePartMove { pub id: u16, pub x: f32, pub y: f32, pub rot_sin: f32, pub rot_cos: f32 }
 
 /*enum Event {
     NewSocket { socket: TcpStream },
@@ -63,25 +70,6 @@ impl Future for GuarenteeOnePoll {
         }
     }
 }
-
-//pub enum SessionDInit { InitPloz (TcpListener, async_std::sync::Sender<InboundEvent>, async_std::sync::Receiver<Vec<OutboundEvent>>, Option<Arc<ApiDat>>), IntermediateState, Inited(Pin<Box<dyn Future<Output = ()>>>) }
-//unsafe impl Send for SessionDInit {}
-/*impl Future for SessionDInit {
-    type Output = ();
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.deref_mut() {
-            SessionDInit::Inited(sessiond) => sessiond.as_mut().poll(cx),
-            SessionDInit::InitPloz(listener, inbound, outbound, api) => {
-                if let SessionDInit::InitPloz(listener, inbound, outbound, api) = std::mem::replace(self.deref_mut(), SessionDInit::IntermediateState) {
-                    *self = SessionDInit::Inited(sessiond(listener, inbound, outbound, api).boxed_local());
-                    cx.waker().wake_by_ref();
-                    Poll::Pending
-                } else { panic!(); }
-            },
-            SessionDInit::IntermediateState => panic!()
-        }
-    }
-}*/
 
 pub async fn incoming_connection_acceptor(listener: TcpListener, to_game: Sender<ToGameEvent>, to_serializer: Sender<Vec<ToSerializerEvent>>, api: Option<Arc<ApiDat>>) {
     println!("Hello from incomming connection acceptor");
@@ -132,7 +120,7 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
     is_admin = true; //remove this
     let layout = layout.unwrap_or( RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() } );                                                                                                                                                        
 
-    to_game.send(ToGameEvent::NewPlayer { id, name: name.clone(), parts: layout }).await;
+    to_game.send(ToGameEvent::NewPlayer { id, name: name.clone(), parts: layout, beamout_token }).await;
     let (to_writer, from_serializer) = channel::<Vec<OutboundWsMessage>>(50);
     async_std::task::Builder::new()
         .name(format!("outbound_${}", id))
@@ -186,8 +174,11 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
                     writers.insert(id, (to_writer, Vec::new(), true));
                 },
                 ToSerializerEvent::DeleteWriter(id) => {
-                    writers.remove(&id);
-                    to_game.send(ToGameEvent::PlayerQuit { id }).await;
+                    if let Some((writer, mut queue, _request_update)) = writers.remove(&id) {
+                        queue.push(websocket::close_message());
+                        writer.send(queue).await;
+                        to_game.send(ToGameEvent::PlayerQuit { id }).await;
+                    }
                 },
                 ToSerializerEvent::RequestUpdate(id) => {
                     if let Some((_to_writer, _queue, request_update)) = writers.get_mut(&id) {
@@ -300,319 +291,3 @@ async fn socket_writer(_id: u16, mut out: TcpWriter, mut from_serializer: Receiv
     }
     out.await; //Flush
 }
-
-/*async fn sessiond_old(listener: TcpListener, inbound: async_std::sync::Sender<InboundEvent>, outbound: async_std::sync::Receiver<Vec<OutboundEvent>>, api: Option<Arc<ApiDat>>) {
-    struct Pulser {
-        listener: TcpListener,
-        potential_sessions: MaybeFairPoller7573<PotentialSession>,
-        sessions: MaybeFairPoller7573<Session>,
-        outbound: async_std::sync::Receiver<Vec<OutboundEvent>>,
-    }
-    impl Stream for Pulser {
-        type Item = Event;
-        fn poll_next(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Option<Event>> {
-            match self.outbound.poll_next_unpin(ctx) {
-                Poll::Ready(Some(event)) => return Poll::Ready(Some(Event::OutboundEvent(event))),
-                Poll::Ready(None) => return Poll::Ready(None),
-                Poll::Pending => (),
-            };
-            match self.sessions.poll_next_unpin(ctx) {
-                Poll::Ready(Some((id, Some(msg)))) => return Poll::Ready(Some(Event::SessionMessage{ id, msg })),
-                Poll::Ready(Some((id, None))) => return Poll::Ready(Some(Event::SessionDisconnect{ id })),
-                Poll::Pending => (),
-                Poll::Ready(None) => panic!("I wrote this, how did we get here?")
-            };
-            match self.potential_sessions.poll_next_unpin(ctx) {
-                Poll::Ready(Some((id, Some(PotentialSessionEvent::Msg(msg))))) => return Poll::Ready(Some(Event::PotentialSessionMessage{ id, msg })),
-                Poll::Ready(Some((id, Some(PotentialSessionEvent::Beamin(Some(beamin)))))) => return Poll::Ready(Some(Event::PotentialSessionBeamin{ id, parts: beamin.layout, beamout_token: Some(beamin.beamout_token) })),
-                Poll::Ready(Some((id, Some(PotentialSessionEvent::Beamin(None))))) => return Poll::Ready(Some(Event::PotentialSessionBeamin{ id, parts: None, beamout_token: None })),
-                Poll::Ready(Some((id, None))) => return Poll::Ready(Some(Event::PotentialSessionDisconnect{ id })),
-                Poll::Pending => (),
-                Poll::Ready(None) => panic!("I wrote this, how did we get here?")
-            };
-            unsafe {
-                match Pin::new_unchecked(&mut self.listener.accept()).poll(ctx) {
-                    Poll::Ready(Ok((socket, _addr))) => return Poll::Ready(Some(Event::NewSocket{ socket })),
-                    Poll::Ready(Err(err)) => panic!("IO Error or something idk\n{:?}", err),
-                    Poll::Pending => (),
-                };
-            }
-            Poll::Pending
-        }
-    }
-
-    let mut pulser = Pulser {
-        potential_sessions: MaybeFairPoller7573( BTreeMap::new(), 0 ),
-        sessions: MaybeFairPoller7573( BTreeMap::new(), 0 ),
-        listener, outbound,
-    };
-    let mut next_session_id: u16 = 0;
-    let mut serialization_vec: Vec<u8> = Vec::with_capacity(2048);
-    while let Some(event) = pulser.next().await {
-        match event {
-            Event::OutboundEvent(events) => {
-                for event in events {
-                    match event {
-                        OutboundEvent::Message(id, msg) => {
-                            if let Some(session) = pulser.sessions.0.get_mut(&id) {
-                                msg.serialize(&mut serialization_vec);
-                                session.socket.queue_send(Message::Binary(serialization_vec.clone()));
-                                serialization_vec.clear();
-                            }
-                        },
-                        OutboundEvent::Broadcast(msg) => {
-                            msg.serialize(&mut serialization_vec);
-                            for session in pulser.sessions.0.values_mut() {
-                                session.socket.queue_send(Message::Binary(serialization_vec.clone()));
-                            }
-                            serialization_vec.clear();
-                        },
-                        OutboundEvent::SessionBad(id) => {
-                            pulser.sessions.0.remove(&id);
-                            inbound.send(InboundEvent::PlayerQuit{ id }).await;
-                        },
-                        OutboundEvent::WorldUpdate(player_movements, free_part_movements) => {
-                            for player in &player_movements {
-                                if let Some(session) = pulser.sessions.0.get_mut(&player.id) {
-                                    session.player_x = player.core_x;
-                                    session.player_y = player.core_y;
-                                }
-                            }
-                            for player in &player_movements {
-                                ToClientMsg::MessagePack { count: player.parts.len() as u16 }.serialize(&mut serialization_vec);
-                                for part in &player.parts {
-                                    ToClientMsg::MovePart{
-                                        id: part.id,
-                                        x: part.x, y: part.y,
-                                        rotation_i: part.rot_sin,
-                                        rotation_n: part.rot_cos,
-                                    }.serialize(&mut serialization_vec);
-                                }
-                            }
-                            /*for part_moved in part_movements {
-                                for session in pulser.sessions.0.values_mut() {
-                                    session.socket.queue_send(Message::Binary(serialization_vec.clone()));
-                                }
-                                serialization_vec.clear();
-                            }*/
-                        },
-                        OutboundEvent::BeamOutPlayer(id, beamout_layout) => {
-                            if let Some(session) = pulser.sessions.0.remove(&id) {
-                                let beamout_token = session.beamout_token.clone();
-                                async_std::task::spawn(async {
-                                    let mut socket = session.socket.socket;
-                                    socket.flush().await; 
-                                });
-
-                                spawn_beamout_request(beamout_token, beamout_layout, api.clone());
-                            } 
-                        },
-                    };
-                };
-            }
-
-            Event::NewSocket{ socket } => {
-                let my_id = next_session_id;
-                next_session_id += 1;
-                pulser.potential_sessions.0.insert(my_id, PotentialSession::AcceptingWebSocket(async_tungstenite::accept_async(socket).boxed_local()));
-            },
-            Event::PotentialSessionMessage{ id, msg } => {
-                if let Ok(msg) = ToServerMsg::deserialize(msg.as_ref(), &mut 0) {
-                    match msg {
-                        ToServerMsg::Handshake{ session, client, name } => {
-                            let beamin = beamin_request(session.clone(), api.clone()).boxed();
-                            if let Some(PotentialSession::AwaitingHandshake(socket)) = pulser.potential_sessions.0.remove(&id) {
-                                pulser.potential_sessions.0.insert(id, PotentialSession::AwaitingBeamin(socket, beamin, session, name));
-                            }
-                        },
-                        _ => { pulser.potential_sessions.0.remove(&id); }
-                    }
-                } else { pulser.potential_sessions.0.remove(&id); }
-            },
-            Event::PotentialSessionBeamin{ id, parts, beamout_token } => {
-                if let Some(PotentialSession::AwaitingBeamin(socket, _beamin_future, _session, mut name)) = pulser.potential_sessions.0.remove(&id) {
-                    name = String::from(name.trim());
-                    if name.is_empty() { name = String::from("Unnamed") };
-                    pulser.sessions.0.insert(id, Session{ socket, beamout_token, name: name.clone(), player_x: 0.0, player_y: 0.0 });
-                    inbound.send(InboundEvent::NewPlayer{ id, name, parts: parts.unwrap_or(RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() })}).await;
-                }
-            },
-            Event::PotentialSessionDisconnect{ id } => { pulser.potential_sessions.0.remove(&id); },
-            Event::SessionMessage{ id, msg } => {
-                match ToServerMsg::deserialize(msg.as_ref(), &mut 0) {
-                    Ok(ToServerMsg::SendChatMessage{ msg }) => {
-                        ToClientMsg::ChatMessage{ username: pulser.sessions.0.get(&id).unwrap().name.clone(), msg, color: String::from("#dd55ff") }.serialize(&mut serialization_vec);
-                        for (_id, session) in &mut pulser.sessions.0 {
-                            session.socket.queue_send(Message::Binary(serialization_vec.clone()));
-                        };
-                        serialization_vec.clear();
-                    },
-                    Ok(msg) => { inbound.send(InboundEvent::PlayerMessage{ id, msg }).await; }
-                    Err(_) => {
-                        pulser.sessions.0.remove(&id);
-                        inbound.send(InboundEvent::PlayerQuit{ id }).await;
-                    }
-                };
-            },
-            Event::SessionDisconnect{ id } => {
-                pulser.sessions.0.remove(&id);
-                inbound.send(InboundEvent::PlayerQuit{ id }).await;
-            }
-        }
-    };
-
-    println!("Sessiond stopped");
-}
-
-struct MaybeFairPoller7573<T: Stream + Unpin> ( BTreeMap<u16, T>, usize );
-impl<T> Stream for MaybeFairPoller7573<T> where T: Stream + Unpin {
-    type Item = (u16, Option<T::Item>);
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let skip = self.1;
-        for (i, (id, thing)) in self.0.iter_mut().enumerate().skip(skip) {
-            if let Poll::Ready(poll) = thing.poll_next_unpin(cx) {
-                let id = *id;
-                self.1 = i;
-                return Poll::Ready(Some((id, poll)));
-            }
-        }
-        for (i, (id, thing)) in self.0.iter_mut().enumerate() {
-            if let Poll::Ready(poll) = thing.poll_next_unpin(cx) {
-                let id = *id;
-                self.1 = i;
-                return Poll::Ready(Some((id, poll)));
-            }
-        }
-        Poll::Pending
-    }
-}
-
-type BeaminRequestType = Pin<Box<dyn Future<Output = Option<BeaminResponse>>>>;
-enum PotentialSession {
-    AcceptingWebSocket(Pin<Box<dyn Future<Output = Result<WebSocketStream<TcpStream>, async_tungstenite::tungstenite::Error>>>>),
-    AwaitingHandshake(MyWebSocket),
-    AwaitingBeamin(MyWebSocket, BeaminRequestType, Option<String>, String),
-}
-impl PotentialSession {
-    pub fn new(socket: TcpStream) -> PotentialSession {
-        let future = async_tungstenite::accept_async(socket);
-        let pinbox;
-        unsafe { pinbox = Pin::new_unchecked(Box::new(future)); }
-        PotentialSession::AcceptingWebSocket(pinbox)
-    }
-}
-enum PotentialSessionEvent {
-    Msg(Vec<u8>),
-    Beamin(Option<BeaminResponse>),
-}
-impl Stream for PotentialSession {
-    type Item = PotentialSessionEvent;
-    fn poll_next(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Option<PotentialSessionEvent>> {
-        match self.deref_mut() {
-            PotentialSession::AcceptingWebSocket(future) => {
-                if let Poll::Ready(result) = future.as_mut().poll(ctx) {
-                    if let Ok(stream) = result {
-                        let socket: MyWebSocket = stream.into();
-                        println!("Accepted websocket");
-                        std::mem::replace(self.get_mut(), PotentialSession::AwaitingHandshake(socket));
-                        Poll::Pending
-                    } else {
-                        Poll::Ready(None)
-                    }
-                } else { Poll::Pending }
-            },
-            PotentialSession::AwaitingHandshake(stream) => stream.poll_next_unpin(ctx).map(|dat| dat.map(|dat| PotentialSessionEvent::Msg(dat))),
-            PotentialSession::AwaitingBeamin(stream, beamin_request, _session, _name) => {
-                if let Poll::Ready(dat) = stream.poll_next_unpin(ctx) {
-                    Poll::Ready(dat.map(|dat| PotentialSessionEvent::Msg(dat)))
-                } else if let Poll::Ready(beamin) = beamin_request.as_mut().poll(ctx) {
-                    Poll::Ready(Some(PotentialSessionEvent::Beamin(beamin)))
-                } else { Poll::Pending }
-            },
-        }
-    }
-}
-
-pub struct Session { socket: MyWebSocket, player_x: f32, player_y: f32, beamout_token: Option<String>, name: String }
-impl Stream for Session {
-    type Item = Vec<u8>;
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        ctx: &mut std::task::Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
-        self.socket.poll_next_unpin(ctx)
-    }
-}
-pub struct MyWebSocket {
-    socket: WebSocketStream<TcpStream>
-}
-impl Stream for MyWebSocket {
-    type Item = Vec<u8>;
-    fn poll_next(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Option<Vec<u8>>> {
-        //Flush
-        Pin::new(&mut self.socket).poll_flush(ctx);
-        //Read
-        match self.socket.poll_next_unpin(ctx) {
-            Poll::Ready(Some(Ok(Message::Binary(dat)))) => Poll::Ready(Some(dat)),
-            Poll::Ready(Some(Ok(Message::Ping(_)))) => Poll::Pending,
-            Poll::Pending => Poll::Pending,
-            _ => Poll::Ready(None)
-        }
-    }
-}
-impl From<WebSocketStream<TcpStream>> for MyWebSocket {
-    fn from(socket: WebSocketStream<TcpStream>) -> MyWebSocket { MyWebSocket { socket } }
-}
-impl MyWebSocket {
-    pub fn queue_send(&mut self, message: Message) {
-        match self.socket.start_send_unpin(message) {
-            Err(WsError::SendQueueFull(msg)) => panic!("Send queue full. Implement own queue and start using poll_ready. Msg: {}", msg),
-            _ => ()
-        };
-    }
-}*/
-
-// struct FairPoller7573<T: Stream + Unpin> {
-//     stuff: Vec<T>,
-//     indexi: BTreeMap<u16, usize>,
-//     last_poll_index: usize,
-//     next_id: u16
-// }
-// impl<T> FairPoller7573<T> where T: Stream + Unpin {
-//     pub fn new() -> Self {
-//         FairPoller7573 {
-//             stuff: Vec::new(),
-//             indexi: BTreeMap::new(),
-//             last_poll_index: 0,
-//             next_id: 0,
-//         }
-//     }
-//     pub fn get(&self, id: u16) -> Option<&T> {
-//         unsafe { self.indexi.get(&id).map(|index| self.stuff.get_unchecked(*index) ) }
-//     }
-//     pub fn get_mut(&mut self, id: u16) -> Option<&mut T> {
-//         unsafe { self.indexi.get(&id).map(|index| self.stuff.get_unchecked_mut(*index) ) }
-//     }
-//     pub fn insert(&mut self, thing: T) -> u16 {
-//         let my_id = self.next_id;
-//         self.next_id += 1;
-//         self.indexi.insert(my_id, self.stuff.len());
-//         self.stuff.push(thing);
-//         my_id
-//     }
-//     pub fn remove(&mut self, id: u16) -> Option<T> {
-//         if let Some(index) = self.indexi.remove(&id) {
-//             let thing = self.stuff.remove(index);
-//             for other_index in self.indexi.values_mut().skip(index) {
-//                 *other_index -= 1;
-//             };
-//             Some(thing)
-//         } else { None }
-//     }
-// }
-// impl<T> Stream for FairPoller7573<T> where T: Stream + Unpin {
-//     type Item = T::Item;
-//     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        
-//     }
-// }

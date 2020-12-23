@@ -358,3 +358,9 @@ pub fn pong_message() -> OutboundWsMessage {
         0b00000000,
     ]) )
 }
+pub fn close_message() -> OutboundWsMessage {
+    OutboundWsMessage ( Arc::new(vec! [
+        0b10001000,
+        0b00000000,
+    ]) )
+}

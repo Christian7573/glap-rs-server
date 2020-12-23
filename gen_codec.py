@@ -148,6 +148,7 @@ ToClientMsg.messages.append(MessagePack)
 HandshakeAccepted = Message("HandshakeAccepted")
 HandshakeAccepted.fields.append(Field("id", TypeUShort))
 HandshakeAccepted.fields.append(Field("core_id", TypeUShort))
+HandshakeAccepted.fields.append(Field("can_beamout", TypeBoolean))
 ToClientMsg.messages.append(HandshakeAccepted)
 
 AddCelestialObject = Message("AddCelestialObject")
