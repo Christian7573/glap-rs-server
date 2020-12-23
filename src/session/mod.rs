@@ -103,7 +103,6 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
     let (session, name) = if let ToServerMsg::Handshake{ session, client, name} = first_msg { (session, name) }
     else { return Err(()) };
     let beamin_data = beamin_request(session.clone(), api.clone()).await;
-    println!("{:?}", beamin_data);
 
     let layout: Option<RecursivePartDescription>;
     let is_admin: bool;
