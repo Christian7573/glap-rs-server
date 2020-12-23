@@ -337,7 +337,7 @@ async fn main() {
                         }
                     }
                     outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage{ username: String::from("Server"), msg: player.name.clone() + " left the game", color: String::from("#e270ff") }));
-                } else { panic!("RE Player Quit Error"); }
+                } 
             },
             
             Event::InboundEvent(NewPlayer{ id, name, parts, beamout_token }) => { 
@@ -398,7 +398,7 @@ async fn main() {
                 }
                 
                 //Graduate to spawned player
-                let mut meta = PlayerMeta::new(name.clone());
+                let mut meta = PlayerMeta::new(name.clone(), beamout_token);
                 meta.max_power = max_power;
                 meta.power_regen_per_5_ticks = power_regen;
                 meta.power = meta.max_power;
