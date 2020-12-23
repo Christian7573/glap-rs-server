@@ -199,7 +199,7 @@ impl ToServerMsg {
 
 pub enum ToClientMsg {
 	MessagePack { count: u16, },
-	HandshakeAccepted { id: u16, core_id: u16, },
+	HandshakeAccepted { id: u16, core_id: u16, can_beamout: bool, },
 	AddCelestialObject { name: String, display_name: String, radius: f32, id: u16, position: (f32,f32), },
 	AddPart { id: u16, kind: PartKind, },
 	MovePart { id: u16, x: f32, y: f32, rotation_n: f32, rotation_i: f32, },
@@ -220,10 +220,11 @@ impl ToClientMsg {
 				out.push(0);
 				type_u16_serialize(out, count);
 			},
-			Self::HandshakeAccepted { id, core_id} => {
+			Self::HandshakeAccepted { id, core_id, can_beamout} => {
 				out.push(1);
 				type_u16_serialize(out, id);
 				type_u16_serialize(out, core_id);
+				type_bool_serialize(out, can_beamout);
 			},
 			Self::AddCelestialObject { name, display_name, radius, id, position} => {
 				out.push(2);
@@ -304,10 +305,11 @@ impl ToClientMsg {
 				Ok(ToClientMsg::MessagePack { count})
 			},
 			1 => {
-				let id; let core_id;
+				let id; let core_id; let can_beamout;
 				id = type_u16_deserialize(stream).await?;
 				core_id = type_u16_deserialize(stream).await?;
-				Ok(ToClientMsg::HandshakeAccepted { id, core_id})
+				can_beamout = type_bool_deserialize(stream).await?;
+				Ok(ToClientMsg::HandshakeAccepted { id, core_id, can_beamout})
 			},
 			2 => {
 				let name; let display_name; let radius; let id; let position;
