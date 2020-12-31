@@ -29,7 +29,7 @@ pub enum ToSerializerEvent {
     Message (u16, ToClientMsg),
     MulticastMessage (Vec<u16>, ToClientMsg),
     Broadcast (ToClientMsg),
-    WorldUpdate (BTreeMap<u16, ((f32,f32), Vec<WorldUpdatePartMove>, ToClientMsg)>, Vec<WorldUpdatePartMove>),
+    WorldUpdate (BTreeMap<u16, ((f32,f32), (f32, f32), Vec<WorldUpdatePartMove>, ToClientMsg)>, Vec<WorldUpdatePartMove>),
 
     NewWriter (u16, Sender<Vec<OutboundWsMessage>>),
     RequestUpdate (u16),
@@ -201,9 +201,10 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
                     }
                 },
                 ToSerializerEvent::WorldUpdate(players, free_parts) => {
-                    for (id, ((x, y), parts, post_simulation)) in &players {
+                    for (id, ((x, y), (vel_x, vel_y), parts, post_simulation)) in &players {
                         let mut msg = Vec::new();
-                        ToClientMsg::MessagePack { count: parts.len() as u16 }.serialize(&mut msg);
+                        ToClientMsg::MessagePack { count: parts.len() as u16 + 1 }.serialize(&mut msg);
+                        ToClientMsg::UpdatePlayerVelocity { id: *id, vel_x: *vel_x, vel_y: *vel_y }.serialize(&mut msg);
                         for part in parts {
                             ToClientMsg::MovePart {
                                 id: part.id, x: part.x, y: part.y,
@@ -213,7 +214,7 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
                         let msg = OutboundWsMessage::from(&msg);
                         for (id, (_to_writer, queue, request_update)) in &mut writers {
                             if *request_update {
-                                if let Some(((player_x, player_y), _parts, _post_simulation)) = players.get(&id) {
+                                if let Some(((player_x, player_y), (_vel_x, _vel_y), _parts, _post_simulation)) = players.get(&id) {
                                     if (player_x - x).abs() <= 200.0 && (player_y - y).abs() <= 200.0 {
                                         queue.push(msg.clone());
                                     }
