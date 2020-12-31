@@ -163,7 +163,7 @@ impl PartKind {
     }
     pub fn power_regen_per_5_ticks(&self) -> u32 {
         match self {
-            PartKind::SolarPanel => 1,
+            PartKind::SolarPanel => 2,
             _ => 0,
         }
     }
