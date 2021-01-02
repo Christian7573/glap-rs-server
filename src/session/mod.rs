@@ -154,7 +154,7 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
         for event in events {
             match event {
                 ToSerializerEvent::NewWriter(id, to_writer) => {
-                    writers.insert(id, (to_writer, Vec::new(), true));
+                    writers.insert(id, (to_writer, Vec::new(), false));
                 },
                 ToSerializerEvent::DeleteWriter(id) => {
                     if let Some((writer, mut queue, _request_update)) = writers.remove(&id) {
