@@ -117,7 +117,6 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
         is_admin = false;
         beamout_token = None;
     }
-    is_admin = true; //remove this
     let layout = layout.unwrap_or( RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() } );                                                                                                                                                        
 
     to_game.send(ToGameEvent::NewPlayer { id, name: name.clone(), parts: layout, beamout_token }).await;
