@@ -197,6 +197,13 @@ UpdatePlayerMeta.fields.append(Field("thrust_counter_clockwise", TypeBoolean))
 UpdatePlayerMeta.fields.append(Field("grabed_part", OptionType(TypeUShort)))
 ToClientMsg.messages.append(UpdatePlayerMeta)
 
+UpdatePlayerVelocity = Message("UpdatePlayerVelocity")
+UpdatePlayerVelocity.fields.append(Field("id", TypeUShort))
+UpdatePlayerVelocity.fields.append(Field("vel_x", TypeFloat))
+UpdatePlayerVelocity.fields.append(Field("vel_y", TypeFloat))
+#UpdatePlayerVelocity.fields.append(Field("vel_rot", TypeFloat))
+ToClientMsg.messages.append(UpdatePlayerVelocity)
+
 RemovePlayer = Message("RemovePlayer")
 RemovePlayer.fields.append(Field("id", TypeUShort))
 ToClientMsg.messages.append(RemovePlayer)

@@ -289,6 +289,7 @@ async fn main() {
                         let mut out = BTreeMap::new();
                         for (id, (player, core)) in &players {
                             let mut parts = Vec::new();
+                            let vel = simulation.world.get_rigid(MyHandle::Part(core.body_id)).unwrap().velocity();
                             fn recursive_part_move(parts: &mut Vec<session::WorldUpdatePartMove>, part: &Part, simulation: &world::Simulation) {
                                 let body = simulation.world.get_rigid(MyHandle::Part(part.body_id)).unwrap();
                                 let position = body.position();
@@ -302,7 +303,7 @@ async fn main() {
                                 };
                             }
                             recursive_part_move(&mut parts, core, &simulation);
-                            out.insert(*id, ((parts[0].x, parts[0].y), parts, ToClientMsg::PostSimulationTick{ your_power: player.power }));
+                            out.insert(*id, ((parts[0].x, parts[0].y), (vel.linear.x, vel.linear.y), parts, ToClientMsg::PostSimulationTick{ your_power: player.power }));
                         }
                         out
                     },

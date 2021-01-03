@@ -156,7 +156,7 @@ impl Simulation {
             Point::new(attachment.x - offset.0, attachment.y - offset.1),
             Point::new(-0.2, 0.0)
         );
-        const MAX_TORQUE: f32 = 100.0;
+        const MAX_TORQUE: f32 = 200.0;
         const MAX_FORCE: f32 = MAX_TORQUE * 3.0;
         constraint1.set_break_torque(MAX_TORQUE);
         constraint1.set_break_force(MAX_FORCE);

@@ -207,6 +207,7 @@ pub enum ToClientMsg {
 	RemovePart { id: u16, },
 	AddPlayer { id: u16, core_id: u16, name: String, },
 	UpdatePlayerMeta { id: u16, thrust_forward: bool, thrust_backward: bool, thrust_clockwise: bool, thrust_counter_clockwise: bool, grabed_part: Option<u16>, },
+	UpdatePlayerVelocity { id: u16, vel_x: f32, vel_y: f32, },
 	RemovePlayer { id: u16, },
 	PostSimulationTick { your_power: u32, },
 	UpdateMyMeta { max_power: u32, can_beamout: bool, },
@@ -272,25 +273,31 @@ impl ToClientMsg {
 				type_bool_serialize(out, thrust_counter_clockwise);
 				if let Some(tmp) = grabed_part {out.push(1); type_u16_serialize(out, tmp);} else {out.push(0);}
 			},
-			Self::RemovePlayer { id} => {
+			Self::UpdatePlayerVelocity { id, vel_x, vel_y} => {
 				out.push(9);
+				type_u16_serialize(out, id);
+				type_float_serialize(out, vel_x);
+				type_float_serialize(out, vel_y);
+			},
+			Self::RemovePlayer { id} => {
+				out.push(10);
 				type_u16_serialize(out, id);
 			},
 			Self::PostSimulationTick { your_power} => {
-				out.push(10);
+				out.push(11);
 				type_u32_serialize(out, your_power);
 			},
 			Self::UpdateMyMeta { max_power, can_beamout} => {
-				out.push(11);
+				out.push(12);
 				type_u32_serialize(out, max_power);
 				type_bool_serialize(out, can_beamout);
 			},
 			Self::BeamOutAnimation { player_id} => {
-				out.push(12);
+				out.push(13);
 				type_u16_serialize(out, player_id);
 			},
 			Self::ChatMessage { username, msg, color} => {
-				out.push(13);
+				out.push(14);
 				type_string_serialize(out, username);
 				type_string_serialize(out, msg);
 				type_string_serialize(out, color);
@@ -365,27 +372,34 @@ impl ToClientMsg {
 				Ok(ToClientMsg::UpdatePlayerMeta { id, thrust_forward, thrust_backward, thrust_clockwise, thrust_counter_clockwise, grabed_part})
 			},
 			9 => {
+				let id; let vel_x; let vel_y;
+				id = type_u16_deserialize(stream).await?;
+				vel_x = type_float_deserialize(stream).await?;
+				vel_y = type_float_deserialize(stream).await?;
+				Ok(ToClientMsg::UpdatePlayerVelocity { id, vel_x, vel_y})
+			},
+			10 => {
 				let id;
 				id = type_u16_deserialize(stream).await?;
 				Ok(ToClientMsg::RemovePlayer { id})
 			},
-			10 => {
+			11 => {
 				let your_power;
 				your_power = type_u32_deserialize(stream).await?;
 				Ok(ToClientMsg::PostSimulationTick { your_power})
 			},
-			11 => {
+			12 => {
 				let max_power; let can_beamout;
 				max_power = type_u32_deserialize(stream).await?;
 				can_beamout = type_bool_deserialize(stream).await?;
 				Ok(ToClientMsg::UpdateMyMeta { max_power, can_beamout})
 			},
-			12 => {
+			13 => {
 				let player_id;
 				player_id = type_u16_deserialize(stream).await?;
 				Ok(ToClientMsg::BeamOutAnimation { player_id})
 			},
-			13 => {
+			14 => {
 				let username; let msg; let color;
 				username = type_string_deserialize(stream).await?;
 				msg = type_string_deserialize(stream).await?;
