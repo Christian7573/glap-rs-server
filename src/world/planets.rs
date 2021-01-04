@@ -5,6 +5,7 @@ use ncollide2d::shape::{Ball, ShapeHandle};
 use nalgebra::Vector2;
 use nphysics2d::material::{BasicMaterial, MaterialHandle};
 use rand::Rng;
+use super::parts::PartKind;
 
 pub struct Planets {
     pub earth: CelestialObject,
@@ -161,7 +162,7 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: None,
+                cargo_upgrade: Some(super::parts::PartKind::Thruster),
                 can_beamout: false,
             }
         };
@@ -189,7 +190,7 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: None,
+                cargo_upgrade: Some(PartKind::LandingWheel),
                 can_beamout: false,
             }
         };
@@ -217,7 +218,7 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: None,
+                cargo_upgrade: Some(PartKind::SuperThruster),
                 can_beamout: false,
             }
         };
@@ -245,7 +246,7 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: None,
+                cargo_upgrade: Some(HubThruster),
                 can_beamout: false,
             }
         };
@@ -273,7 +274,7 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: None,
+                cargo_upgrade: Some(PartKind::EcoThruster),
                 can_beamout: false,
             }
         };
@@ -301,7 +302,7 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: None,
+                cargo_upgrade: Some(PartKind::PowerHub),
                 can_beamout: false,
             }
         };
