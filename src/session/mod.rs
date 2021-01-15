@@ -118,6 +118,7 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
         beamout_token = None;
     }
 
+    let layout = layout.unwrap_or( RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() } );                                   
     to_game.send(ToGameEvent::NewPlayer { id, name: name.clone(), parts: layout, beamout_token }).await;
     let (to_writer, from_serializer) = channel::<Vec<OutboundWsMessage>>(50);
     async_std::task::Builder::new()
