@@ -602,28 +602,33 @@ async fn main() {
                 let chunks: Vec<String> = command.split_whitespace().map(|s| s.to_string()).collect();
                 match chunks[0].as_str() {
                     "/teleport" => {
-                        let x: f32 = chunks[1].parse().unwrap();
-                        let y: f32 = chunks[2].parse().unwrap();
-                        if let Some((player_meta, core)) = players.get_mut(&id) {
-                            let core_pos = simulation.world.get_rigid(MyHandle::Part(core.body_id)).unwrap().position().translation;
-                            fn teleport(part: &world::parts::Part, simulation: &mut world::Simulation, x: f32, y: f32, core_x: f32, core_y: f32) {
-                                simulation.world.get_rigid_mut(MyHandle::Part(part.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(x, y), 0.0));
-                                for part in part.attachments.iter() {
-                                    if let Some((part, _, _)) = part {
-                                        let part_pos = simulation.world.get_rigid(MyHandle::Part(part.body_id)).unwrap().position().translation;
-                                        let offset_x = part_pos.x - core_x;
-                                        let offfset_y = part_pos.y - core_y;
-                                        teleport(part, simulation, x + offset_x, y + offfset_y, core_x, core_y);
+                        if(chunks.len() == 2) {
+                            let x: f32 = chunks[1].parse().unwrap();
+                            let y: f32 = chunks[2].parse().unwrap();
+                            if let Some((player_meta, core)) = players.get_mut(&id) {
+                                let core_pos = simulation.world.get_rigid(MyHandle::Part(core.body_id)).unwrap().position().translation;
+                                fn teleport(part: &world::parts::Part, simulation: &mut world::Simulation, x: f32, y: f32, core_x: f32, core_y: f32) {
+                                    simulation.world.get_rigid_mut(MyHandle::Part(part.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(x, y), 0.0));
+                                    for part in part.attachments.iter() {
+                                        if let Some((part, _, _)) = part {
+                                            let part_pos = simulation.world.get_rigid(MyHandle::Part(part.body_id)).unwrap().position().translation;
+                                            let offset_x = part_pos.x - core_x;
+                                            let offfset_y = part_pos.y - core_y;
+                                            teleport(part, simulation, x + offset_x, y + offfset_y, core_x, core_y);
+                                        }
                                     }
                                 }
+                                simulation.world.get_rigid_mut(MyHandle::Part(core.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(x, y), 0.0));
+                                teleport(core, &mut simulation, x, y, core_pos.x, core_pos.y);
+                                println!("Teleporting {} to: {} {}", player_meta.name, x, y);
                             }
-                            simulation.world.get_rigid_mut(MyHandle::Part(core.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(x, y), 0.0));
-                            teleport(core, &mut simulation, x, y, core_pos.x, core_pos.y);
-                            println!("Teleporting {} to: {} {}", player_meta.name, x, y);
                         }
                     },
 
-                    _ => println!("oh no: {}", chunks[0])
+                    _ => {
+                        to_serializer.send(vec! [ToSerializerEvent::Message(id, ToClientMsg::ChatMessage{ username: String::from("Server"), msg: String::from("You cannot use that command"), color: String::from("#FF0000") })]).await;
+                    }
+                    
                 }
             }
         }

@@ -142,6 +142,8 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
                                 _ => {
                                     if is_admin {
                                         to_game.send(ToGameEvent::AdminCommand { id, command: msg.clone() }).await;
+                                    } else {
+                                        to_serializer.send(vec! [ToSerializerEvent::Message(id, ToClientMsg::ChatMessage{ username: String::from("Server"), msg: String::from("You cannot use that command"), color: String::from("#FF0000") })]).await;
                                     }
                                 }
                             }
