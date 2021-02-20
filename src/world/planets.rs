@@ -5,6 +5,7 @@ use ncollide2d::shape::{Ball, ShapeHandle};
 use nalgebra::Vector2;
 use nphysics2d::material::{BasicMaterial, MaterialHandle};
 use rand::Rng;
+use super::parts::PartKind;
 
 pub struct Planets {
     pub earth: CelestialObject,
@@ -18,7 +19,8 @@ pub struct Planets {
     pub neptune: CelestialObject,
     pub venus: CelestialObject,
     pub uranus: CelestialObject,
-    pub sun: CelestialObject
+    pub sun: CelestialObject,
+    pub trade: CelestialObject,
 }
 impl Planets {
     pub fn new(colliders: &mut super::MyColliderSet, bodies: &mut super::World) -> Planets {
@@ -161,7 +163,7 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: None,
+                cargo_upgrade: Some(super::parts::PartKind::Thruster),
                 can_beamout: false,
             }
         };
@@ -189,7 +191,7 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: None,
+                cargo_upgrade: Some(PartKind::LandingWheel),
                 can_beamout: false,
             }
         };
@@ -217,7 +219,7 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: None,
+                cargo_upgrade: Some(PartKind::SuperThruster),
                 can_beamout: false,
             }
         };
@@ -245,7 +247,7 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: None,
+                cargo_upgrade: Some(PartKind::HubThruster),
                 can_beamout: false,
             }
         };
@@ -273,7 +275,7 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: None,
+                cargo_upgrade: Some(PartKind::EcoThruster),
                 can_beamout: false,
             }
         };
@@ -301,7 +303,7 @@ impl Planets {
                 radius: RADIUS,
                 body: body_handle,
                 id,
-                cargo_upgrade: None,
+                cargo_upgrade: Some(PartKind::PowerHub),
                 can_beamout: false,
             }
         };
@@ -334,13 +336,41 @@ impl Planets {
             }
         };
 
+        let trade = {
+            let body = RigidBodyDesc::new()
+                .translation(Vector2::new(earth_pos.x / earth_pos.magnitude() * -2500.0, earth_pos.y / earth_pos.magnitude() * -2500.0))
+                .gravity_enabled(false)
+                .status(BodyStatus::Static)
+                .mass(EARTH_MASS)
+                .build();
+            let body_handle = bodies.add_celestial_object(body);
+            const RADIUS: f32 = EARTH_SIZE * 0.75;
+            let shape = ShapeHandle::new(Ball::new(RADIUS));
+            let collider = ColliderDesc::new(shape)
+                .material(planet_material.clone())
+                .build(BodyPartHandle(body_handle, 0));
+            colliders.insert(collider);
+
+            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+
+            CelestialObject {
+                name: String::from("trade"),
+                display_name: String::from("Trade Planet"),
+                radius: RADIUS,
+                body: body_handle,
+                id,
+                cargo_upgrade: None,
+                can_beamout: true,
+            }
+        };
+
         Planets {
-            earth, moon, planet_material, mars, mercury, jupiter, pluto, saturn, neptune, venus, uranus, sun,
+            earth, moon, planet_material, mars, mercury, jupiter, pluto, saturn, neptune, venus, uranus, sun, trade,
         }
     }
 
-    pub fn celestial_objects<'a>(&'a self) -> [&'a CelestialObject; 11] {
-        [&self.earth, &self.moon, &self.mars, &self.mercury, &self.jupiter, &self.pluto, &self.saturn, &self.neptune, &self.venus, &self.uranus, &self.sun]
+    pub fn celestial_objects<'a>(&'a self) -> [&'a CelestialObject; 12] {
+        [&self.earth, &self.moon, &self.mars, &self.mercury, &self.jupiter, &self.pluto, &self.saturn, &self.neptune, &self.venus, &self.uranus, &self.sun, &self.trade]
     }
     pub fn get_celestial_object<'a>(&'a self, id: u16) -> Result<&'a CelestialObject, ()> {
         if id == self.earth.id { Ok(&self.earth) }
@@ -354,6 +384,7 @@ impl Planets {
         else if id == self.venus.id { Ok(&self.venus) }
         else if id == self.uranus.id { Ok(&self.uranus) }
         else if id == self.sun.id { Ok(&self.sun) }
+        else if id == self.trade.id { Ok(&self.trade) }
         else { Err(()) }
     }
 }

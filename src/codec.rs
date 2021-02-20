@@ -75,11 +75,11 @@ async fn type_bool_deserialize<S: Stream<Item=u8>+Unpin>(stream: &mut S) -> Resu
 
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)] pub enum PartKind {
-	Core, Cargo, LandingThruster, Hub, SolarPanel
+	Core, Cargo, LandingThruster, Hub, SolarPanel, EcoThruster, Thruster, SuperThruster, PowerHub, HubThruster, LandingWheel
 }
 impl PartKind {
 	pub fn val_of(&self) -> u8 { match self {
-			Self::Core => 0, Self::Cargo => 1, Self::LandingThruster => 2, Self::Hub => 3, Self::SolarPanel => 4
+			Self::Core => 0, Self::Cargo => 1, Self::LandingThruster => 2, Self::Hub => 3, Self::SolarPanel => 4, Self::EcoThruster => 5, Self::Thruster => 6, Self::SuperThruster => 7, Self::PowerHub => 8, Self::HubThruster => 9, Self::LandingWheel => 10
 		} }
 	pub fn serialize(&self, buf: &mut Vec<u8>) {
 		buf.push(self.val_of());
@@ -87,7 +87,7 @@ impl PartKind {
 	pub async fn deserialize<S: Stream<Item=u8>+Unpin>(stream: &mut S) -> Result<Self, ()> {
 		let me = stream.next().await.ok_or(())?;
 		match me {
-			0 => Ok(Self::Core), 1 => Ok(Self::Cargo), 2 => Ok(Self::LandingThruster), 3 => Ok(Self::Hub), 4 => Ok(Self::SolarPanel),
+			0 => Ok(Self::Core), 1 => Ok(Self::Cargo), 2 => Ok(Self::LandingThruster), 3 => Ok(Self::Hub), 4 => Ok(Self::SolarPanel), 5 => Ok(Self::EcoThruster), 6 => Ok(Self::Thruster), 7 => Ok(Self::SuperThruster), 8 => Ok(Self::PowerHub), 9 => Ok(Self::HubThruster), 10 => Ok(Self::LandingWheel),
 			_ => Err(())
 		}
 	}

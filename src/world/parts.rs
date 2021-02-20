@@ -101,7 +101,7 @@ pub use crate::codec::PartKind;
 impl PartKind {
     pub fn physics_components(&self, part_static: &PartStatic) -> (RigidBodyDesc<MyUnits>, ColliderDesc<MyUnits>) {
         match self {
-            PartKind::Core | PartKind::Hub | PartKind::Cargo | PartKind::LandingThruster | PartKind::SolarPanel => {
+            _ => {
                 (
                     RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(self.inertia()),
                     ColliderDesc::new(self.shape(part_static))
@@ -112,9 +112,9 @@ impl PartKind {
     }
     fn shape(&self, part_static: &PartStatic) -> ShapeHandle<MyUnits> {
         match self {
-            PartKind::Core | PartKind::Hub => part_static.unit_cuboid.clone(),
-            PartKind::Cargo | PartKind::LandingThruster => part_static.cargo_cuboid.clone(),
-            PartKind::SolarPanel => part_static.solar_panel_cuboid.clone(), 
+            PartKind::Core | PartKind::Hub | PartKind::PowerHub | PartKind::HubThruster => part_static.unit_cuboid.clone(),
+            PartKind::Cargo | PartKind::LandingThruster | PartKind::Thruster | PartKind::SuperThruster => part_static.cargo_cuboid.clone(),
+            PartKind::SolarPanel | PartKind::EcoThruster | PartKind::LandingWheel => part_static.solar_panel_cuboid.clone(), 
         }
     }
     fn thrust(&self) -> Option<ThrustDetails> {
@@ -122,7 +122,12 @@ impl PartKind {
             PartKind::Core => panic!("PartKind thrust called on core"),
             PartKind::Hub => None,
             PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 2, force: Force2::linear_at_point(Vector2::new(0.0, -5.0), &Point2::new(0.0, 1.0)) }),
-            PartKind::Cargo | PartKind::SolarPanel => None
+            PartKind::Cargo | PartKind::SolarPanel => None,
+            PartKind::Thruster => Some(ThrustDetails{ fuel_cost: 4, force: Force2::linear_at_point(Vector2::new(0.0, -9.0), &Point2::new(0.0, 1.0)) }),
+            PartKind::SuperThruster => Some(ThrustDetails { fuel_cost: 7, force: Force2::linear_at_point(Vector2::new(0.0, -13.5), &Point2::new(0.0, 1.0)) }),
+            PartKind::HubThruster => Some(ThrustDetails { fuel_cost: 4, force: Force2::linear_at_point(Vector2::new(0.0, -6.0), &Point2::new(0.0, 1.0)) }),
+            PartKind::EcoThruster => Some(ThrustDetails { fuel_cost: 1, force: Force2::linear_at_point(Vector2::new(0.0, -3.5), &Point2::new(0.0, 1.0)) }),
+            PartKind::PowerHub | PartKind::LandingWheel => None,
         }
     }
     pub fn inertia(&self) -> Inertia2<MyUnits> {
@@ -132,6 +137,12 @@ impl PartKind {
             PartKind::LandingThruster => Inertia2::new(1.5, 1.5),
             PartKind::Hub => Inertia2::new(0.75, 0.75),
             PartKind::SolarPanel => Inertia2::new(0.4, 0.4),
+            PartKind::Thruster => Inertia2::new(1.6, 1.6),
+            PartKind::SuperThruster => Inertia2::new(1.8, 1.8),
+            PartKind::HubThruster => Inertia2::new(1.6, 1.6),
+            PartKind::EcoThruster => Inertia2::new(1.35, 1.35),
+            PartKind::PowerHub => Inertia2::new(1.1, 1.1),
+            PartKind::LandingWheel => Inertia2::new(0.75, 0.75),
         }
     }
     pub fn attachment_locations(&self) -> [Option<AttachmentPointDetails>; 4] {
@@ -142,13 +153,19 @@ impl PartKind {
                 Some(AttachmentPointDetails{ x: 0.0, y: -0.6, facing: AttachedPartFacing::Down, perpendicular: (-1.0, 0.0) }),
                 Some(AttachmentPointDetails{ x: 0.6, y: 0.0, facing: AttachedPartFacing::Left, perpendicular: (0.0, -1.0) }),
             ],
-            PartKind::Hub => [
+            PartKind::Hub | PartKind::PowerHub => [
                 None,
                 Some(AttachmentPointDetails{ x: 0.6, y: 0.5, facing: AttachedPartFacing::Left, perpendicular: (0.0, -1.0) }),
                 Some(AttachmentPointDetails{ x: 0.0, y: 1.1, facing: AttachedPartFacing::Up, perpendicular: (1.0, 0.0) }),
                 Some(AttachmentPointDetails{ x: -0.6, y: 0.5, facing: AttachedPartFacing::Right, perpendicular: (0.0, 1.0) }),
             ],
-            PartKind::Cargo | PartKind::LandingThruster | PartKind::SolarPanel => [ None, None, None, None ]
+            PartKind::Cargo | PartKind::LandingThruster | PartKind::SolarPanel | PartKind::Thruster | PartKind::SuperThruster | PartKind::EcoThruster | PartKind::LandingWheel => [ None, None, None, None ],
+            PartKind::HubThruster => [
+                None,
+                Some(AttachmentPointDetails{ x: 0.6, y: 0.5, facing: AttachedPartFacing::Left, perpendicular: (0.0, -1.0) }),
+                None, //Some(AttachmentPointDetails{ x: 0.0, y: 1.1, facing: AttachedPartFacing::Up, perpendicular: (1.0, 0.0) }),
+                Some(AttachmentPointDetails{ x: -0.6, y: 0.5, facing: AttachedPartFacing::Right, perpendicular: (0.0, 1.0) }),
+            ],
         }
     }
     pub fn power_storage(&self) -> u32 {
@@ -156,9 +173,13 @@ impl PartKind {
         match self {
             PartKind::Core => CORE_MAX_POWER,
             PartKind::Cargo => CORE_MAX_POWER / 10,
-            PartKind::LandingThruster => CORE_MAX_POWER / 5,
+            PartKind::LandingThruster | PartKind::HubThruster => CORE_MAX_POWER / 5,
             PartKind::Hub => CORE_MAX_POWER / 3,
             PartKind::SolarPanel => 0,
+            PartKind::Thruster | PartKind::SuperThruster => CORE_MAX_POWER / 4,
+            PartKind::EcoThruster => 0,
+            PartKind::PowerHub => CORE_MAX_POWER / 6 * 2,
+            PartKind::LandingWheel => 0,
         }
     }
     pub fn power_regen_per_5_ticks(&self) -> u32 {
