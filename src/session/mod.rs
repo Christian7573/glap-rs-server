@@ -23,7 +23,8 @@ use websocket::*;
 pub enum ToGameEvent {
     NewPlayer { id: u16, name: String, parts: RecursivePartDescription, beamout_token: Option<String> },
     PlayerMessage { id: u16, msg: ToServerMsg },
-    PlayerQuit { id: u16 }
+    PlayerQuit { id: u16 },
+    AdminCommand { id: u16, command: String }
 }
 pub enum ToSerializerEvent {
     Message (u16, ToClientMsg),
@@ -105,7 +106,7 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
     let beamin_data = beamin_request(session.clone(), api.clone()).await;
 
     let layout: Option<RecursivePartDescription>;
-    let is_admin: bool;
+    let mut is_admin: bool;
     let beamout_token: Option<String>;
     if let Some(beamin_data) = beamin_data {
         layout = beamin_data.layout;
@@ -116,8 +117,8 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
         is_admin = false;
         beamout_token = None;
     }
-    let layout = layout.unwrap_or( RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() } );                                                                                                                                                        
 
+    let layout = layout.unwrap_or( RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() } );                                   
     to_game.send(ToGameEvent::NewPlayer { id, name: name.clone(), parts: layout, beamout_token }).await;
     let (to_writer, from_serializer) = channel::<Vec<OutboundWsMessage>>(50);
     async_std::task::Builder::new()
@@ -131,7 +132,24 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
                 let msg = ToServerMsg::deserialize(&mut msg).await;
                 match msg {
                     Ok(ToServerMsg::SendChatMessage { msg }) => {
-                        to_serializer.send(vec! [ToSerializerEvent::Broadcast(ToClientMsg::ChatMessage{ username: name.clone(), msg, color: String::from("#dd55ff") })]).await;
+                        if msg.chars().nth(0).unwrap() == '/' {
+                            let chunks: Vec<String> = msg.split_whitespace().map(|s| s.to_string()).collect();
+                            match chunks[0].as_str() {
+                                "/shrug" => {
+                                    to_serializer.send(vec! [ToSerializerEvent::Broadcast(ToClientMsg::ChatMessage{ username: name.clone(), msg: String::from("¯\\_(ツ)_/¯"), color: String::from("#dd55ff") })]).await;
+                                },
+                                
+                                _ => {
+                                    if is_admin {
+                                        to_game.send(ToGameEvent::AdminCommand { id, command: msg.clone() }).await;
+                                    } else {
+                                        to_serializer.send(vec! [ToSerializerEvent::Message(id, ToClientMsg::ChatMessage{ username: String::from("Server"), msg: String::from("You cannot use that command"), color: String::from("#FF0000") })]).await;
+                                    }
+                                }
+                            }
+                        } else {
+                            to_serializer.send(vec! [ToSerializerEvent::Broadcast(ToClientMsg::ChatMessage{ username: name.clone(), msg, color: String::from("#dd55ff") })]).await;
+                        }
                     },
                     Ok(ToServerMsg::RequestUpdate) => { to_serializer.send(vec! [ToSerializerEvent::RequestUpdate(id)]).await; },
                     Ok(msg) => { to_game.send(ToGameEvent::PlayerMessage { id, msg }).await; },
