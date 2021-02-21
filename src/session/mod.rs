@@ -114,7 +114,7 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
         beamout_token = Some(beamin_data.beamout_token);
     } else {
         layout = None;
-        is_admin = true;
+        is_admin = false;
         beamout_token = None;
     }
 
