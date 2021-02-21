@@ -602,7 +602,7 @@ async fn main() {
                 let chunks: Vec<String> = command.split_whitespace().map(|s| s.to_string()).collect();
                 match chunks[0].as_str() {
                     "/teleport" => {
-                        if(chunks.len() == 2) {
+                        if(chunks.len() == 3) {
                             let x: f32 = chunks[1].parse().unwrap();
                             let y: f32 = chunks[2].parse().unwrap();
                             if let Some((player_meta, core)) = players.get_mut(&id) {
