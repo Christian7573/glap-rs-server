@@ -602,25 +602,27 @@ async fn main() {
                 let chunks: Vec<String> = command.split_whitespace().map(|s| s.to_string()).collect();
                 match chunks[0].as_str() {
                     "/teleport" => {
-                        if(chunks.len() == 2) {
-                            let x: f32 = chunks[1].parse().unwrap();
-                            let y: f32 = chunks[2].parse().unwrap();
-                            if let Some((player_meta, core)) = players.get_mut(&id) {
-                                let core_pos = simulation.world.get_rigid(MyHandle::Part(core.body_id)).unwrap().position().translation;
-                                fn teleport(part: &world::parts::Part, simulation: &mut world::Simulation, x: f32, y: f32, core_x: f32, core_y: f32) {
-                                    simulation.world.get_rigid_mut(MyHandle::Part(part.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(x, y), 0.0));
-                                    for part in part.attachments.iter() {
-                                        if let Some((part, _, _)) = part {
-                                            let part_pos = simulation.world.get_rigid(MyHandle::Part(part.body_id)).unwrap().position().translation;
-                                            let offset_x = part_pos.x - core_x;
-                                            let offfset_y = part_pos.y - core_y;
-                                            teleport(part, simulation, x + offset_x, y + offfset_y, core_x, core_y);
+                        if(chunks.len() == 3) {
+                            if(is_string_numeric(chunks[1].to_string()) && is_string_numeric(chunks[2].to_string())) {
+                                let x: f32 = chunks[1].parse().unwrap();
+                                let y: f32 = chunks[2].parse().unwrap();
+                                if let Some((player_meta, core)) = players.get_mut(&id) {
+                                    let core_pos = simulation.world.get_rigid(MyHandle::Part(core.body_id)).unwrap().position().translation;
+                                    fn teleport(part: &world::parts::Part, simulation: &mut world::Simulation, x: f32, y: f32, core_x: f32, core_y: f32) {
+                                        simulation.world.get_rigid_mut(MyHandle::Part(part.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(x, y), 0.0));
+                                        for part in part.attachments.iter() {
+                                            if let Some((part, _, _)) = part {
+                                                let part_pos = simulation.world.get_rigid(MyHandle::Part(part.body_id)).unwrap().position().translation;
+                                                let offset_x = part_pos.x - core_x;
+                                                let offfset_y = part_pos.y - core_y;
+                                                teleport(part, simulation, x + offset_x, y + offfset_y, core_x, core_y);
+                                            }
                                         }
                                     }
+                                    simulation.world.get_rigid_mut(MyHandle::Part(core.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(x, y), 0.0));
+                                    teleport(core, &mut simulation, x, y, core_pos.x, core_pos.y);
+                                    println!("Teleporting {} to: {} {}", player_meta.name, x, y);
                                 }
-                                simulation.world.get_rigid_mut(MyHandle::Part(core.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(x, y), 0.0));
-                                teleport(core, &mut simulation, x, y, core_pos.x, core_pos.y);
-                                println!("Teleporting {} to: {} {}", player_meta.name, x, y);
                             }
                         }
                     },
@@ -658,6 +660,14 @@ fn recursive_broken_check(part: &mut Part, simulation: &mut world::Simulation, f
     }
 }
 
+fn is_string_numeric(str: String) -> bool {
+    for c in str.chars() {
+        if !c.is_numeric() {
+            return false;
+        }
+    }
+    return true;
+}
 
 fn recursive_detatch(part: &mut Part, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation, out: &mut Vec<ToSerializerEvent>, max_power_lost: &mut u32, regen_lost: &mut u32) {
     for slot in part.attachments.iter_mut() {
@@ -774,3 +784,4 @@ impl PlayerMeta {
     } }
 }
 pub struct PartOfPlayer (u16);
+
