@@ -13,13 +13,15 @@ pub struct PartStatic {
     cargo_cuboid: ShapeHandle<MyUnits>,
     solar_panel_cuboid: ShapeHandle<MyUnits>,
     attachment_collider_cuboid: ShapeHandle<MyUnits>,
+    super_thruster_cuboid: ShapeHandle<MyUnits>,
 }
 impl Default for PartStatic {
     fn default() -> PartStatic { PartStatic {
         unit_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.5))),
         cargo_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.38, 0.5))),
         solar_panel_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.31, 0.5))),
-        attachment_collider_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(1.0, 1.0)))
+        attachment_collider_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(1.0, 1.0))),
+        super_thruster_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.38, 0.44))),
     } }
 }
 
@@ -104,17 +106,19 @@ impl PartKind {
             _ => {
                 (
                     RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(self.inertia()),
-                    ColliderDesc::new(self.shape(part_static))
-                        .translation(if let PartKind::Core = self { Vector2::zero() } else { Vector2::new(0.0, 0.5) })
+                    ColliderDesc::new( match self {
+                        PartKind::Core | PartKind::Hub | PartKind::PowerHub | PartKind::HubThruster => part_static.unit_cuboid.clone(),
+                        PartKind::Cargo | PartKind::LandingThruster | PartKind::Thruster => part_static.cargo_cuboid.clone(),
+                        PartKind::SolarPanel | PartKind::EcoThruster | PartKind::LandingWheel => part_static.solar_panel_cuboid.clone(), 
+                        PartKind::SuperThruster => part_static.super_thruster_cuboid.clone(),
+                    } )
+                    .translation( match self {
+                        PartKind::Core => Vector2::zero(),
+                        PartKind::Thruster | PartKind::SuperThruster => Vector2::new(0.0, 0.44),
+                        _ => Vector2::new(0.0, 0.5)
+                    } ) 
                 )
             }
-        }
-    }
-    fn shape(&self, part_static: &PartStatic) -> ShapeHandle<MyUnits> {
-        match self {
-            PartKind::Core | PartKind::Hub | PartKind::PowerHub | PartKind::HubThruster => part_static.unit_cuboid.clone(),
-            PartKind::Cargo | PartKind::LandingThruster | PartKind::Thruster | PartKind::SuperThruster => part_static.cargo_cuboid.clone(),
-            PartKind::SolarPanel | PartKind::EcoThruster | PartKind::LandingWheel => part_static.solar_panel_cuboid.clone(), 
         }
     }
     fn thrust(&self) -> Option<ThrustDetails> {
