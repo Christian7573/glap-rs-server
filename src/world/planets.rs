@@ -14,13 +14,13 @@ pub struct Planets {
     pub mars: CelestialObject,
     pub mercury: CelestialObject,
     pub jupiter: CelestialObject,
-    pub pluto: CelestialObject,
+    //pub pluto: CelestialObject,
     pub saturn: CelestialObject,
     pub neptune: CelestialObject,
     pub venus: CelestialObject,
     pub uranus: CelestialObject,
     pub sun: CelestialObject,
-    pub trade: CelestialObject,
+    //pub trade: CelestialObject,
 }
 impl Planets {
     pub fn new(colliders: &mut super::MyColliderSet, bodies: &mut super::World) -> Planets {
@@ -168,7 +168,7 @@ impl Planets {
             }
         };
 
-        let pluto = {
+        /*let pluto = {
             let body = RigidBodyDesc::new()
                 .translation(planet_location(6000.0))
                 .gravity_enabled(false)
@@ -194,7 +194,7 @@ impl Planets {
                 cargo_upgrade: Some(PartKind::LandingWheel),
                 can_beamout: false,
             }
-        };
+        };*/
 
         let saturn = {
             let body = RigidBodyDesc::new()
@@ -336,7 +336,7 @@ impl Planets {
             }
         };
 
-        let trade = {
+        /*let trade = {
             let body = RigidBodyDesc::new()
                 .translation(Vector2::new(earth_pos.x / earth_pos.magnitude() * -2500.0, earth_pos.y / earth_pos.magnitude() * -2500.0))
                 .gravity_enabled(false)
@@ -362,15 +362,15 @@ impl Planets {
                 cargo_upgrade: None,
                 can_beamout: true,
             }
-        };
+        };*/
 
         Planets {
-            earth, moon, planet_material, mars, mercury, jupiter, pluto, saturn, neptune, venus, uranus, sun, trade,
+            earth, moon, planet_material, mars, mercury, jupiter, /* pluto, */ saturn, neptune, venus, uranus, sun, /* trade, */
         }
     }
 
-    pub fn celestial_objects<'a>(&'a self) -> [&'a CelestialObject; 12] {
-        [&self.earth, &self.moon, &self.mars, &self.mercury, &self.jupiter, &self.pluto, &self.saturn, &self.neptune, &self.venus, &self.uranus, &self.sun, &self.trade]
+    pub fn celestial_objects<'a>(&'a self) -> [&'a CelestialObject; 10] {
+        [&self.earth, &self.moon, &self.mars, &self.mercury, &self.jupiter, /* &self.pluto, */ &self.saturn, &self.neptune, &self.venus, &self.uranus, &self.sun, /* &self.trade */]
     }
     pub fn get_celestial_object<'a>(&'a self, id: u16) -> Result<&'a CelestialObject, ()> {
         if id == self.earth.id { Ok(&self.earth) }
@@ -378,13 +378,13 @@ impl Planets {
         else if id == self.mars.id { Ok(&self.mars) }
         else if id == self.mercury.id { Ok(&self.mercury) }
         else if id == self.jupiter.id { Ok(&self.jupiter) }
-        else if id == self.pluto.id { Ok(&self.pluto) }
+        //else if id == self.pluto.id { Ok(&self.pluto) }
         else if id == self.saturn.id { Ok(&self.saturn) }
         else if id == self.neptune.id { Ok(&self.neptune) }
         else if id == self.venus.id { Ok(&self.venus) }
         else if id == self.uranus.id { Ok(&self.uranus) }
         else if id == self.sun.id { Ok(&self.sun) }
-        else if id == self.trade.id { Ok(&self.trade) }
+        //else if id == self.trade.id { Ok(&self.trade) }
         else { Err(()) }
     }
 }

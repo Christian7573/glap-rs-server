@@ -103,6 +103,13 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
     let first_msg = ToServerMsg::deserialize(&mut first_msg).await?;
     let (session, name) = if let ToServerMsg::Handshake{ session, client, name} = first_msg { (session, name) }
     else { return Err(()) };
+    let name = {
+        let tmp_name = name.trim();
+        if tmp_name.is_empty() { "Unnamed".to_owned() }
+        else { tmp_name.to_owned() }
+    };
+
+
     let beamin_data = beamin_request(session.clone(), api.clone()).await;
 
     let layout: Option<RecursivePartDescription>;
