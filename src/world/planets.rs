@@ -257,7 +257,7 @@ impl Planets {
                 .translation(planet_location(1000.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
-                .mass(EARTH_SIZE)
+                .mass(EARTH_MASS * 1.3)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE;
