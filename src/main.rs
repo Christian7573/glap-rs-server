@@ -459,15 +459,17 @@ async fn main() {
                                         if player_meta.power > player_meta.max_power { player_meta.power = player_meta.max_power };
                                         player_meta.power_regen_per_5_ticks -= regen_lost;
                                         player_meta.power_regen_per_5_ticks -= part.kind.power_regen_per_5_ticks();
-                                        outbound_events.push(ToSerializer::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: player_meta.max_power, can_beamout: player_meta.can_beamout }));
                                         simulation.colliders.get_mut(part.collider).unwrap().set_user_data(None);
                                         grabbed = true;
+
                                         if player_meta.parts_touching_planet.remove(&part.body_id) {
-                                            if player_meta.parts_touching_planet.is_empty() {
+                                            if player_meta.parts_touching_planet.is_empty() { 
                                                 player_meta.touching_planet = None;
+                                                player_meta.can_beamout = false;
                                             }
                                         }
-        
+                                        outbound_events.push(ToSerializer::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: player_meta.max_power, can_beamout: player_meta.can_beamout }));
+
                                         free_parts.insert(grabbed_id, FreePart::Grabbed(part));
                                     }
                                 }
