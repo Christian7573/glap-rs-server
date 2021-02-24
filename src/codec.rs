@@ -212,6 +212,7 @@ pub enum ToClientMsg {
 	PostSimulationTick { your_power: u32, },
 	UpdateMyMeta { max_power: u32, can_beamout: bool, },
 	BeamOutAnimation { player_id: u16, },
+	IncinerationAnimation { player_id: u16, },
 	ChatMessage { username: String, msg: String, color: String, },
 }
 impl ToClientMsg {
@@ -296,8 +297,12 @@ impl ToClientMsg {
 				out.push(13);
 				type_u16_serialize(out, player_id);
 			},
-			Self::ChatMessage { username, msg, color} => {
+			Self::IncinerationAnimation { player_id} => {
 				out.push(14);
+				type_u16_serialize(out, player_id);
+			},
+			Self::ChatMessage { username, msg, color} => {
+				out.push(15);
 				type_string_serialize(out, username);
 				type_string_serialize(out, msg);
 				type_string_serialize(out, color);
@@ -400,6 +405,11 @@ impl ToClientMsg {
 				Ok(ToClientMsg::BeamOutAnimation { player_id})
 			},
 			14 => {
+				let player_id;
+				player_id = type_u16_deserialize(stream).await?;
+				Ok(ToClientMsg::IncinerationAnimation { player_id})
+			},
+			15 => {
 				let username; let msg; let color;
 				username = type_string_deserialize(stream).await?;
 				msg = type_string_deserialize(stream).await?;

@@ -227,6 +227,10 @@ BeamOutAnimation = Message("BeamOutAnimation")
 BeamOutAnimation.fields.append(Field("player_id", TypeUShort))
 ToClientMsg.messages.append(BeamOutAnimation)
 
+IncinerationAnimation = Message("IncinerationAnimation")
+IncinerationAnimation.fields.append(Field("player_id", TypeUShort))
+ToClientMsg.messages.append(IncinerationAnimation)
+
 ChatMessage = Message("ChatMessage")
 ChatMessage.fields.append(Field("username", TypeString))
 ChatMessage.fields.append(Field("msg", TypeString))
