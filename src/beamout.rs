@@ -13,10 +13,6 @@ use std::sync::Arc;
 use futures::FutureExt;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct RecursivePartDescription {
-    pub kind: PartKind,
-    pub attachments: Vec<Option<RecursivePartDescription>>,
-}
 impl RecursivePartDescription {
     pub fn deflate(part: &Part, ) -> RecursivePartDescription {
         Self::deflate_recursive(part)

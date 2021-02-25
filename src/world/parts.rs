@@ -7,6 +7,7 @@ use super::{MyUnits, MyHandle};
 use num_traits::identities::{Zero, One};
 use ncollide2d::pipeline::object::CollisionGroups;
 use nphysics2d::joint::DefaultJointConstraintHandle;
+use super::nphysics_types::*;
 
 pub struct PartStatic {
     unit_cuboid: ShapeHandle<MyUnits>,
@@ -25,13 +26,28 @@ impl Default for PartStatic {
 
 pub const ATTACHMENT_COLLIDER_COLLISION_GROUP: [usize; 1] = [5];
 
-pub struct Part {
+pub struct RecursivePartDescription {
     pub kind: PartKind,
-    pub attachments: Box<[Option<(Part, DefaultJointConstraintHandle, DefaultJointConstraintHandle)>; 4]>,
-    pub body_id: u16,
-    pub thrust_mode: CompactThrustMode,
-    pub collider: DefaultColliderHandle
+    pub attachments: Vec<Option<RecursivePartDescription>>,
 }
+pub struct Part {
+    body_id: u16,
+    collider: DefaultColliderHandle,
+    kind: PartKind,
+    attachments: Box<[Option<PartAttachment>; 4]>,
+    pub thrust_mode: CompactThrustMode,
+}
+pub struct PartAttachment {
+    part: PartKind,
+    connections: (DefaultJointConstraintHandle, DefaultJointConstraintHandle),
+}
+
+impl RecursivePartDescription {
+    pub fn inflate(bodies: &mut World, colliders: &mut MyGeometricalWorld) -> Part {
+
+    }
+}
+
 impl Part {
     pub fn new(kind: PartKind, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) -> Part {
         let (body_desc, collider_desc) = kind.physics_components(part_static);

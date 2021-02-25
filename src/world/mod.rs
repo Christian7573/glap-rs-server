@@ -12,13 +12,18 @@ use crate::PartOfPlayer;
 pub mod planets;
 pub mod parts;
 
-pub type MyUnits = f32;
-pub type MyColliderHandle = nphysics2d::object::DefaultColliderHandle;
-pub type MyMechanicalWorld = nphysics2d::world::MechanicalWorld<MyUnits, MyHandle, MyColliderHandle>;
-pub type MyGeometricalWorld = nphysics2d::world::GeometricalWorld<MyUnits, MyHandle, MyColliderHandle>;
-pub type MyColliderSet = nphysics2d::object::DefaultColliderSet<MyUnits, MyHandle>;
-pub type MyJointSet = nphysics2d::joint::DefaultJointConstraintSet<MyUnits, MyHandle>;
-pub type MyForceSet = nphysics2d::force_generator::DefaultForceGeneratorSet<MyUnits, MyHandle>;
+pub mod nphysics_types {
+    pub type MyUnits = f32;
+    pub type MyHandle = nphysics2d::object::DefaultBodyHandle;
+    pub type MyColliderHandle = nphysics2d::object::DefaultColliderHandle;
+    pub type MyMechanicalWorld = nphysics2d::world::MechanicalWorld<MyUnits, MyHandle, MyColliderHandle>;
+    pub type MyBodySet = nphysics2d::object::DefaultBodySet<MyUnits>;
+    pub type MyGeometricalWorld = nphysics2d::world::GeometricalWorld<MyUnits, MyHandle, MyColliderHandle>;
+    pub type MyColliderSet = nphysics2d::object::DefaultColliderSet<MyUnits, MyHandle>;
+    pub type MyJointSet = nphysics2d::joint::DefaultJointConstraintSet<MyUnits, MyHandle>;
+    pub type MyForceSet = nphysics2d::force_generator::DefaultForceGeneratorSet<MyUnits, MyHandle>;
+}
+use nphysics_types::*;
 
 pub struct Simulation {
     pub world: World,
@@ -181,33 +186,6 @@ pub struct World {
     next_part: u16,
     reference_point_body: RigidBody<MyUnits>
 }
-#[derive(Copy, Eq, Debug)]
-pub enum MyHandle {
-    CelestialObject(u16),
-    Part(u16),
-    ReferencePoint
-}
-impl Clone for MyHandle {
-    fn clone(&self) -> MyHandle { *self }
-}
-impl PartialEq for MyHandle {
-    fn eq(&self, other: &Self) -> bool {
-        match self {
-            MyHandle::CelestialObject(id) => if let MyHandle::CelestialObject(other_id) = other { *id == *other_id } else { false },
-            MyHandle::Part(id) => if let MyHandle::Part(other_id) = other { *id == *other_id } else { false },
-            MyHandle::ReferencePoint => if let MyHandle::ReferencePoint = other { true } else { false }
-        }
-    }
-}
-impl std::hash::Hash for MyHandle {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u16(match self {
-            MyHandle::CelestialObject(id) => *id,
-            MyHandle::Part(id) => *id,
-            MyHandle::ReferencePoint => 1
-        });
-    }
-}
 
 impl World {
     pub fn add_celestial_object(&mut self, body: RigidBody<MyUnits>) -> MyHandle {
@@ -244,7 +222,9 @@ impl World {
     pub fn get_parts(&self) -> &BTreeMap<u16, RigidBody<MyUnits>> { &self.parts }
     pub fn remove_part(&mut self, handle: MyHandle) {
         if let MyHandle::Part(id) = handle {
-            if let Some(_) = self.parts.remove(&id) { self.removal_events.push_back(handle); }
+            if let Some(_) = self.parts.remove(&id) {
+                self.removal_events.push_back(handle);
+            }
         } else { panic!(); };
     }
 }
