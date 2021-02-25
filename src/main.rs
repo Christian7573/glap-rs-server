@@ -114,22 +114,6 @@ async fn main() {
     let mut simulation_events = Vec::new();
     const TICKS_PER_CARGO_UPGRADE: u8 = TICKS_PER_SECOND;
 
-    /*let my_thruster_1 = world::parts::Part::new(world::parts::PartKind::Hub, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
-    simulation.world.get_rigid_mut(MyHandle::Part(my_thruster_1.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(0.0, 27.0), 0.0));
-    free_parts.insert(my_thruster_1.body_id, FreePart::Decaying(my_thruster_1, DEFAULT_PART_DECAY_TICKS));
-    let my_thruster_2 = world::parts::Part::new(world::parts::PartKind::Hub, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
-    simulation.world.get_rigid_mut(MyHandle::Part(my_thruster_2.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(2.0, 27.0), 0.0));
-    free_parts.insert(my_thruster_2.body_id, FreePart::Decaying(my_thruster_2, DEFAULT_PART_DECAY_TICKS));
-    let my_thruster_3 = world::parts::Part::new(world::parts::PartKind::Hub, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
-    simulation.world.get_rigid_mut(MyHandle::Part(my_thruster_3.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(4.0, 27.0), 0.0));
-    free_parts.insert(my_thruster_3.body_id, FreePart::Decaying(my_thruster_3, DEFAULT_PART_DECAY_TICKS));
-    let my_thruster_4 = world::parts::Part::new(world::parts::PartKind::LandingThruster, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
-    simulation.world.get_rigid_mut(MyHandle::Part(my_thruster_4.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(6.0, 27.0), 0.0));
-    free_parts.insert(my_thruster_4.body_id, FreePart::Decaying(my_thruster_4, DEFAULT_PART_DECAY_TICKS));
-    let my_thruster_5 = world::parts::Part::new(world::parts::PartKind::LandingThruster, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
-    simulation.world.get_rigid_mut(MyHandle::Part(my_thruster_5.body_id)).unwrap().set_position(Isometry2::new(Vector2::new(8.0, 27.0), 0.0));
-    free_parts.insert(my_thruster_5.body_id, FreePart::Decaying(my_thruster_5, DEFAULT_PART_DECAY_TICKS));*/
-    
     let mut ticks_til_power_regen = 5u8;
 
     while let Some(event) = event_source.next().await {
@@ -235,8 +219,15 @@ async fn main() {
                                     player.max_power += upgrade_into.power_storage();
                                     player.power_regen_per_5_ticks -= world::parts::PartKind::Cargo.power_regen_per_5_ticks();
                                     player.power_regen_per_5_ticks += upgrade_into.power_regen_per_5_ticks();
+
+                                    if player.parts_touching_planet.remove(&part.body_id) {
+                                        if player.parts_touching_planet.is_empty() { 
+                                            player.touching_planet = None;
+                                            player.can_beamout = false;
+                                        }
+                                    }
+
                                     outbound_events.push(ToSerializer::Message(*id, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
-                                    
                                     outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::RemovePart{ id: part.body_id }));
                                     outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::AddPart{ id: part.body_id, kind: part.kind, }));
                                     outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::UpdatePartMeta{ id: part.body_id, owning_player: Some(*id), thrust_mode: part.thrust_mode.into() }));
@@ -253,12 +244,26 @@ async fn main() {
                         PlayerTouchPlanet{ player, planet, part } => {
                             let player_id = player;
                             if let Some((player, _part)) = players.get_mut(&player) {
-                                player.touching_planet = Some(planet);
-                                player.can_beamout = simulation.planets.get_celestial_object(planet).unwrap().can_beamout;
-                                player.ticks_til_cargo_transform = TICKS_PER_SECOND;
-                                player.parts_touching_planet.insert(part);
-                                player.power = player.max_power;
-                                outbound_events.push(ToSerializer::Message(player_id, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
+                                if planet == simulation.planets.sun.id {
+                                    //Kill player
+                                    outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::IncinerationAnimation{ player_id }));
+                                    let my_to_serializer = to_serializer.clone();
+                                    let (_player, part) = players.remove(&player_id).unwrap();
+                                    recursive_beamout_remove(&part, &mut simulation);
+                                    async_std::task::spawn(async move {
+                                        futures_timer::Delay::new(std::time::Duration::from_millis(2500)).await;
+                                        my_to_serializer.send(vec![ ToSerializer::DeleteWriter(player_id) ]).await;
+                                    });
+                                } else {
+                                    player.touching_planet = Some(planet);
+                                    player.can_beamout = simulation.planets.get_celestial_object(planet).unwrap().can_beamout;
+                                    player.ticks_til_cargo_transform = TICKS_PER_SECOND;
+                                    player.parts_touching_planet.insert(part);
+                                    player.power = player.max_power;
+                                    outbound_events.push(ToSerializer::Message(player_id, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
+                                }
+                            } else if planet == simulation.planets.sun.id {
+                                outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::RemovePart { id: part }));
                             }
                         },
                         PlayerUntouchPlanet{ player, planet, part } => {
@@ -468,15 +473,17 @@ async fn main() {
                                         if player_meta.power > player_meta.max_power { player_meta.power = player_meta.max_power };
                                         player_meta.power_regen_per_5_ticks -= regen_lost;
                                         player_meta.power_regen_per_5_ticks -= part.kind.power_regen_per_5_ticks();
-                                        outbound_events.push(ToSerializer::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: player_meta.max_power, can_beamout: player_meta.can_beamout }));
                                         simulation.colliders.get_mut(part.collider).unwrap().set_user_data(None);
                                         grabbed = true;
+
                                         if player_meta.parts_touching_planet.remove(&part.body_id) {
-                                            if player_meta.parts_touching_planet.is_empty() {
+                                            if player_meta.parts_touching_planet.is_empty() { 
                                                 player_meta.touching_planet = None;
+                                                player_meta.can_beamout = false;
                                             }
                                         }
-        
+                                        outbound_events.push(ToSerializer::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: player_meta.max_power, can_beamout: player_meta.can_beamout }));
+
                                         free_parts.insert(grabbed_id, FreePart::Grabbed(part));
                                     }
                                 }
@@ -575,16 +582,6 @@ async fn main() {
                         if let Some((player, core)) = players.remove(&id) {
                             let beamout_layout = beamout::RecursivePartDescription::deflate(&core);
                             outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::BeamOutAnimation { player_id: id }));
-                            fn recursive_beamout_remove(part: &Part, simulation: &mut world::Simulation) {
-                                for slot in 0..part.attachments.len() {
-                                    if let Some((part, joint1, joint2)) = part.attachments[slot].as_ref() {
-                                        simulation.release_constraint(*joint1);
-                                        simulation.release_constraint(*joint2);
-                                        recursive_beamout_remove(part, simulation);
-                                    }
-                                }
-                                simulation.world.remove_part(MyHandle::Part(part.body_id));
-                            }
                             recursive_beamout_remove(&core, &mut simulation);
                             beamout::spawn_beamout_request(player.beamout_token, beamout_layout, api.clone());
                             let my_to_serializer = to_serializer.clone();
@@ -658,6 +655,18 @@ fn recursive_broken_check(part: &mut Part, simulation: &mut world::Simulation, f
             }
         }
     }
+}
+
+
+fn recursive_beamout_remove(part: &Part, simulation: &mut world::Simulation) {
+    for slot in 0..part.attachments.len() {
+        if let Some((part, joint1, joint2)) = part.attachments[slot].as_ref() {
+            simulation.release_constraint(*joint1);
+            simulation.release_constraint(*joint2);
+            recursive_beamout_remove(part, simulation);
+        }
+    }
+    simulation.world.remove_part(MyHandle::Part(part.body_id));
 }
 
 fn is_string_numeric(str: String) -> bool {
