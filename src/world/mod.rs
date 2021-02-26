@@ -15,12 +15,14 @@ pub mod parts;
 pub mod nphysics_types {
     pub type MyUnits = f32;
     pub type MyHandle = nphysics2d::object::DefaultBodyHandle;
+    pub type MyIsometry = nphysics2d::math::Isometry<MyUnits>;
     pub type MyColliderHandle = nphysics2d::object::DefaultColliderHandle;
     pub type MyMechanicalWorld = nphysics2d::world::MechanicalWorld<MyUnits, MyHandle, MyColliderHandle>;
     pub type MyBodySet = nphysics2d::object::DefaultBodySet<MyUnits>;
     pub type MyGeometricalWorld = nphysics2d::world::GeometricalWorld<MyUnits, MyHandle, MyColliderHandle>;
     pub type MyColliderSet = nphysics2d::object::DefaultColliderSet<MyUnits, MyHandle>;
     pub type MyJointSet = nphysics2d::joint::DefaultJointConstraintSet<MyUnits, MyHandle>;
+    pub type MyJointHandle = nphysics2d::joint::DefaultJointConstraintHandle;
     pub type MyForceSet = nphysics2d::force_generator::DefaultForceGeneratorSet<MyUnits, MyHandle>;
 }
 use nphysics_types::*;
@@ -33,7 +35,6 @@ pub struct Simulation {
     joints: MyJointSet,
     persistant_forces: MyForceSet,
     pub planets: planets::Planets,
-    pub part_static: parts::PartStatic
 }
 pub enum SimulationEvent {
     PlayerTouchPlanet { player: u16, part: u16, planet: u16, },
@@ -145,30 +146,6 @@ impl Simulation {
         self.joints.remove(constraint_id);
     }
 
-    pub fn equip_part_constraint(&mut self, parent: u16, child: u16, attachment: parts::AttachmentPointDetails) -> (DefaultJointConstraintHandle, DefaultJointConstraintHandle) {
-        let offset = (attachment.perpendicular.0 * 0.2, attachment.perpendicular.1 * 0.2);
-        //println!("{} {}", attachment.x + offset.0, attachment.y + offset.1);
-        let mut constraint1 = nphysics2d::joint::RevoluteConstraint::new(
-            BodyPartHandle(MyHandle::Part(parent), 0),
-            BodyPartHandle(MyHandle::Part(child), 0),
-            Point::new(attachment.x + offset.0, attachment.y + offset.1),
-            Point::new(0.2, 0.0)
-        );
-        //println!("{} {}", attachment.x - offset.0, attachment.y - offset.1);
-        let mut constraint2 = nphysics2d::joint::RevoluteConstraint::new(
-            BodyPartHandle(MyHandle::Part(parent), 0),
-            BodyPartHandle(MyHandle::Part(child), 0),
-            Point::new(attachment.x - offset.0, attachment.y - offset.1),
-            Point::new(-0.2, 0.0)
-        );
-        const MAX_TORQUE: f32 = 200.0;
-        const MAX_FORCE: f32 = MAX_TORQUE * 3.0;
-        constraint1.set_break_torque(MAX_TORQUE);
-        constraint1.set_break_force(MAX_FORCE);
-        constraint2.set_break_torque(MAX_TORQUE);
-        constraint2.set_break_force(MAX_FORCE);
-        (self.joints.insert(constraint1), self.joints.insert(constraint2))
-    }
     pub fn is_constraint_broken(&self, handle: DefaultJointConstraintHandle) -> bool {
         self.joints.get(handle).map(|joint| joint.is_broken()).unwrap_or(true)
     }

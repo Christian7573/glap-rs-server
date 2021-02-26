@@ -8,22 +8,14 @@ use num_traits::identities::{Zero, One};
 use ncollide2d::pipeline::object::CollisionGroups;
 use nphysics2d::joint::DefaultJointConstraintHandle;
 use super::nphysics_types::*;
+use nalgebra::geometry::Rotation;
 
-pub struct PartStatic {
-    unit_cuboid: ShapeHandle<MyUnits>,
-    cargo_cuboid: ShapeHandle<MyUnits>,
-    solar_panel_cuboid: ShapeHandle<MyUnits>,
-    attachment_collider_cuboid: ShapeHandle<MyUnits>,
-    super_thruster_cuboid: ShapeHandle<MyUnits>,
-}
-impl Default for PartStatic {
-    fn default() -> PartStatic { PartStatic {
-        unit_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.5))),
-        cargo_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.38, 0.5))),
-        solar_panel_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.31, 0.5))),
-        attachment_collider_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(1.0, 1.0))),
-        super_thruster_cuboid: ShapeHandle::new(Cuboid::new(Vector2::new(0.38, 0.44))),
-    } }
+lazy_static! {
+    static ref UNIT_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.5)));
+    static ref CARGO_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(0.38, 0.5)));
+    static ref SOLAR_PANEL_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(0.31, 0.5)));
+    static ref ATTACHMENT_COLLIDER_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(1.0, 1.0)));
+    static ref SUPER_THRUSTER_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(0.38, 0.44)));
 }
 
 pub const ATTACHMENT_COLLIDER_COLLISION_GROUP: [usize; 1] = [5];
@@ -33,20 +25,97 @@ pub struct RecursivePartDescription {
     pub attachments: Vec<Option<RecursivePartDescription>>,
 }
 pub struct Part {
-    body_id: u16,
+    body: MyHandle,
     collider: DefaultColliderHandle,
     kind: PartKind,
     attachments: Box<[Option<PartAttachment>; 4]>,
     pub thrust_mode: CompactThrustMode,
 }
 pub struct PartAttachment {
-    part: PartKind,
+    part: Part,
     connections: (DefaultJointConstraintHandle, DefaultJointConstraintHandle),
 }
 
 impl RecursivePartDescription {
-    pub fn inflate(bodies: &mut World, colliders: &mut MyGeometricalWorld) -> Part {
+    pub fn inflate_component(self, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry, true_facing: AttachedPartFacing, rel_part_x: i32, rel_part_y: i32) -> Part {
+        let (body_desc, collider_desc) = self.kind.physics_components();
+        let mut body = body_desc.build();
+        body.set_position(&initial_location);
+        let body_handle = bodies.insert(body);
+        let collider = colliders.insert(collider_desc.build(BodyPartHandle(body_handle, 0)));
+        let mut attachments: Box<[Option<PartAttachment>; 4]> = Box::new([None, None, None, None]);
+        for i in 0..4 {
+            attachments[i] = self.attachments.get(i).map(|o| o.as_ref()).flatten().map(|recursive_part| {
+                if let Some(attachment) = self.kind.attachment_locations()[i] {
+                    let attachment_location = PartAttachment::calculate_attachment_position(self.kind, &initial_location, i).unwrap();
+                    let attachment_true_facing = attachment.facing.compute_true_facing(true_facing);
+                    let (d_part_x, d_part_y) = attachment_true_facing.delta_rel_part();
+                    let attachment_part_x = rel_part_x + d_part_x;
+                    let attachment_part_y = rel_part_y + d_part_y;
+                    let part = recursive_part.inflate_component(bodies, colliders, joints, attachment_location, attachment_true_facing, attachment_part_x, attachment_part_y);
+                    Some(PartAttachment::inflate(part, self.kind, &body_handle, i, joints))
+                } else { None }
+            }).flatten();
+        };
+        Part {
+            body: body_handle,
+            collider,
+            kind: self.kind,
+            attachments,
+            thrust_mode: CompactThrustMode::calculate(true_facing, rel_part_x, rel_part_y)
+        }
+    }
+}
 
+impl Part {
+
+}
+
+impl PartAttachment {
+    pub fn calculate_attachment_position(parent: PartKind, parent_location: &MyIsometry, attachment_slot: usize) -> Option<MyIsometry> {
+        if let Some(attachment) = parent.attachment_locations()[attachment_slot] {
+            Some(MyIsometry::new(Vector2::new(attachment.x, attachment.y), attachment.facing.part_rotation()) * parent_location)
+        } else {
+            eprintln!("calculate_attachment_position: PartKind {:?} doesn't have attachment slot {}", parent, attachment_slot);
+            None
+        }
+    }
+
+    pub fn inflate(part: Part, parent: PartKind, parent_body_handle: &MyHandle, attachment_slot: usize, joints: &mut MyJointSet) -> PartAttachment {
+        use nphysics2d::math::Point;
+        let attachment = parent.attachment_locations()[attachment_slot].expect("PartAttachment tried to inflate on invalid slot");
+        const HALF_CONNECTION_WIDTH: f32 = 0.25;
+        let offset = (attachment.perpendicular.0 * HALF_CONNECTION_WIDTH, attachment.perpendicular.1 * HALF_CONNECTION_WIDTH);
+        let mut constraint1 = nphysics2d::joint::RevoluteConstraint::new(
+            BodyPartHandle(parent_body_handle.clone(), 0),
+            BodyPartHandle(part.body, 0),
+            Point::new(attachment.x + offset.0, attachment.y + offset.1),
+            Point::new(HALF_CONNECTION_WIDTH, 0.0)
+        );
+        let mut constraint2 = nphysics2d::joint::RevoluteConstraint::new(
+            BodyPartHandle(parent_body_handle.clone(), 0),
+            BodyPartHandle(part.body, 0),
+            Point::new(attachment.x - offset.0, attachment.y - offset.1),
+            Point::new(-HALF_CONNECTION_WIDTH, 0.0)
+        );
+        const MAX_TORQUE: f32 = 100.0;
+        //const MAX_FORCE: f32 = MAX_TORQUE * 3.0;
+        constraint1.set_break_torque(MAX_TORQUE);
+        //constraint1.set_break_force(MAX_FORCE);
+        constraint2.set_break_torque(MAX_TORQUE);
+        //constraint2.set_break_force(MAX_FORCE);
+        PartAttachment {
+            part,
+            connections: (joints.insert(constraint1), joints.insert(constraint2))
+        }
+    }
+
+    pub fn part(&mut self) -> &mut Part { &mut self.part }
+
+    pub fn deflate(self, joints: &mut MyJointSet) -> Part {
+        joints.remove(self.connections.0);
+        joints.remove(self.connections.1);
+        self.part
     }
 }
 
@@ -231,15 +300,15 @@ impl AttachedPartFacing {
             AttachedPartFacing::Left => -std::f32::consts::FRAC_PI_2,
         }
     }
-    pub fn get_actual_rotation(&self, parent_actual_rotation: AttachedPartFacing) -> AttachedPartFacing {
-        let parent_actual_rotation: u8 = parent_actual_rotation.into();
+    pub fn compute_true_facing(&self, parent_true_facing: AttachedPartFacing) -> AttachedPartFacing {
+        let parent_actual_rotation: u8 = parent_true_facing.into();
         let my_rotation: u8 = (*self).into();
         let num: u8 = parent_actual_rotation + my_rotation;
         if num > 3 { (num - 4).into() } else { num.into() }
     }
-    pub fn attachment_offset(&self) -> (i16,i16) {
-        let new_x = match self { AttachedPartFacing::Left => -1, AttachedPartFacing::Right => 1, _ => 0 };
-        let new_y = match self { AttachedPartFacing::Up => 1, AttachedPartFacing::Down => -1, _ => 0 };
+    pub fn delta_rel_part(&self) -> (i32,i32) {
+        let new_x = match self { AttachedPartFacing::Left => -3, AttachedPartFacing::Right => 3, _ => 0 };
+        let new_y = match self { AttachedPartFacing::Up => 3, AttachedPartFacing::Down => -3, _ => 0 };
         (new_x, new_y)
     }
 }
@@ -310,14 +379,15 @@ impl CompactThrustMode {
     pub fn set_vertical(&mut self, vertical: VerticalThrustMode) { std::mem::replace::<CompactThrustMode>(self, CompactThrustMode::new(self.get_horizontal(), vertical)); }
     pub fn set(&mut self, horizontal: HorizontalThrustMode, vertical: VerticalThrustMode) { std::mem::replace::<CompactThrustMode>(self, CompactThrustMode::new(horizontal, vertical)); }
 
-    pub fn calculate(my_actual_facing: AttachedPartFacing, x: i16, y: i16) -> CompactThrustMode {
-        let hroizontal = match my_actual_facing {
+    pub fn calculate(part_true_facing: AttachedPartFacing, rel_part_x: i32, rel_part_y: i32) -> CompactThrustMode {
+        let x = rel_part_x; let y = rel_part_y;
+        let hroizontal = match part_true_facing {
             AttachedPartFacing::Up => if x < 0 { HorizontalThrustMode::CounterClockwise } else if x > 0 { HorizontalThrustMode::Clockwise } else { HorizontalThrustMode::None },
             AttachedPartFacing::Right => if y > 0 { HorizontalThrustMode::CounterClockwise } else { HorizontalThrustMode::Clockwise },
             AttachedPartFacing::Down => if x < 0 { HorizontalThrustMode::Clockwise } else if x > 0 { HorizontalThrustMode::CounterClockwise } else { HorizontalThrustMode::None },
             AttachedPartFacing::Left => if y > 0 { HorizontalThrustMode::Clockwise } else { HorizontalThrustMode::CounterClockwise },
         };
-        let vertical = match my_actual_facing  {
+        let vertical = match part_true_facing  {
             AttachedPartFacing::Up => VerticalThrustMode::Backwards,
             AttachedPartFacing::Down => VerticalThrustMode::Forwards,
             AttachedPartFacing::Left | AttachedPartFacing::Right => VerticalThrustMode::None

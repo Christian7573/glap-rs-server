@@ -1,4 +1,5 @@
 #[macro_use] extern crate serde_derive;
+#[macro_use] extern crate lazy_static;
 use async_std::prelude::*;
 use std::net::SocketAddr;
 use futures::{FutureExt, StreamExt};
@@ -26,25 +27,6 @@ pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 20;
 
 #[derive(Clone)]
 pub struct ApiDat { prefix: String, beamout: String, beamin: String, password: String }
-
-/*#[derive(Clone)]
-pub struct AbortKit { sender: Sender<()>, reciever: Reciever<()>, handle: futures::future::AbortHandle, registration: futures::future::AbortRegistration }
-impl AbortKit {
-    pub fn new() -> AbortKit {
-        let (sender, reciever) = channel(4);
-        let (handle, registration) = AbortHandle::new_pair();
-        AbortKit {
-            sender, reciever,
-            handle, registration
-        }
-    }
-    pub fn make_abortable<F: Future>(&self, future: F) -> futures::future::Abortable<F> {
-        futures::future::Abortable::new(future, self.registration.clone())
-    }
-    pub async fn abort(&mut self) {
-        self.sender.send(()).await
-    }
-}*/
 
 #[async_std::main]
 async fn main() {
