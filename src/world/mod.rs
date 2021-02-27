@@ -8,17 +8,19 @@ use nphysics2d::joint::{DefaultJointConstraintHandle, MouseConstraint, JointCons
 use nphysics2d::math::Point;
 use ncollide2d::pipeline::ContactEvent;
 use crate::PartOfPlayer;
+use generational_arena::{Arena, Index};
 
 pub mod planets;
 pub mod parts;
 
 pub mod nphysics_types {
     pub type MyUnits = f32;
-    pub type MyHandle = nphysics2d::object::DefaultBodyHandle;
+    pub type MyHandle = Index;
     pub type MyIsometry = nphysics2d::math::Isometry<MyUnits>;
     pub type MyColliderHandle = nphysics2d::object::DefaultColliderHandle;
     pub type MyMechanicalWorld = nphysics2d::world::MechanicalWorld<MyUnits, MyHandle, MyColliderHandle>;
-    pub type MyBodySet = nphysics2d::object::DefaultBodySet<MyUnits>;
+    pub type MyBodySet = super::World;
+    pub type MyRigidBody = nphysics2d::object::RigidBody<MyUnits>;
     pub type MyGeometricalWorld = nphysics2d::world::GeometricalWorld<MyUnits, MyHandle, MyColliderHandle>;
     pub type MyColliderSet = nphysics2d::object::DefaultColliderSet<MyUnits, MyHandle>;
     pub type MyJointSet = nphysics2d::joint::DefaultJointConstraintSet<MyUnits, MyHandle>;
@@ -55,7 +57,6 @@ impl Simulation {
             joints: MyJointSet::new(),
             persistant_forces: MyForceSet::new(),
             planets,
-            part_static: Default::default()
         };
         simulation
     }
@@ -153,7 +154,34 @@ impl Simulation {
     pub fn geometrical_world(&self) -> &MyGeometricalWorld { &self.geometry }
 }
 
+type MyStorage = Arena<WorldlyObject>;
 pub struct World {
+    storage: MyStorage,
+    removal_events: std::collections::VecDeque<MyHandle>,
+    reference_point_body: Index,
+}
+
+pub enum WorldlyObject {
+    CelestialObject(MyRigidBody),
+    Part(parts::Part),
+    Uninitialized,
+}
+pub struct WorldAddHandle<'a>(&'a mut MyStorage); 
+impl<'a> WorldAddHandle<'a> {
+    pub fn add_now(&self, object: WorldlyObject) -> Index { self.0.insert(object) }
+    pub fn add_later(&self) -> Index { self.0.insert(WorldlyObject::Uninitialized) }
+    pub fn add_its_later(&self, index: Index, object: WorldlyObject) {
+        match std::mem::replace(self.0.get_mut(index).expect("add_its_later: the index doesn't exist"), object) {
+            WorldlyObject::Uninitialized => {},
+            _ => panic!("add_its_later: the index wasn't WorldlyObject::Uninitialized. Storage is now poisioned(?)")
+        }
+    }
+}
+impl<'a> From<&'a mut MyStorage> for WorldAddHandle<'a> {
+    fn from(storage: &'a mut MyStorage) -> WorldAddHandle<'a> { WorldAddHandle(storage) }
+}
+
+pub struct WorldOld {
     celestial_objects: BTreeMap<u16, RigidBody<MyUnits>>,
     // free_parts: BTreeMap<u16, RigidBody<MyUnits>>,
     // player_parts: BTreeMap<u16, BTreeMap<u16, RigidBody<MyUnits>>>,
@@ -164,7 +192,7 @@ pub struct World {
     reference_point_body: RigidBody<MyUnits>
 }
 
-impl World {
+impl WorldOld {
     pub fn add_celestial_object(&mut self, body: RigidBody<MyUnits>) -> MyHandle {
         let id = self.next_celestial_object;
         self.next_celestial_object += 1;

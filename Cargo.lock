@@ -722,6 +722,7 @@ dependencies = [
  "byte",
  "futures",
  "futures-timer",
+ "generational-arena",
  "lazy_static",
  "nalgebra",
  "ncollide2d",

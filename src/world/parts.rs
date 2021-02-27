@@ -10,6 +10,8 @@ use nphysics2d::joint::DefaultJointConstraintHandle;
 use super::nphysics_types::*;
 use nalgebra::geometry::Rotation;
 use crate::PlayerMeta;
+use super::{WorldAddHandle, World};
+use std::sync::atomic::{AtomicI16, Ordering as AtomicOrdering};
 
 lazy_static! {
     static ref UNIT_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.5)));
@@ -18,6 +20,7 @@ lazy_static! {
     static ref ATTACHMENT_COLLIDER_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(1.0, 1.0)));
     static ref SUPER_THRUSTER_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(0.38, 0.44)));
 }
+static NEXT_PART_ID: AtomicI16 = AtomicI16::new(0);
 
 pub const ATTACHMENT_COLLIDER_COLLISION_GROUP: [usize; 1] = [5];
 
@@ -26,7 +29,8 @@ pub struct RecursivePartDescription {
     pub attachments: Vec<Option<RecursivePartDescription>>,
 }
 pub struct Part {
-    body: MyHandle,
+    id: u16,
+    body: MyRigidBody,
     collider: DefaultColliderHandle,
     kind: PartKind,
     attachments: Box<[Option<PartAttachment>; 4]>,
@@ -38,11 +42,14 @@ pub struct PartAttachment {
 }
 
 impl RecursivePartDescription {
-    pub fn inflate_component(self, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry, true_facing: AttachedPartFacing, rel_part_x: i32, rel_part_y: i32) -> Part {
+    pub fn inflate(&self, bodies: &WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry) -> Part {
+        self.inflate_component(bodies, colliders, joints, initial_location, AttachedPartFacing::Up, 0, 0)        
+    }
+    pub fn inflate_component(&self, bodies: &WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry, true_facing: AttachedPartFacing, rel_part_x: i32, rel_part_y: i32) -> Part {
         let (body_desc, collider_desc) = self.kind.physics_components();
         let mut body = body_desc.build();
         body.set_position(&initial_location);
-        let body_handle = bodies.insert(body);
+        let body_handle = bodies.add_later();
         let collider = colliders.insert(collider_desc.build(BodyPartHandle(body_handle, 0)));
         let mut attachments: Box<[Option<PartAttachment>; 4]> = Box::new([None, None, None, None]);
         for i in 0..4 {
@@ -58,7 +65,9 @@ impl RecursivePartDescription {
                 } else { None }
             }).flatten();
         };
+        let my_part_id = NEXT_PART_ID.fetch_add(1, AtomicOrdering::AcqRel);
         Part {
+            id: next_part_id,
             body: body_handle,
             collider,
             kind: self.kind,
