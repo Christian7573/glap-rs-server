@@ -159,6 +159,19 @@ pub struct World {
     storage: MyStorage,
     removal_events: std::collections::VecDeque<MyHandle>,
     reference_point_body: Index,
+    free_parts: BTreeMap<u16, Index>,
+}
+
+impl World {
+    pub fn get_part(&self, index: MyHandle) -> Option<&parts::Part> {
+        self.storage.get(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
+    }
+    pub fn get_part_mut(&mut self, index: MyHandle) -> Option<&mut parts::Part> {
+        self.storage.get_mut(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
+    }
+    pub fn remove_part(&mut self, index: MyHandle) -> Option<parts::Part> {
+        self.storage.remove(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
+    }
 }
 
 pub enum WorldlyObject {
@@ -177,8 +190,8 @@ impl<'a> WorldAddHandle<'a> {
         }
     }
 }
-impl<'a> From<&'a mut MyStorage> for WorldAddHandle<'a> {
-    fn from(storage: &'a mut MyStorage) -> WorldAddHandle<'a> { WorldAddHandle(storage) }
+impl<'a> From<&'a mut World> for WorldAddHandle<'a> {
+    fn from(world: &'a mut World) -> WorldAddHandle<'a> { WorldAddHandle(&mut world.storage) }
 }
 
 pub struct WorldOld {

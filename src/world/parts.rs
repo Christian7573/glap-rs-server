@@ -10,8 +10,9 @@ use nphysics2d::joint::DefaultJointConstraintHandle;
 use super::nphysics_types::*;
 use nalgebra::geometry::Rotation;
 use crate::PlayerMeta;
-use super::{WorldAddHandle, World};
-use std::sync::atomic::{AtomicI16, Ordering as AtomicOrdering};
+use super::{WorldAddHandle, World, WorldlyObject};
+use std::sync::atomic::{AtomicU16, Ordering as AtomicOrdering};
+use generational_arena::Index;
 
 lazy_static! {
     static ref UNIT_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.5)));
@@ -20,7 +21,7 @@ lazy_static! {
     static ref ATTACHMENT_COLLIDER_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(1.0, 1.0)));
     static ref SUPER_THRUSTER_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(0.38, 0.44)));
 }
-static NEXT_PART_ID: AtomicI16 = AtomicI16::new(0);
+static mut NEXT_PART_ID: AtomicU16 = AtomicU16::new(0);
 
 pub const ATTACHMENT_COLLIDER_COLLISION_GROUP: [usize; 1] = [5];
 
@@ -42,10 +43,10 @@ pub struct PartAttachment {
 }
 
 impl RecursivePartDescription {
-    pub fn inflate(&self, bodies: &WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry) -> Part {
-        self.inflate_component(bodies, colliders, joints, initial_location, AttachedPartFacing::Up, 0, 0)        
+    pub fn inflate(&self, bodies: &WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry) -> MyHandle {
+        self.inflate_component(bodies, colliders, joints, initial_location, AttachedPartFacing::Up, 0, 0, None)        
     }
-    pub fn inflate_component(&self, bodies: &WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry, true_facing: AttachedPartFacing, rel_part_x: i32, rel_part_y: i32) -> Part {
+    pub fn inflate_component(&self, bodies: &WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry, true_facing: AttachedPartFacing, rel_part_x: i32, rel_part_y: i32, id: Option<u16>) -> MyHandle {
         let (body_desc, collider_desc) = self.kind.physics_components();
         let mut body = body_desc.build();
         body.set_position(&initial_location);
@@ -60,20 +61,22 @@ impl RecursivePartDescription {
                     let (d_part_x, d_part_y) = attachment_true_facing.delta_rel_part();
                     let attachment_part_x = rel_part_x + d_part_x;
                     let attachment_part_y = rel_part_y + d_part_y;
-                    let part = recursive_part.inflate_component(bodies, colliders, joints, attachment_location, attachment_true_facing, attachment_part_x, attachment_part_y);
+                    let part = recursive_part.inflate_component(bodies, colliders, joints, attachment_location, attachment_true_facing, attachment_part_x, attachment_part_y, None);
                     Some(PartAttachment::inflate(part, self.kind, &body_handle, i, joints))
                 } else { None }
             }).flatten();
         };
-        let my_part_id = NEXT_PART_ID.fetch_add(1, AtomicOrdering::AcqRel);
-        Part {
-            id: next_part_id,
-            body: body_handle,
+        let my_part_id = if let Some(id) = id { id } else { unsafe { NEXT_PART_ID.fetch_add(1, AtomicOrdering::AcqRel) } };
+        let part = Part {
+            id: my_part_id,
+            body,
             collider,
             kind: self.kind,
             attachments,
             thrust_mode: CompactThrustMode::calculate(true_facing, rel_part_x, rel_part_y)
-        }
+        };
+        bodies.add_its_later(body_handle, WorldlyObject::Part(part));
+        body_handle
     }
 }
 impl From<PartKind> for RecursivePartDescription {
@@ -92,7 +95,7 @@ impl Part {
         player.power_regen_per_5_ticks -= self.kind.power_regen_per_5_ticks();
         player.power = player.power.min(player.max_power);
     }
-    pub fn mutate(self, mutate_into: PartKind, player: Option<&mut PlayerMeta>, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet) -> Part {
+    pub fn mutate(self, mutate_into: PartKind, player: Option<&mut PlayerMeta>, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet) -> MyHandle {
         if let Some(player) = player { self.remove_from(player); }
         let old_attachments = self.attachments;
         let raw_attachments: [Option<Part>; 4] = [None, None, None, None];
@@ -101,11 +104,19 @@ impl Part {
                 raw_attachments[i] = Some(attachment.deflate(joints));
             }
         };
-        let body = bodies.get(self.body).expect("Mutate: Body is null").downcast_ref::<RigidBody<_>>().expect("Mutate: Not a rigid body");
-        let position = body.position().clone();
+        let position = self.body.position().clone();
         colliders.remove(self.collider);
-        bodies.remove(self.body);
-        let part = RecursivePartDescription::from(mutate_into).inflate_component(bodies, colliders, joints, position, AttachedPartFacing::Up, 0, 0);
+        let add_handle = WorldAddHandle::from(bodies);
+        let part_index = RecursivePartDescription::from(mutate_into).inflate_component(add_handle, colliders, joints, position, AttachedPartFacing::Up, 0, 0, Some(self.id));
+        let part = bodies.get_part_mut(part_index).unwrap();
+        part.thrust_mode = self.thrust_mode;
+        if let Some(player) = player { part.join_to(player) };
+    }
+    pub fn deflate(&self) -> RecursivePartDescription {
+        RecursivePartDescription {
+            kind: self.kind,
+            attachments: self.attachments[..].iter().map(|attachment| attachment.map(|attachment| attachment.deflate())).collect()
+        }
     }
 }
 
@@ -119,20 +130,20 @@ impl PartAttachment {
         }
     }
 
-    pub fn inflate(part: Part, parent: PartKind, parent_body_handle: &MyHandle, attachment_slot: usize, joints: &mut MyJointSet) -> PartAttachment {
+    pub fn inflate(part: MyHandle, parent: PartKind, parent_body_handle: MyHandle, attachment_slot: usize, joints: &mut MyJointSet) -> PartAttachment {
         use nphysics2d::math::Point;
         let attachment = parent.attachment_locations()[attachment_slot].expect("PartAttachment tried to inflate on invalid slot");
         const HALF_CONNECTION_WIDTH: f32 = 0.25;
         let offset = (attachment.perpendicular.0 * HALF_CONNECTION_WIDTH, attachment.perpendicular.1 * HALF_CONNECTION_WIDTH);
         let mut constraint1 = nphysics2d::joint::RevoluteConstraint::new(
             BodyPartHandle(parent_body_handle.clone(), 0),
-            BodyPartHandle(part.body, 0),
+            BodyPartHandle(part, 0),
             Point::new(attachment.x + offset.0, attachment.y + offset.1),
             Point::new(HALF_CONNECTION_WIDTH, 0.0)
         );
         let mut constraint2 = nphysics2d::joint::RevoluteConstraint::new(
             BodyPartHandle(parent_body_handle.clone(), 0),
-            BodyPartHandle(part.body, 0),
+            BodyPartHandle(part, 0),
             Point::new(attachment.x - offset.0, attachment.y - offset.1),
             Point::new(-HALF_CONNECTION_WIDTH, 0.0)
         );
