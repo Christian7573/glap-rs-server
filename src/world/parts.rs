@@ -9,6 +9,7 @@ use ncollide2d::pipeline::object::CollisionGroups;
 use nphysics2d::joint::DefaultJointConstraintHandle;
 use super::nphysics_types::*;
 use nalgebra::geometry::Rotation;
+use crate::PlayerMeta;
 
 lazy_static! {
     static ref UNIT_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.5)));
@@ -66,9 +67,37 @@ impl RecursivePartDescription {
         }
     }
 }
+impl From<PartKind> for RecursivePartDescription {
+    fn from(kind: PartKind) -> RecursivePartDescription {
+        RecursivePartDescription { kind, attachments: Vec::with_capacity(0) }        
+    }
+}
 
 impl Part {
-
+    pub fn join_to(&self, player: &mut PlayerMeta) {
+        player.max_power += self.kind.power_storage();
+        player.power_regen_per_5_ticks += self.kind.power_regen_per_5_ticks();
+    }
+    pub fn remove_from(&self, player: &mut PlayerMeta) {
+        player.max_power -= self.kind.power_storage();
+        player.power_regen_per_5_ticks -= self.kind.power_regen_per_5_ticks();
+        player.power = player.power.min(player.max_power);
+    }
+    pub fn mutate(self, mutate_into: PartKind, player: Option<&mut PlayerMeta>, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet) -> Part {
+        if let Some(player) = player { self.remove_from(player); }
+        let old_attachments = self.attachments;
+        let raw_attachments: [Option<Part>; 4] = [None, None, None, None];
+        for i in 0..4 {
+            if let Some(attachment) = old_attachments[i] {
+                raw_attachments[i] = Some(attachment.deflate(joints));
+            }
+        };
+        let body = bodies.get(self.body).expect("Mutate: Body is null").downcast_ref::<RigidBody<_>>().expect("Mutate: Not a rigid body");
+        let position = body.position().clone();
+        colliders.remove(self.collider);
+        bodies.remove(self.body);
+        let part = RecursivePartDescription::from(mutate_into).inflate_component(bodies, colliders, joints, position, AttachedPartFacing::Up, 0, 0);
+    }
 }
 
 impl PartAttachment {
@@ -131,7 +160,7 @@ impl Part {
             collider
         }
     }
-    pub fn mutate(&mut self, new_kind: PartKind, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) {
+    pub fn old_mutate(&mut self, new_kind: PartKind, bodies: &mut super::World, colliders: &mut super::MyColliderSet, part_static: &PartStatic) {
         for attachment in self.attachments.iter() { if attachment.is_some() { panic!("Mutated part with attachments"); } };
         let mut prev_collider = colliders.remove(self.collider).unwrap();        
         self.kind = new_kind;
