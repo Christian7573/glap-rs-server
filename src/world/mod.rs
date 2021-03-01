@@ -62,14 +62,14 @@ impl Simulation {
     }
 
     fn celestial_gravity(&mut self) {
-        fn do_gravity_for_part(part: &mut RigidBody<MyUnits>, celestial_bodies: &BTreeMap<u16, RigidBody<MyUnits>>) {
+        fn do_gravity_for_part(part: &mut MyRigidBody, celestial_bodies: &[planets::CelestialObject]) {
             const GRAVITATION_CONSTANT: f32 = 1.0; //Lolrandom
-            for body in celestial_bodies.values() {
-                let distance: (f32, f32) = ((body.position().translation.x - part.position().translation.x),
-                                            (body.position().translation.y - part.position().translation.y));
-                let magnitude: f32 = part.augmented_mass().linear * body.augmented_mass().linear 
-                                     / (distance.0.pow(2f32) + distance.1.pow(2f32))
-                                     * GRAVITATION_CONSTANT;
+            for body in celestial_bodies {
+                let distance: (f32, f32) = ((body.position.0 - part.position().translation.x),
+                                            (body.position.1 - part.position().translation.y));
+                let magnitude: f32 = part.augmented_mass().linear * body.mass
+                                     / (distance.0.pow(2f32) + distance.1.pow(2f32));
+                                     //* GRAVITATION_CONSTANT;
                 if distance.0.abs() > distance.1.abs() {
                     part.apply_force(0, &Force2::linear(Vector2::new(if distance.0 >= 0.0 { magnitude } else { -magnitude }, distance.1 / distance.0.abs() * magnitude)), ForceType::Force, false);
                 } else {
@@ -78,9 +78,6 @@ impl Simulation {
                 
             }
         }
-        // for player in self.world.player_parts.values_mut() {
-        //     for part in player.values_mut() { do_gravity_for_part(part, &mut self.world.celestial_objects); }
-        // }
         for part in self.world.parts.values_mut() {
             do_gravity_for_part(part, &self.world.celestial_objects);
         }
@@ -159,19 +156,6 @@ pub struct World {
     storage: MyStorage,
     removal_events: std::collections::VecDeque<MyHandle>,
     reference_point_body: Index,
-    free_parts: BTreeMap<u16, Index>,
-}
-
-impl World {
-    pub fn get_part(&self, index: MyHandle) -> Option<&parts::Part> {
-        self.storage.get(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
-    }
-    pub fn get_part_mut(&mut self, index: MyHandle) -> Option<&mut parts::Part> {
-        self.storage.get_mut(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
-    }
-    pub fn remove_part(&mut self, index: MyHandle) -> Option<parts::Part> {
-        self.storage.remove(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
-    }
 }
 
 pub enum WorldlyObject {
@@ -179,6 +163,24 @@ pub enum WorldlyObject {
     Part(parts::Part),
     Uninitialized,
 }
+impl WorldlyObject {
+    pub fn rigid(&self) -> Option<&MyRigidBody> {
+         match self {
+            WorldlyObject::Part(part) => Some(part.body()),
+            WorldlyObject::CelestialObject(body) => Some(body),
+            WorldlyObject::Uninitialized => None
+        }
+    }
+    pub fn rigid_mut(&mut self) -> Option<&mut MyRigidBody> {
+        match self {
+            WorldlyObject::Part(part) => Some(part.body_mut()),
+            WorldlyObject::CelestialObject(body) => Some(body),
+            WorldlyObject::Uninitialized => None
+        }
+    }
+
+}
+
 pub struct WorldAddHandle<'a>(&'a mut MyStorage); 
 impl<'a> WorldAddHandle<'a> {
     pub fn add_now(&self, object: WorldlyObject) -> Index { self.0.insert(object) }
@@ -194,110 +196,57 @@ impl<'a> From<&'a mut World> for WorldAddHandle<'a> {
     fn from(world: &'a mut World) -> WorldAddHandle<'a> { WorldAddHandle(&mut world.storage) }
 }
 
-pub struct WorldOld {
-    celestial_objects: BTreeMap<u16, RigidBody<MyUnits>>,
-    // free_parts: BTreeMap<u16, RigidBody<MyUnits>>,
-    // player_parts: BTreeMap<u16, BTreeMap<u16, RigidBody<MyUnits>>>,
-    parts: BTreeMap<u16, RigidBody<MyUnits>>,
-    removal_events: std::collections::VecDeque<MyHandle>,
-    next_celestial_object: u16,
-    next_part: u16,
-    reference_point_body: RigidBody<MyUnits>
-}
-
-impl WorldOld {
-    pub fn add_celestial_object(&mut self, body: RigidBody<MyUnits>) -> MyHandle {
-        let id = self.next_celestial_object;
-        self.next_celestial_object += 1;
-        let handle = MyHandle::CelestialObject(id);
-        self.celestial_objects.insert(id, body);
-        handle
+impl World {
+    pub fn get_rigid(&self, index: MyHandle) -> Option<&MyRigidBody> {
+        self.storage.get(index).map(|obj| obj.rigid()).flatten()
     }
-    pub fn add_part(&mut self, body: RigidBody<MyUnits>) -> u16 {
-        let id = self.next_part;
-        self.next_part += 1;
-        self.parts.insert(id, body);
-        id
+    pub fn get_part(&self, index: MyHandle) -> Option<&parts::Part> {
+        self.storage.get(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
     }
-    fn swap_part(&mut self, part_id: u16, with: RigidBody<MyUnits>) {
-        self.removal_events.push_back(MyHandle::Part(part_id));
-        self.parts.insert(part_id, with).expect("Attempted swap on a non-existant part");
+    pub fn get_rigid_mut(&mut self, index: MyHandle) -> Option<&MyRigidBody> {
+        self.storage.get_mut(index).map(|obj| obj.rigid()).flatten()
     }
-    pub fn get_rigid(&self, handle: MyHandle) -> Option<&RigidBody<MyUnits>> {
-        match handle {
-            MyHandle::CelestialObject(id) => self.celestial_objects.get(&id),
-            MyHandle::Part(id) => self.parts.get(&id),
-            MyHandle::ReferencePoint => Some(&self.reference_point_body)
-        }
+    pub fn get_part_mut(&mut self, index: MyHandle) -> Option<&mut parts::Part> {
+        self.storage.get_mut(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
     }
-    pub fn get_rigid_mut(&mut self, handle: MyHandle) -> Option<&mut RigidBody<MyUnits>> {
-        match handle {
-            MyHandle::CelestialObject(id) => self.celestial_objects.get_mut(&id),
-            MyHandle::Part(id) => self.parts.get_mut(&id),
-            MyHandle::ReferencePoint => Some(&mut self.reference_point_body)
-        }
-    }
-    pub fn get_parts(&self) -> &BTreeMap<u16, RigidBody<MyUnits>> { &self.parts }
-    pub fn remove_part(&mut self, handle: MyHandle) {
-        if let MyHandle::Part(id) = handle {
-            if let Some(_) = self.parts.remove(&id) {
-                self.removal_events.push_back(handle);
-            }
-        } else { panic!(); };
+    pub fn remove_part(&mut self, index: MyHandle) -> Option<parts::Part> {
+        self.storage.remove(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
     }
 }
 impl Default for World {
-    fn default() -> World { World {
-        celestial_objects: BTreeMap::new(),
-        parts: BTreeMap::new(),
-        removal_events: std::collections::VecDeque::new(),
-        next_celestial_object: 0,
-        next_part: 0,
-        reference_point_body: nphysics2d::object::RigidBodyDesc::new().status(nphysics2d::object::BodyStatus::Static).build()
-    } }
+    fn default() -> World { 
+        let mut storage = Arena::new();
+        let reference_point_body = nphysics2d::object::RigidBodyDesc::new().status(nphysics2d::object::BodyStatus::Static).mass(0f32).build();
+        let reference_point_body = storage.insert(WorldlyObject::CelestialObject(reference_point_body));
+        World {
+            storage,
+            reference_point_body,
+            removal_events: std::collections::VecDeque::<MyHandle>::new(),
+        }
+    }
 }
 impl nphysics2d::object::BodySet<MyUnits> for World {
     type Handle = MyHandle;
     fn get(&self, handle: Self::Handle) -> Option<&dyn nphysics2d::object::Body<MyUnits>> {
-        let ptr = match handle {
-            MyHandle::CelestialObject(id) => self.celestial_objects.get(&id),
-            MyHandle::Part(id) => self.parts.get(&id),
-            MyHandle::ReferencePoint => Some(&self.reference_point_body),
-        };
-        if let Some(ptr) = ptr { Some(ptr) }
+        if let Some(ptr) = self.get_rigid(handle) { Some(ptr) }
         else { None }
     }
     fn get_mut(&mut self, handle: Self::Handle) -> Option<&mut dyn nphysics2d::object::Body<MyUnits>> {
-        let ptr = match handle {
-            MyHandle::CelestialObject(id) => self.celestial_objects.get_mut(&id),
-            MyHandle::Part(id) => self.parts.get_mut(&id),
-            MyHandle::ReferencePoint => Some(&mut self.reference_point_body),
-        };
-        if let Some(ptr) = ptr { Some(ptr) }
+        if let Some(ptr) = self.get_rigid_mut(handle) { Some(ptr) }
         else { None }
     }
     fn contains(&self, handle: Self::Handle) -> bool {
-        match handle {
-            MyHandle::CelestialObject(id) => self.celestial_objects.contains_key(&id),
-            MyHandle::Part(id) => self.parts.contains_key(&id),
-            MyHandle::ReferencePoint => true,
-        }
+        self.get_rigid(handle).is_some()
     }
     fn foreach(&self, f: &mut dyn FnMut(Self::Handle, &dyn nphysics2d::object::Body<MyUnits>)) {
-        for (id, body) in &self.celestial_objects { f(MyHandle::CelestialObject(*id), body); }
-        // for (player, bodies) in &self.player_parts {
-        //     for (id, body) in bodies { f(MyHandle::Part(Some(*player), *id), body); }
-        // }
-        for (id, body) in &self.parts { f(MyHandle::Part(*id), body); }
-        f(MyHandle::ReferencePoint, &self.reference_point_body);
+        for (id, obj) in &self.storage {
+            if let Some(body) = obj.rigid() { f(id, body) }
+        }
     }
     fn foreach_mut(&mut self, f: &mut dyn FnMut(Self::Handle, &mut dyn nphysics2d::object::Body<MyUnits>)) {
-        for (id, body) in &mut self.celestial_objects { f(MyHandle::CelestialObject(*id), body); }
-        // for (player, bodies) in &mut self.player_parts {
-        //     for (id, body) in bodies { f(MyHandle::Part(Some(*player), *id), body); }
-        // }
-        for (id, body) in &mut self.parts { f(MyHandle::Part(*id), body); }
-        f(MyHandle::ReferencePoint, &mut self.reference_point_body);
+        for (id, obj) in &mut self.storage {
+            if let Some(body) = obj.rigid_mut() { f(id, body) }
+        }
     }
     fn pop_removal_event(&mut self) -> Option<Self::Handle> {
         self.removal_events.pop_front()

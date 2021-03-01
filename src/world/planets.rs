@@ -35,6 +35,8 @@ impl Planets {
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS)
                 .build();
+            let position = (body.position().translation.x, body.position().translation.y);
+            let mass = body.augmented_mass().linear;
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
@@ -53,6 +55,8 @@ impl Planets {
                 id,
                 cargo_upgrade: None,
                 can_beamout: true,
+                position: (earth_pos.x, earth_pos.y),
+                mass,
             }
         };
 
@@ -63,6 +67,8 @@ impl Planets {
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 35.0)
                 .build();
+            let position = (body.position().translation.x, body.position().translation.y);
+            let mass = body.augmented_mass().linear;
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE / 4.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
@@ -81,6 +87,8 @@ impl Planets {
                 id,
                 cargo_upgrade: Some(super::parts::PartKind::LandingThruster),
                 can_beamout: true,
+                position,
+                mass,
             }
         };
 
@@ -91,6 +99,8 @@ impl Planets {
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 4.0)
                 .build();
+            let position = (body.position().translation.x, body.position().translation.y);
+            let mass = body.augmented_mass().linear;
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE / 2.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
@@ -109,6 +119,8 @@ impl Planets {
                 id,
                 cargo_upgrade: Some(super::parts::PartKind::Hub),
                 can_beamout: false,
+                position,
+                mass,
             }
         };
 
@@ -119,6 +131,8 @@ impl Planets {
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 15.0)
                 .build();
+            let position = (body.position().translation.x, body.position().translation.y);
+            let mass = body.augmented_mass().linear;
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE * 0.38;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
@@ -137,6 +151,8 @@ impl Planets {
                 id,
                 cargo_upgrade: Some(super::parts::PartKind::SolarPanel),
                 can_beamout: false,
+                position,
+                mass,
             }
         };
 
@@ -147,6 +163,8 @@ impl Planets {
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 10.0)
                 .build();
+            let position = (body.position().translation.x, body.position().translation.y);
+            let mass = body.augmented_mass().linear;
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE * 2.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
@@ -165,6 +183,8 @@ impl Planets {
                 id,
                 cargo_upgrade: Some(super::parts::PartKind::Thruster),
                 can_beamout: false,
+                position,
+                mass,
             }
         };
 
@@ -175,6 +195,8 @@ impl Planets {
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 10.0)
                 .build();
+            let position = (body.position().translation.x, body.position().translation.y);
+            let mass = body.augmented_mass().linear;
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE / 4.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
@@ -193,6 +215,8 @@ impl Planets {
                 id,
                 cargo_upgrade: Some(PartKind::LandingWheel),
                 can_beamout: false,
+                position,
+                mass,
             }
         };*/
 
@@ -203,6 +227,8 @@ impl Planets {
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 10.0)
                 .build();
+            let position = (body.position().translation.x, body.position().translation.y);
+            let mass = body.augmented_mass().linear;
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE * 2.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
@@ -221,6 +247,8 @@ impl Planets {
                 id,
                 cargo_upgrade: Some(PartKind::SuperThruster),
                 can_beamout: false,
+                position,
+                mass,
             }
         };
 
@@ -231,6 +259,8 @@ impl Planets {
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 4.0)
                 .build();
+            let position = (body.position().translation.x, body.position().translation.y);
+            let mass = body.augmented_mass().linear;
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE * 1.5;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
@@ -249,6 +279,8 @@ impl Planets {
                 id,
                 cargo_upgrade: Some(PartKind::HubThruster),
                 can_beamout: false,
+                position,
+                mass,
             }
         };
 
@@ -259,6 +291,8 @@ impl Planets {
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 1.3)
                 .build();
+            let position = (body.position().translation.x, body.position().translation.y);
+            let mass = body.augmented_mass().linear;
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
@@ -277,6 +311,8 @@ impl Planets {
                 id,
                 cargo_upgrade: Some(PartKind::EcoThruster),
                 can_beamout: false,
+                position,
+                mass,
             }
         };
 
@@ -287,6 +323,8 @@ impl Planets {
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 4.0)
                 .build();
+            let position = (body.position().translation.x, body.position().translation.y);
+            let mass = body.augmented_mass().linear;
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE * 2.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
@@ -305,6 +343,8 @@ impl Planets {
                 id,
                 cargo_upgrade: Some(PartKind::PowerHub),
                 can_beamout: false,
+                position,
+                mass,
             }
         };
 
@@ -315,6 +355,8 @@ impl Planets {
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 50.0)
                 .build();
+            let position = (body.position().translation.x, body.position().translation.y);
+            let mass = body.augmented_mass().linear;
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE * 4.7;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
@@ -333,6 +375,8 @@ impl Planets {
                 id,
                 cargo_upgrade: None,
                 can_beamout: false,
+                position,
+                mass,
             }
         };
 
@@ -343,6 +387,8 @@ impl Planets {
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS)
                 .build();
+            let position = (body.position().translation.x, body.position().translation.y);
+            let mass = body.augmented_mass().linear;
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE * 0.75;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
@@ -361,6 +407,8 @@ impl Planets {
                 id,
                 cargo_upgrade: None,
                 can_beamout: true,
+                position,
+                mass,
             }
         };*/
 
@@ -397,6 +445,8 @@ pub struct CelestialObject {
     pub id: u16,
     pub cargo_upgrade: Option<super::parts::PartKind>,
     pub can_beamout: bool,
+    pub position: (f32, f32),
+    pub mass: f32,
 }
 
 pub fn planet_location(radius: f32) -> nalgebra::Matrix<f32, nalgebra::U2, nalgebra::U1, nalgebra::ArrayStorage<f32, nalgebra::U2, nalgebra::U1>> {
