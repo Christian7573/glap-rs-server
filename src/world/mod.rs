@@ -34,7 +34,7 @@ pub struct Simulation {
     mechanics: MyMechanicalWorld,
     geometry: MyGeometricalWorld,
     pub colliders: MyColliderSet,
-    joints: MyJointSet,
+    pub joints: MyJointSet,
     persistant_forces: MyForceSet,
     pub planets: planets::Planets,
 }
@@ -212,6 +212,7 @@ impl World {
     pub fn remove_part(&mut self, index: MyHandle) -> Option<parts::Part> {
         self.storage.remove(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
     }
+    pub fn add_celestial_object(&mut self, body: MyRigidBody) -> MyHandle { self.storage.insert(WorldlyObject::CelestialObject(body)) }
 }
 impl Default for World {
     fn default() -> World { 

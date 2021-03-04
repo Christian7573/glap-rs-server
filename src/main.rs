@@ -104,31 +104,35 @@ async fn main() {
         let mut outbound_events = Vec::new();
         match event {
             Event::Simulate => {
-                let mut to_delete: Vec<u16> = Vec::new();
-                for (id, part) in free_parts.iter_mut() {
-                    match part {
-                        FreePart::Decaying(_, ticks) => {
+                let mut to_delete: Vec<MyHandle> = Vec::new();
+                for (part_handle, meta) in free_parts.iter_mut() {
+                    match meta {
+                        FreePart::Decaying(ticks) => {
                             *ticks -= 1;
-                            if *ticks < 1 { to_delete.push(*id); }
+                            if *ticks < 1 { to_delete.push(part_handle); }
                         },
-                        FreePart::EarthCargo(part, ticks) => {
+                        FreePart::EarthCargo(ticks) => {
                             *ticks -= 1;
                             if *ticks < 1 {
                                 let earth_position = simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
-                                let body = simulation.world.get_rigid_mut(MyHandle::Part(part.body_id)).unwrap();
+                                let part = simulation.world.get_part_mut(part_handle).expect("Invalid Earth Cargo");
+                                let body = part.body_mut();
                                 let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                                 let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
                                 body.set_position(Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0)); // spawn_degrees));
-                                use nphysics2d::object::Body;
-                                body.apply_force(0, &nphysics2d::math::Force::zero(), nphysics2d::math::ForceType::Force, true);
+                                //use nphysics2d::object::Body;
+                                //body.apply_force(0, &nphysics2d::math::Force::zero(), nphysics2d::math::ForceType::Force, true);
+                                body.activate();
                                 *ticks = TICKS_PER_SECOND as u16 * 60;
                             }
                         },
-                        FreePart::Grabbed(_) => (),
+                        FreePart::Grabbed => (),
                         FreePart::PlaceholderLol => panic!(),
                     }
                 }
                 for to_delete in to_delete {
+                    outbound_events.push(ToSerializer::Broadcast(
+                            //TODO World::remove_part needs to interact with a new method on Part
                     if let Some(FreePart::Decaying(_part, _)) = free_parts.remove(&to_delete) {
                         simulation.world.remove_part(MyHandle::Part(to_delete));
                         outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::RemovePart{ id: to_delete }));
@@ -140,16 +144,13 @@ async fn main() {
                         ticks_til_earth_cargo_spawn = TICKS_PER_EARTH_CARGO_SPAWN;
                         earth_cargos += 1; 
                         let earth_position = simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
-                        let part = world::parts::Part::new(world::parts::PartKind::Cargo, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
-                        let id = part.body_id;
-                        let body = simulation.world.get_rigid_mut(MyHandle::Part(part.body_id)).unwrap();
                         let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                         let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
-                        body.set_position(Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0)); // spawn_degrees));
-                        free_parts.insert(part.body_id, FreePart::EarthCargo(part, TICKS_PER_SECOND as u16 * 60));
-
-                        outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::AddPart { id, kind: world::parts::PartKind::Cargo }));
-                        outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::MovePart { id, x: body.position().translation.x, y: body.position().translation.y, rotation_i: body.position().rotation.im, rotation_n: body.position().rotation.re }));
+                        let spawn_pos = Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0);
+                        let part_handle = world::parts::PartKind::Cargo.into().inflate(&mut simulation.world, &mut simulation.colliders, &mut simulation.joints, spawn_pos);
+                        //let part = world::parts::Part::new(world::parts::PartKind::Cargo, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
+                        free_parts.insert(part_handle, FreePart::EarthCargo(TICKS_PER_SECOND as u16 * 60));
+                        outbound_events.extend(simulation.world.get_part(part_handle).unwrap().inflation_msgs().into_iter().map(|msg| ToSerializer::Broadcast(msg)));
                     }
                 }
                 ticks_til_power_regen -= 1;
@@ -677,60 +678,23 @@ fn recursive_detatch(part: &mut Part, free_parts: &mut BTreeMap<u16, FreePart>, 
 }
 
 enum FreePart {
-    Decaying(world::parts::Part, u16),
-    EarthCargo(world::parts::Part, u16),
-    Grabbed(world::parts::Part),
+    Decaying(u16),
+    EarthCargo(u16),
+    Grabbed,
     PlaceholderLol,
 }
-impl std::ops::Deref for FreePart {
-    type Target = world::parts::Part;
-    fn deref(&self) -> &world::parts::Part {
-        match self {
-            FreePart::Decaying(part, _) => part,
-            FreePart::EarthCargo(part, _) => part,
-            FreePart::Grabbed(part) => part,
-            FreePart::PlaceholderLol => panic!("Attempted to get part from placeholder"),
-        }
-    }
-}
-impl std::ops::DerefMut for FreePart {
-    fn deref_mut(&mut self) -> &mut world::parts::Part {
-        match self {
-            FreePart::Decaying(part, _) => part,
-            FreePart::EarthCargo(part, _) => part,
-            FreePart::Grabbed(part) => part,
-            FreePart::PlaceholderLol => panic!("Attempted to get part from placeholder"),
-        }
-    }
-}
+
 impl FreePart {
     pub fn become_grabbed(&mut self, earth_cargo_count: &mut u8) {
-        match &self {
-            FreePart::EarthCargo(_, _) => { *earth_cargo_count -= 1; },
-            _ => ()
+        match self {
+            FreePart::Decaying(_) | FreePart::EarthCargo(_) => { *self = FreePart::Grabbed }
+            FreePart::PlaceholderLol | FreePart::Grabbed => panic!("FreePart::Grabbed called on bad")
         }
-        let potato = match std::mem::replace(self, FreePart::PlaceholderLol) {
-            FreePart::PlaceholderLol => panic!("Become transform on Placerholderlol"),
-            FreePart::Decaying(part, _) => FreePart::Grabbed(part),
-            FreePart::EarthCargo(part, _) => FreePart::Grabbed(part),
-            FreePart::Grabbed(_) => panic!("Into FreePart::Grabbed called on Grabbed")
-        };
-        *self = potato;
     }
     pub fn become_decaying(&mut self) {
-        let potato = match std::mem::replace(self, FreePart::PlaceholderLol) {
-            FreePart::PlaceholderLol => panic!("Become transform on Placerholderlol"),
-            FreePart::Decaying(part, _) | FreePart::Grabbed(part) => FreePart::Decaying(part, DEFAULT_PART_DECAY_TICKS),
-            FreePart::EarthCargo(_, _) => panic!("EarthCargo into Decaying directly"),
-        };
-        *self = potato;
-    }
-    pub fn extract(self) -> Part {
         match self {
-            FreePart::PlaceholderLol => panic!("Tried to extract placeholderlol"),
-            FreePart::Decaying(part, _) => part,
-            FreePart::EarthCargo(part, _) => part,
-            FreePart::Grabbed(part) => part,
+            FreePart::Decaying(_) | FreePart::Grabbed => { *self = FreePart::Decaying(DEFAULT_PART_DECAY_TICKS) }
+            FreePart::PlaceholderLol | FreePart::EarthCargo(_) => panic!("FreePart::Grabbed called on bad")
         }
     }
 }
