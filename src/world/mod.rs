@@ -9,6 +9,7 @@ use nphysics2d::math::Point;
 use ncollide2d::pipeline::ContactEvent;
 use crate::PartOfPlayer;
 use generational_arena::{Arena, Index};
+use crate::codec::ToClientMsg;
 
 pub mod planets;
 pub mod parts;
@@ -149,6 +150,12 @@ impl Simulation {
     }
 
     pub fn geometrical_world(&self) -> &MyGeometricalWorld { &self.geometry }
+
+    pub fn delete_parts_recursive(&mut self, index: MyHandle) -> Vec<ToClientMsg> {
+        let mut removal_msgs = Vec::new();
+        self.world.delete_parts_recursive(index, &mut self.colliders, &mut self.joints, &mut removal_msgs);
+        removal_msgs
+    }
 }
 
 type MyStorage = Arena<WorldlyObject>;
@@ -209,8 +216,15 @@ impl World {
     pub fn get_part_mut(&mut self, index: MyHandle) -> Option<&mut parts::Part> {
         self.storage.get_mut(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
     }
-    pub fn remove_part(&mut self, index: MyHandle) -> Option<parts::Part> {
-        self.storage.remove(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
+    pub fn delete_parts_recursive(&mut self, index: MyHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, removal_msgs: &mut Vec<ToClientMsg>) {
+        match self.storage.remove(index) {
+            Some(WorldlyObject::Part(part)) => {
+                self.removal_events.push(index);
+                part.delete_recursive(self, colliders, joints, removal_msgs);
+            },
+            None => (),
+            _ => panic!("Delete part called on non-part")
+        }
     }
     pub fn add_celestial_object(&mut self, body: MyRigidBody) -> MyHandle { self.storage.insert(WorldlyObject::CelestialObject(body)) }
 }

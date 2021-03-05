@@ -149,6 +149,17 @@ impl Part {
         }
     }
 
+    pub fn delete_recursive(self, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet, removal_msgs: &mut Vec<ToClientMsg>) {
+        colliders.remove(self.collider);
+        removal_msgs.push(self.remove_msg());
+        for attachment in self.attachments.into_iter() {
+            if let Some(attachment) = attachment {
+                let attachment = attachment.deflate(joints);
+                bodies.delete_parts_recursive(attachment, colliders, joints, removal_msgs);
+            }
+        }
+    }
+
     pub fn id(&self) -> u16 { self.id }
     pub fn body(&self) -> &MyRigidBody { &self.body }
     pub fn body_mut(&self) -> &mut MyRigidBody { &mut self.body }
@@ -204,7 +215,7 @@ impl PartAttachment {
         }
     }
 
-    pub fn deflate(self, joints: &mut MyJointSet) -> Part {
+    pub fn deflate(self, joints: &mut MyJointSet) -> MyHandle {
         joints.remove(self.connections.0);
         joints.remove(self.connections.1);
         self.part

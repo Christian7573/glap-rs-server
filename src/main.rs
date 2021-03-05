@@ -131,12 +131,7 @@ async fn main() {
                     }
                 }
                 for to_delete in to_delete {
-                    outbound_events.push(ToSerializer::Broadcast(
-                            //TODO World::remove_part needs to interact with a new method on Part
-                    if let Some(FreePart::Decaying(_part, _)) = free_parts.remove(&to_delete) {
-                        simulation.world.remove_part(MyHandle::Part(to_delete));
-                        outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::RemovePart{ id: to_delete }));
-                    }
+                    outbound_events.extend(simulation.delete_parts_recursive(to_delete).into_iter().map(|msg| ToSerializer::Broadcast(msg)));
                 }
                 if earth_cargos < MAX_EARTH_CARGOS {
                     ticks_til_earth_cargo_spawn -= 1;
