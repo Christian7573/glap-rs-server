@@ -10,6 +10,7 @@ use super::nphysics_types::*;
 use crate::PlayerMeta;
 use crate::codec::ToClientMsg;
 use super::{WorldAddHandle, World, WorldlyObject};
+use crate::session::WorldUpdatePartMove;
 use std::sync::atomic::{AtomicU16, Ordering as AtomicOrdering};
 
 lazy_static! {
@@ -32,7 +33,7 @@ pub struct Part {
     body: MyRigidBody,
     collider: DefaultColliderHandle,
     kind: PartKind,
-    attachments: Box<[Option<PartAttachment>; 4]>,
+    attachments: [Option<PartAttachment>; 4],
     pub thrust_mode: CompactThrustMode,
 }
 pub struct PartAttachment {
@@ -50,7 +51,7 @@ impl RecursivePartDescription {
         body.set_position(initial_location.clone());
         let body_handle = bodies.add_later();
         let collider = colliders.insert(collider_desc.build(BodyPartHandle(body_handle, 0)));
-        let mut attachments: Box<[Option<PartAttachment>; 4]> = Box::new([None, None, None, None]);
+        let mut attachments: [Option<PartAttachment>; 4] = [None, None, None, None];
         for i in 0..4 {
             attachments[i] = self.attachments.get(i).map(|o| o.as_ref()).flatten().map(|recursive_part| {
                 if let Some(attachment) = self.kind.attachment_locations()[i] {
@@ -149,6 +150,23 @@ impl Part {
         }
     }
 
+    pub fn find_cargo_recursive(&self, bodies: &MyBodySet) -> Option<(Option<MyHandle>, usize)> {
+        for (i, attachment) in self.attachments.iter().enumerate() {
+            if let Some(attachment) = attachment {
+                let part = bodies.get_part(*attachment).expect("find_cargo_recursive: attached to body that didn't exist");
+                if part.kind == PartKind::Cargo { return Some((None, i)) }
+                else {
+                    match part.find_cargo_recursive(bodies) {
+                        Some((Some(parent_handle), attachment_slot)) => return Some((Some(parent_handle), attachment_slot)),
+                        Some((None, attachment_slot)) => return Some((Some(*attachment), attachment_slot)),
+                        None => ()
+                    }
+                }
+            }
+        }
+        None
+    }
+
     pub fn delete_recursive(self, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet, removal_msgs: &mut Vec<ToClientMsg>) {
         colliders.remove(self.collider);
         removal_msgs.push(self.remove_msg());
@@ -174,6 +192,20 @@ impl Part {
     } }
     pub fn update_meta_msg(&self, owning_player: Option<u16>) -> ToClientMsg { ToClientMsg::UpdatePartMeta { id: self.id, owning_player, thrust_mode: self.thrust_mode.into() } }
     pub fn remove_msg(&self) -> ToClientMsg { ToClientMsg::RemovePart { id: self.id } }
+
+    pub fn physics_update_msg(&self, bodies: &MyBodySet, out: &mut Vec<WorldUpdatePartMove>) {
+        let position = self.body.position();
+        out.push(WorldUpdatePartMove {
+            id: self.id,
+            x: position.translation.x, y: position.translation.y,
+            rot_cos: position.rotation.re, rot_sin: position.rotation.im
+        });
+        for attachment in &self.attachments {
+            if let Some(attachment) = attachment {
+                bodies.get_part(*attachment).unwrap().physics_update_msg(bodies, out);
+            }
+        }
+    }
 }
 
 impl PartAttachment {
