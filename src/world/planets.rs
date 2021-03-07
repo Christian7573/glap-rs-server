@@ -25,7 +25,7 @@ pub struct Planets {
 impl Planets {
     pub fn new(colliders: &mut super::MyColliderSet, bodies: &mut super::World) -> Planets {
         const EARTH_MASS: f32 = 600.0;
-        const EARTH_SIZE: f32 = 25.0;
+        const EARTH_SIZE: f32 = 30.0;
         let earth_pos = planet_location(1500.0);
         let planet_material = MaterialHandle::new(BasicMaterial::new(0.0, 1.0));
         let earth = {
@@ -64,7 +64,7 @@ impl Planets {
                 .mass(EARTH_MASS / 35.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE / 4.0;
+            const RADIUS: f32 = EARTH_SIZE * 0.29 ;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -92,7 +92,7 @@ impl Planets {
                 .mass(EARTH_MASS / 4.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE / 2.0;
+            const RADIUS: f32 = EARTH_SIZE * 0.53;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -120,7 +120,7 @@ impl Planets {
                 .mass(EARTH_MASS / 15.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE * 0.38;
+            const RADIUS: f32 = EARTH_SIZE * 0.37;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -148,7 +148,7 @@ impl Planets {
                 .mass(EARTH_MASS * 10.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE * 2.0;
+            const RADIUS: f32 = EARTH_SIZE * 6.67;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -176,7 +176,7 @@ impl Planets {
                 .mass(EARTH_MASS / 10.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE / 4.0;
+            const RADIUS: f32 = EARTH_SIZE * 0.19;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -204,7 +204,7 @@ impl Planets {
                 .mass(EARTH_MASS * 10.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE * 2.0;
+            const RADIUS: f32 = EARTH_SIZE * 6.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -232,7 +232,7 @@ impl Planets {
                 .mass(EARTH_MASS * 4.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE * 1.5;
+            const RADIUS: f32 = EARTH_SIZE * 2.67;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -288,7 +288,7 @@ impl Planets {
                 .mass(EARTH_MASS * 4.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE * 2.0;
+            const RADIUS: f32 = EARTH_SIZE * 2.17;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -316,7 +316,7 @@ impl Planets {
                 .mass(EARTH_MASS * 50.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE * 4.7;
+            const RADIUS: f32 = EARTH_SIZE * 10;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
@@ -341,10 +341,10 @@ impl Planets {
                 .translation(Vector2::new(earth_pos.x / earth_pos.magnitude() * -2500.0, earth_pos.y / earth_pos.magnitude() * -2500.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
-                .mass(EARTH_MASS)
+                .mass(0.0)
                 .build();
             let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE * 0.75;
+            const RADIUS: f32 = EARTH_SIZE * 1.67;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
