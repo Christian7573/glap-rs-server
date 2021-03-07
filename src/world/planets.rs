@@ -108,7 +108,7 @@ impl Planets {
                 body: body_handle,
                 id,
                 cargo_upgrade: Some(super::parts::PartKind::Hub),
-                can_beamout: false,
+                can_beamout: true,
             }
         };
 
@@ -136,7 +136,7 @@ impl Planets {
                 body: body_handle,
                 id,
                 cargo_upgrade: Some(super::parts::PartKind::SolarPanel),
-                can_beamout: false,
+                can_beamout: true,
             }
         };
 
@@ -164,7 +164,7 @@ impl Planets {
                 body: body_handle,
                 id,
                 cargo_upgrade: Some(super::parts::PartKind::Thruster),
-                can_beamout: false,
+                can_beamout: true,
             }
         };
 
@@ -192,7 +192,7 @@ impl Planets {
                 body: body_handle,
                 id,
                 cargo_upgrade: Some(PartKind::LandingWheel),
-                can_beamout: false,
+                can_beamout: true,
             }
         };*/
 
@@ -220,7 +220,7 @@ impl Planets {
                 body: body_handle,
                 id,
                 cargo_upgrade: Some(PartKind::SuperThruster),
-                can_beamout: false,
+                can_beamout: true,
             }
         };
 
@@ -248,7 +248,7 @@ impl Planets {
                 body: body_handle,
                 id,
                 cargo_upgrade: Some(PartKind::HubThruster),
-                can_beamout: false,
+                can_beamout: true,
             }
         };
 
@@ -276,7 +276,7 @@ impl Planets {
                 body: body_handle,
                 id,
                 cargo_upgrade: Some(PartKind::EcoThruster),
-                can_beamout: false,
+                can_beamout: true,
             }
         };
 
@@ -304,7 +304,7 @@ impl Planets {
                 body: body_handle,
                 id,
                 cargo_upgrade: Some(PartKind::PowerHub),
-                can_beamout: false,
+                can_beamout: true,
             }
         };
 
