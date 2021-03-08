@@ -217,8 +217,9 @@ async fn main() {
                                     let my_to_serializer = to_serializer.clone();
                                     let player = players.remove(&player_id).unwrap();
                                     let deflated_ship = simulation.world.get_part(player.part).unwrap().deflate();
-                                    outbound_events.extend(simulation.delete_parts_recursive(player.part).into_iter().map(|msg| ToSerializer::Broadcast(msg)));
-                                    recursive_beamout_remove(&part, &mut simulation);
+                                    //Don't need to send deletion messages since the client will
+                                    //take care of IncinerationAnimation
+                                    simulation.delete_parts_recursive(player.part);
                                     async_std::task::spawn(async move {
                                         futures_timer::Delay::new(std::time::Duration::from_millis(2500)).await;
                                         my_to_serializer.send(vec![ ToSerializer::DeleteWriter(player_id) ]).await;
@@ -250,9 +251,10 @@ async fn main() {
                     }
                 }
 
-                for (player, core) in players.values_mut() { 
+                for player in players.values_mut() { 
                     let mut max_power_lost = 0;
                     let mut regen_lost = 0;
+                    //TODO REWRITE
                     recursive_broken_check(core, &mut simulation, &mut free_parts, &mut outbound_events, &mut max_power_lost, &mut regen_lost);
                     player.max_power -= max_power_lost;
                     player.power_regen_per_5_ticks -= regen_lost;
@@ -298,28 +300,24 @@ async fn main() {
             },
             
             Event::InboundEvent(NewPlayer{ id, name, parts, beamout_token }) => { 
-                //Graduate session to being existant
-                /*let mut core = world::parts::Part::new(world::parts::PartKind::Core, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
-                let core_body = simulation.world.get_rigid_mut(MyHandle::Part(core.body_id)).unwrap();
-                simulation.colliders.get_mut(core.collider).unwrap().set_user_data(Some(Box::new(PartOfPlayer(id))));*/
-                //core_body.apply_force(0, &nphysics2d::algebra::Force2::torque(std::f32::consts::PI), nphysics2d::algebra::ForceType::VelocityChange, true);
                 let earth_position = *simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
                 let earth_radius = simulation.planets.earth.radius;
-                let core = beamout::RecursivePartDescription::inflate_root(&parts, &mut simulation, earth_position.x, earth_position.y, Some(earth_radius), &mut rand );
-                let mut max_power = 0u32; let mut power_regen = 0u32;
-                fn recursive_part_beamin(part: &Part, player_id: u16, simulation: &mut world::Simulation, max_power: &mut u32, power_regen: &mut u32) {
-                    let collider = simulation.colliders.get_mut(part.collider).unwrap();
-                    collider.set_user_data(Some(Box::new(PartOfPlayer(player_id))));
-                    *max_power += part.kind.power_storage();
-                    *power_regen += part.kind.power_regen_per_5_ticks();
-                    for i in 0..part.attachments.len() {
-                        if let Some((attachment, _, _)) = &part.attachments[i] { recursive_part_beamin(attachment, player_id, simulation, max_power, power_regen); }
-                    };
-                }
-                recursive_part_beamin(&core, id, &mut simulation, &mut max_power, &mut power_regen);
+                use rand::Rng;
+                let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
+                let spawn_radius = earth_radius * 1.25 + 1.0 + earth_radius;
+                let spawn_center = (spawn_degrees.cos() * spawn_radius + earth_position.x, spawn_degrees.sin() * spawn_radius + earth_position.y);
+
+                let core_handle = simulation.inflate(parts, Isometry2::new(Vector2::new(spawn_center.0, spawn_center.1), spawn_degrees - std::f32::consts::FRAC_PI_2));
 
                 outbound_events.push(ToSerializer::Message(id, ToClientMsg::HandshakeAccepted{ id, core_id: core.body_id, can_beamout: beamout_token.is_some() }));
                 outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::AddPlayer { id, name: name.clone(), core_id: core.body_id }));
+                
+                let mut player = PlayerMeta::new(id, core_handle, name.clone(), beamout_token);
+                simulation.world.recurse_part_mut(core_handle, |_handle: MyHandle, part: &mut world::parts::Part| {
+                    part.join_to(&mut player);
+                    outbound_events.extend(part.inflation_msgs(Some(id)).into_iter().map(|msg| ToSerializer::Broadcast(msg)));
+                });
+
 
                 //Send over celestial object locations
                 for planet in simulation.planets.celestial_objects().iter() {
@@ -329,23 +327,6 @@ async fn main() {
                         id: planet.id, radius: planet.radius, position: (position.x, position.y)
                     }));
                 }
-                //Send over all parts
-                fn send_part(part: &Part, owning_player: &Option<u16>, simulation: &crate::world::Simulation, player_id: u16, out: &mut Vec<ToSerializer>) {
-                    let body = simulation.world.get_rigid(MyHandle::Part(part.body_id)).unwrap();
-                    let position = body.position();
-                    out.push(ToSerializer::Message(player_id, ToClientMsg::AddPart{ id: part.body_id, kind: part.kind }));
-                    out.push(ToSerializer::Message(player_id, ToClientMsg::MovePart{
-                        id: part.body_id,
-                        x: position.translation.x, y: position.translation.y,
-                        rotation_n: position.rotation.re, rotation_i: position.rotation.im,
-                    }));
-                    out.push(ToSerializer::Message(player_id, ToClientMsg::UpdatePartMeta{
-                        id: part.body_id, owning_player: *owning_player, thrust_mode: part.thrust_mode.into()
-                    }));
-                    for part in part.attachments.iter() {
-                        if let Some((part, _, _)) = part { send_part(part, owning_player, simulation, player_id, out); }
-                    }
-                }
                 for (_id, part) in &free_parts { send_part(part, &None, &mut simulation, id, &mut outbound_events); };
                 send_part(&core, &Some(id), &simulation, id, &mut outbound_events);
                 for (other_id, (other_player, other_core)) in &players {
@@ -354,13 +335,8 @@ async fn main() {
                     send_part(&core, &Some(id), &mut simulation, *other_id, &mut outbound_events);
                 }
                 
-                //Graduate to spawned player
-                let mut meta = PlayerMeta::new(name.clone(), beamout_token);
-                meta.max_power = max_power;
-                meta.power_regen_per_5_ticks = power_regen;
-                meta.power = meta.max_power;
-                outbound_events.push(ToSerializer::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: meta.max_power, can_beamout: meta.can_beamout }));
-                players.insert(id, (meta, core));
+                outbound_events.push(ToSerializer::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
+                players.insert(id, player);
                 outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage{ username: String::from("Server"), msg: name + " joined the game", color: String::from("#e270ff") }));
             },
 
@@ -673,10 +649,11 @@ pub fn rotate_vector(x: f32, y: f32, theta_sin: f32, theta_cos: f32) -> (f32, f3
 }
 
 pub struct PlayerMeta {
+    pub id: u16,
     pub name: String,
     pub beamout_token: Option<String>, 
 
-    pub part: MyHandle,
+    pub core: MyHandle,
     pub thrust_forwards: bool,
     pub thrust_backwards: bool,
     pub thrust_clockwise: bool,
@@ -694,7 +671,9 @@ pub struct PlayerMeta {
     can_beamout: bool,
 }
 impl PlayerMeta {
-    fn new(name: String, beamout_token: Option<String>) -> PlayerMeta { PlayerMeta {
+    fn new(my_id: u16, core_handle: MyHandle, name: String, beamout_token: Option<String>) -> PlayerMeta { PlayerMeta {
+        id: my_id,
+        core: core_handle,
         name,
         beamout_token,
         thrust_backwards: false, thrust_clockwise: false, thrust_counterclockwise: false, thrust_forwards: false,

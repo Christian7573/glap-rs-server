@@ -151,6 +151,9 @@ impl Simulation {
 
     pub fn geometrical_world(&self) -> &MyGeometricalWorld { &self.geometry }
 
+    pub fn inflate(&mut self, parts: &parts::RecursivePartDescription, initial_location: MyIsometry) -> MyHandle {
+        parts.inflate(&mut self.world, &mut self.colliders, &mut self.joints, initial_location)
+    }
     pub fn delete_parts_recursive(&mut self, index: MyHandle) -> Vec<ToClientMsg> {
         let mut removal_msgs = Vec::new();
         self.world.delete_parts_recursive(index, &mut self.colliders, &mut self.joints, &mut removal_msgs);
@@ -227,6 +230,20 @@ impl World {
         }
     }
     pub fn add_celestial_object(&mut self, body: MyRigidBody) -> MyHandle { self.storage.insert(WorldlyObject::CelestialObject(body)) }
+
+    pub fn recurse_part<F>(&self, part_handle: MyHandle, func: &mut F) where F: FnMut(MyHandle, &parts::Part) {
+        if let Some(part) = self.get_part(part_handle) {
+            func(part_handle, part);
+            for attachment in part.attachments() { self.recurse_part(*attachment, func); }
+        }
+    }
+    pub fn recurse_part_mut<F>(&mut self, part_handle: MyHandle, func: &mut F) where F: FnMut(MyHandle, &mut parts::Part) {
+        if let Some(part) = self.get_part_mut(part_handle) {
+            func(part_handle, part);
+            for attachment in part.attachments() { self.recurse_part(*attachment, func); }
+        }
+    }
+    
 }
 impl Default for World {
     fn default() -> World { 

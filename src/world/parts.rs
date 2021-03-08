@@ -35,6 +35,7 @@ pub struct Part {
     kind: PartKind,
     attachments: [Option<PartAttachment>; 4],
     pub thrust_mode: CompactThrustMode,
+    part_of_player: Option<u16>,
 }
 pub struct PartAttachment {
     part: MyHandle,
@@ -72,7 +73,8 @@ impl RecursivePartDescription {
             collider,
             kind: self.kind,
             attachments,
-            thrust_mode: CompactThrustMode::calculate(true_facing, rel_part_x, rel_part_y)
+            thrust_mode: CompactThrustMode::calculate(true_facing, rel_part_x, rel_part_y),
+            part_of_player: None,
         };
         bodies.add_its_later(body_handle, WorldlyObject::Part(part));
         body_handle
@@ -85,14 +87,16 @@ impl From<PartKind> for RecursivePartDescription {
 }
 
 impl Part {
-    pub fn join_to(&self, player: &mut PlayerMeta) {
+    pub fn join_to(&mut self, player: &mut PlayerMeta) {
         player.max_power += self.kind.power_storage();
         player.power_regen_per_5_ticks += self.kind.power_regen_per_5_ticks();
+        self.part_of_player = Some(player.id);
     }
-    pub fn remove_from(&self, player: &mut PlayerMeta) {
+    pub fn remove_from(&mut self, player: &mut PlayerMeta) {
         player.max_power -= self.kind.power_storage();
         player.power_regen_per_5_ticks -= self.kind.power_regen_per_5_ticks();
         player.power = player.power.min(player.max_power);
+        self.part_of_player = None;
     }
     pub fn mutate(self, mutate_into: PartKind, player: Option<&mut PlayerMeta>, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet) -> MyHandle {
         if let Some(player) = player { self.remove_from(player); }
@@ -206,6 +210,8 @@ impl Part {
             }
         }
     }
+
+    pub fn attachments(&self) -> &[Option<PartAttachment>; 4] { &self.attachments }
 }
 
 impl PartAttachment {
