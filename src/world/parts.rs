@@ -125,28 +125,28 @@ impl PartKind {
         match self {
             PartKind::Core => panic!("PartKind thrust called on core"),
             PartKind::Hub => None,
-            PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 2, force: Force2::linear_at_point(Vector2::new(0.0, -5.0), &Point2::new(0.0, 1.0)) }),
+            PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 2, force: Force2::linear_at_point(Vector2::new(0.0, -2.0), &Point2::new(0.0, 1.0)) }),
             PartKind::Cargo | PartKind::SolarPanel => None,
-            PartKind::Thruster => Some(ThrustDetails{ fuel_cost: 4, force: Force2::linear_at_point(Vector2::new(0.0, -9.0), &Point2::new(0.0, 1.0)) }),
-            PartKind::SuperThruster => Some(ThrustDetails { fuel_cost: 7, force: Force2::linear_at_point(Vector2::new(0.0, -13.5), &Point2::new(0.0, 1.0)) }),
-            PartKind::HubThruster => Some(ThrustDetails { fuel_cost: 4, force: Force2::linear_at_point(Vector2::new(0.0, -6.0), &Point2::new(0.0, 1.0)) }),
-            PartKind::EcoThruster => Some(ThrustDetails { fuel_cost: 1, force: Force2::linear_at_point(Vector2::new(0.0, -3.5), &Point2::new(0.0, 1.0)) }),
+            PartKind::Thruster => Some(ThrustDetails{ fuel_cost: 2, force: Force2::linear_at_point(Vector2::new(0.0, -2.0), &Point2::new(0.0, 1.0)) }),
+            PartKind::SuperThruster => Some(ThrustDetails { fuel_cost: 3, force: Force2::linear_at_point(Vector2::new(0.0, -7.0), &Point2::new(0.0, 1.0)) }),
+            PartKind::HubThruster => Some(ThrustDetails { fuel_cost: 2, force: Force2::linear_at_point(Vector2::new(0.0, -1.8), &Point2::new(0.0, 1.0)) }),
+            PartKind::EcoThruster => Some(ThrustDetails { fuel_cost: 1, force: Force2::linear_at_point(Vector2::new(0.0, -1.8), &Point2::new(0.0, 1.0)) }),
             PartKind::PowerHub | PartKind::LandingWheel => None,
         }
     }
     pub fn inertia(&self) -> Inertia2<MyUnits> {
         match self {
             PartKind::Core => Inertia2::new(1.0,1.0),
-            PartKind::Cargo => Inertia2::new(0.5, 0.5),
-            PartKind::LandingThruster => Inertia2::new(1.5, 1.5),
-            PartKind::Hub => Inertia2::new(0.75, 0.75),
-            PartKind::SolarPanel => Inertia2::new(0.4, 0.4),
-            PartKind::Thruster => Inertia2::new(1.6, 1.6),
-            PartKind::SuperThruster => Inertia2::new(1.8, 1.8),
-            PartKind::HubThruster => Inertia2::new(1.6, 1.6),
-            PartKind::EcoThruster => Inertia2::new(1.35, 1.35),
-            PartKind::PowerHub => Inertia2::new(1.1, 1.1),
-            PartKind::LandingWheel => Inertia2::new(0.75, 0.75),
+            PartKind::Cargo => Inertia2::new(1.0,1.0),
+            PartKind::LandingThruster => Inertia2::new(1.0,1.0),
+            PartKind::Hub => Inertia2::new(1.0,1.0),
+            PartKind::SolarPanel => Inertia2::new(1.0,1.0),
+            PartKind::Thruster => Inertia2::new(1.0,1.0),
+            PartKind::SuperThruster => Inertia2::new(1.0,1.0),
+            PartKind::HubThruster => Inertia2::new(1.0,1.0),
+            PartKind::EcoThruster => Inertia2::new(1.0,1.0),
+            PartKind::PowerHub => Inertia2::new(1.0,1.0),
+            PartKind::LandingWheel => Inertia2::new(1.0,1.0),
         }
     }
     pub fn attachment_locations(&self) -> [Option<AttachmentPointDetails>; 4] {
@@ -175,20 +175,23 @@ impl PartKind {
     pub fn power_storage(&self) -> u32 {
         const CORE_MAX_POWER: u32 = 100 * crate::TICKS_PER_SECOND as u32;
         match self {
-            PartKind::Core => CORE_MAX_POWER,
-            PartKind::Cargo => CORE_MAX_POWER / 10,
-            PartKind::LandingThruster | PartKind::HubThruster => CORE_MAX_POWER / 5,
-            PartKind::Hub => CORE_MAX_POWER / 3,
-            PartKind::SolarPanel => 0,
-            PartKind::Thruster | PartKind::SuperThruster => CORE_MAX_POWER / 4,
-            PartKind::EcoThruster => 0,
-            PartKind::PowerHub => CORE_MAX_POWER / 6 * 2,
-            PartKind::LandingWheel => 0,
+            PartKind::Core => 1000,
+            PartKind::Cargo => 300,
+            PartKind::LandingThruster => 150,
+            PartKind::HubThruster => 300,
+            PartKind::Hub => 250,
+            PartKind::SolarPanel => 200,
+            PartKind::Thruster => 250,
+            PartKind::SuperThruster => 150,
+            PartKind::EcoThruster => 200,
+            PartKind::PowerHub => 900,
+            PartKind::LandingWheel => 200,
         }
     }
     pub fn power_regen_per_5_ticks(&self) -> u32 {
         match self {
-            PartKind::SolarPanel => 2,
+            PartKind::Core => 1
+            PartKind::SolarPanel => 1,
             _ => 0,
         }
     }
