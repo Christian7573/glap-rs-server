@@ -243,7 +243,27 @@ impl World {
             for attachment in part.attachments() { self.recurse_part(*attachment, func); }
         }
     }
-    
+    pub fn recurse_part_with_return<V, F>(&self, part_handle: MyHandle, func: &mut F) -> Option<V> where F: FnMut(MyHandle, &parts::Part) -> Option<V> {
+        if let Some(part) = self.get_part(part_handle) {
+            let result = func(part_handle, part);
+            if result.is_some() { return result };
+        }
+        return None;
+    }
+    pub fn recurse_part_mut_with_return<V, F>(&mut self, part_handle: MyHandle, func: &mut F) -> Option<V> where F: FnMut(MyHandle, &mut parts::Part) -> Option<V> {
+        if let Some(part) = self.get_part_mut(part_handle) {
+            let result = func(part_handle, part);
+            if result.is_some() { return result };
+        }
+        return None;
+    }
+    pub fn recursive_detach_part(&mut self, part_handle: MyHandle) {
+        if let Some(part) = self.get_part_mut(part_handle) {
+            for attachment in part.attachments() {
+                
+            }
+        }
+    }
 }
 impl Default for World {
     fn default() -> World { 

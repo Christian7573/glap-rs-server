@@ -121,6 +121,18 @@ impl Part {
             attachments: self.attachments[..].iter().map(|attachment| attachment.map(|attachment| (*attachment).deflate())).collect()
         }
     }
+
+    pub fn attach_part_player_agnostic(&mut self, attachment_slot: usize, part_handle: MyHandle, my_handle: MyHandle, joints: &mut MyJointSet) {
+        //if self.kind.attachment_locations()[attachment_slot].is_none() { panic!("Can't attach to that slot") };
+        if self.attachments[attachment_slot].is_some() { panic!("Already attached there"); }
+        self.attachments[attachment_slot] = Some(PartAttachment::inflate(part_handle, self.kind, my_handle, attachment_slot, joints));
+    }
+    pub fn detach_part_player_agnostic(&mut self, attachment_slot: usize, joints: &mut MyJointSet) -> Option<MyHandle> {
+        if let Some(part_attachment) = std::mem::replace(&mut self.attachments[attachment_slot], None) {
+            Some(part_attachment.deflate(joints))
+        } else { None }
+    }
+
     pub fn thrust_no_recurse(&mut self, fuel: &mut u32, forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool) {
         match self.kind {
             PartKind::Core => {
@@ -186,15 +198,15 @@ impl Part {
     pub fn body(&self) -> &MyRigidBody { &self.body }
     pub fn body_mut(&self) -> &mut MyRigidBody { &mut self.body }
 
-    pub fn inflation_msgs(&self, owning_player: Option<u16>) -> [ToClientMsg; 3] {
-        [ self.add_msg(), self.move_msg(), self.update_meta_msg(owning_player) ]
+    pub fn inflation_msgs(&self) -> [ToClientMsg; 3] {
+        [ self.add_msg(), self.move_msg(), self.update_meta_msg() ]
     }
     pub fn add_msg(&self) -> ToClientMsg { ToClientMsg::AddPart { id: self.id, kind: self.kind } }
     pub fn move_msg(&self) -> ToClientMsg { ToClientMsg::MovePart {
         id: self.id, x: self.body.position().translation.x, y: self.body.position().translation.y,
         rotation_n: self.body.position().rotation.re, rotation_i: self.body.position().rotation.im
     } }
-    pub fn update_meta_msg(&self, owning_player: Option<u16>) -> ToClientMsg { ToClientMsg::UpdatePartMeta { id: self.id, owning_player, thrust_mode: self.thrust_mode.into() } }
+    pub fn update_meta_msg(&self) -> ToClientMsg { ToClientMsg::UpdatePartMeta { id: self.id, owning_player: self.part_of_player, thrust_mode: self.thrust_mode.into() } }
     pub fn remove_msg(&self) -> ToClientMsg { ToClientMsg::RemovePart { id: self.id } }
 
     pub fn physics_update_msg(&self, bodies: &MyBodySet, out: &mut Vec<WorldUpdatePartMove>) {
