@@ -430,12 +430,14 @@ async fn main() {
                                 grabbed_part.body.set_velocity(nphysics2d::algebra::Velocity2::new(Vector2::new(0.0,0.0), 0.0));
         
                                 use world::parts::CompactThrustMode;
+                                let target_x = x + core_location.translation.x;
+                                let target_y = y + core_location.translation.y; 
                                 //TODO: do
                                 if let Some(_) = simulation.world.recurse_part_mut_with_return(player_meta.core, |parent_handle, parent: world::parts::Part| {
-                                    let attachments = part.kind.attachment_locations();
-                                    let pos = parent.body.position().clone();
-                                    for (i, attachment) in parent.attachments().enumerate() {
-                                        if part.attachments[i].is_none() {
+                                    let attachments = parent.kind().attachment_locations();
+                                    let pos = parent.body().position().clone();
+                                    for (i, attachment) in parent.attachments().iter().enumerate() {
+                                        if attachment.is_none() {
                                             if let Some(details) = &attachments[i] {
                                                 let mut rotated = rotate_vector(details.x, details.y, pos.rotation.im, pos.rotation.re);
                                                 rotated.0 += pos.translation.x;
@@ -443,13 +445,14 @@ async fn main() {
                                                 if (rotated.0 - target_x).abs() <= 0.4 && (rotated.1 - target_y).abs() <= 0.4 {
                                                     let my_actual_facing = details.facing.get_actual_rotation(parent_actual_rotation);
                                                     let thrust_mode = CompactThrustMode::calculate(my_actual_facing, x, y);
-                                                    return Err((part, i, *details, rotated, thrust_mode, my_actual_facing));
+                                                    return Some((part, i, *details, rotated, thrust_mode, my_actual_facing));
                                                 }
                                             }
                                         }
                                     }
+                                    None
                                 })
-                                fn recurse3<'a>(part: &'a mut Part, target_x: f32, target_y: f32, bodies: &world::World, parent_actual_rotation: world::parts::AttachedPartFacing, x: i16, y: i16) -> Result<(), (&'a mut Part, usize, world::parts::AttachmentPointDetails, (f32, f32), CompactThrustMode, world::parts::AttachedPartFacing)> {
+                                /*fn recurse3<'a>(part: &'a mut Part, target_x: f32, target_y: f32, bodies: &world::World, parent_actual_rotation: world::parts::AttachedPartFacing, x: i16, y: i16) -> Result<(), (&'a mut Part, usize, world::parts::AttachmentPointDetails, (f32, f32), CompactThrustMode, world::parts::AttachedPartFacing)> {
                                     
                                     for (i, subpart) in part.attachments.iter_mut().enumerate() {
                                         if let Some((part, _, _)) = subpart {
@@ -467,7 +470,7 @@ async fn main() {
                                     &simulation.world,
                                     world::parts::AttachedPartFacing::Up,
                                     0, 0
-                                ) {
+                                )*/ {
                                     let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
                                     grabbed_part_body.set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), my_actual_facing.part_rotation() + core_location.rotation.angle()));
                                     let (connection1, connection2) = simulation.equip_part_constraint(part.body_id, part_id, part.kind.attachment_locations()[slot_id].unwrap());

@@ -13,6 +13,7 @@ use crate::codec::ToClientMsg;
 
 pub mod planets;
 pub mod parts;
+use parts::{Part, AttachedPartFacing, RecursivePartDescription};
 
 pub mod nphysics_types {
     pub type MyUnits = f32;
@@ -151,7 +152,7 @@ impl Simulation {
 
     pub fn geometrical_world(&self) -> &MyGeometricalWorld { &self.geometry }
 
-    pub fn inflate(&mut self, parts: &parts::RecursivePartDescription, initial_location: MyIsometry) -> MyHandle {
+    pub fn inflate(&mut self, parts: &RecursivePartDescription, initial_location: MyIsometry) -> MyHandle {
         parts.inflate(&mut self.world, &mut self.colliders, &mut self.joints, initial_location)
     }
     pub fn delete_parts_recursive(&mut self, index: MyHandle) -> Vec<ToClientMsg> {
@@ -170,7 +171,7 @@ pub struct World {
 
 pub enum WorldlyObject {
     CelestialObject(MyRigidBody),
-    Part(parts::Part),
+    Part(Part),
     Uninitialized,
 }
 impl WorldlyObject {
@@ -210,13 +211,13 @@ impl World {
     pub fn get_rigid(&self, index: MyHandle) -> Option<&MyRigidBody> {
         self.storage.get(index).map(|obj| obj.rigid()).flatten()
     }
-    pub fn get_part(&self, index: MyHandle) -> Option<&parts::Part> {
+    pub fn get_part(&self, index: MyHandle) -> Option<&Part> {
         self.storage.get(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
     }
     pub fn get_rigid_mut(&mut self, index: MyHandle) -> Option<&MyRigidBody> {
         self.storage.get_mut(index).map(|obj| obj.rigid()).flatten()
     }
-    pub fn get_part_mut(&mut self, index: MyHandle) -> Option<&mut parts::Part> {
+    pub fn get_part_mut(&mut self, index: MyHandle) -> Option<&mut Part> {
         self.storage.get_mut(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
     }
     pub fn delete_parts_recursive(&mut self, index: MyHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, removal_msgs: &mut Vec<ToClientMsg>) {
@@ -231,36 +232,56 @@ impl World {
     }
     pub fn add_celestial_object(&mut self, body: MyRigidBody) -> MyHandle { self.storage.insert(WorldlyObject::CelestialObject(body)) }
 
-    pub fn recurse_part<F>(&self, part_handle: MyHandle, func: &mut F) where F: FnMut(MyHandle, &parts::Part) {
+    pub fn recurse_part<F>(&self, part_handle: MyHandle, func: &mut F, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing) where F: FnMut(MyHandle, &Part, AttachedPartFacing, AttachedPartFacing) {
         if let Some(part) = self.get_part(part_handle) {
-            func(part_handle, part);
-            for attachment in part.attachments() { self.recurse_part(*attachment, func); }
+            func(part_handle, part, my_facing, true_facing);
+            let attachment_dat = part.kind().attachment_locations();
+            for (i, attachment) in part.attachments().iter().enumerate() {
+                self.recurse_part(*attachment, func, attachment_dat[i].unwrap().facing, attachment_dat[i].unwrap().facing.compute_true_facing(true_facing));
+            }
         }
     }
-    pub fn recurse_part_mut<F>(&mut self, part_handle: MyHandle, func: &mut F) where F: FnMut(MyHandle, &mut parts::Part) {
+    pub fn recurse_part_mut<F>(&mut self, part_handle: MyHandle, func: &mut F, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing) where F: FnMut(MyHandle, &mut Part, AttachedPartFacing, AttachedPartFacing) {
         if let Some(part) = self.get_part_mut(part_handle) {
-            func(part_handle, part);
-            for attachment in part.attachments() { self.recurse_part(*attachment, func); }
+            func(part_handle, part, my_facing, true_facing);
+            let attachment_dat = part.kind().attachment_locations();
+            for (i, attachment) in part.attachments().iter().enumerate() {
+                self.recurse_part_mut(*attachment, func, attachment_dat[i].unwrap().facing, attachment_dat[i].unwrap().facing.compute_true_facing(true_facing));
+            }
         }
     }
-    pub fn recurse_part_with_return<V, F>(&self, part_handle: MyHandle, func: &mut F) -> Option<V> where F: FnMut(MyHandle, &parts::Part) -> Option<V> {
+    pub fn recurse_part_with_return<V, F>(&self, part_handle: MyHandle, func: &mut F, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing) -> Option<V> where F: FnMut(MyHandle, &Part, AttachedPartFacing, AttachedPartFacing) -> Option<V> {
         if let Some(part) = self.get_part(part_handle) {
-            let result = func(part_handle, part);
+            let result = func(part_handle, part, my_facing, true_facing);
             if result.is_some() { return result };
+            let attachment_dat = part.kind().attachment_locations();
+            for (i, attachment) in part.attachments().iter().enumerate() {
+                if let Some(result) = self.recurse_part_with_return(*attachment, func, attachment_dat[i].unwrap().facing, attachment_dat[i].unwrap().facing.compute_true_facing(true_facing)) {
+                    return Some(result)
+                }
+            }
         }
         return None;
     }
-    pub fn recurse_part_mut_with_return<V, F>(&mut self, part_handle: MyHandle, func: &mut F) -> Option<V> where F: FnMut(MyHandle, &mut parts::Part) -> Option<V> {
+    pub fn recurse_part_mut_with_return<V, F>(&mut self, part_handle: MyHandle, func: &mut F, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing) -> Option<V> where F: FnMut(MyHandle, &mut Part, AttachedPartFacing, AttachedPartFacing) -> Option<V> {
         if let Some(part) = self.get_part_mut(part_handle) {
-            let result = func(part_handle, part);
+            let result = func(part_handle, part, my_facing, true_facing);
             if result.is_some() { return result };
+            let attachment_dat = part.kind().attachment_locations();
+            for (i, attachment) in part.attachments().iter().enumerate() {
+                if let Some(result) = self.recurse_part_mut_with_return(*attachment, func, attachment_dat[i].unwrap().facing, attachment_dat[i].unwrap().facing.compute_true_facing(true_facing)) {
+                    return Some(result)
+                }
+            }
         }
         return None;
     }
-    pub fn recursive_detach_part(&mut self, part_handle: MyHandle) {
+    pub fn recursive_detach_part(&mut self, part_handle: MyHandle, player: Option<&mut crate::PlayerMeta>, joints: &mut MyJointSet) {
         if let Some(part) = self.get_part_mut(part_handle) {
-            for attachment in part.attachments() {
-                
+            for (i, attachment) in part.attachments().iter().enumerate() {
+                self.recursive_detach_part(*attachment, player, joints);                
+                if let Some(player) = player { part.remove_from(player) };
+                part.detach_part_player_agnostic(i, joints);
             }
         }
     }

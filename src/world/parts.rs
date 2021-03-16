@@ -195,6 +195,7 @@ impl Part {
     }
 
     pub fn id(&self) -> u16 { self.id }
+    pub fn kind(&self) -> PartKind { self.kind }
     pub fn body(&self) -> &MyRigidBody { &self.body }
     pub fn body_mut(&self) -> &mut MyRigidBody { &mut self.body }
 
