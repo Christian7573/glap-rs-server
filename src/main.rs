@@ -433,7 +433,7 @@ async fn main() {
                                 let target_x = x + core_location.translation.x;
                                 let target_y = y + core_location.translation.y; 
                                 //TODO: do
-                                if let Some(_) = simulation.world.recurse_part_mut_with_return(player_meta.core, |parent_handle, parent: world::parts::Part| {
+                                if let Some(_) = simulation.world.recurse_part_mut_with_return(player_meta.core, AttachedPartFacing::Up, AttachedPartFacing::Up, |parent_handle, parent: world::parts::Part, _, true_facing| {
                                     let attachments = parent.kind().attachment_locations();
                                     let pos = parent.body().position().clone();
                                     for (i, attachment) in parent.attachments().iter().enumerate() {
@@ -443,7 +443,7 @@ async fn main() {
                                                 rotated.0 += pos.translation.x;
                                                 rotated.1 += pos.translation.y;
                                                 if (rotated.0 - target_x).abs() <= 0.4 && (rotated.1 - target_y).abs() <= 0.4 {
-                                                    let my_actual_facing = details.facing.get_actual_rotation(parent_actual_rotation);
+                                                    let my_actual_facing = details.facing.compute_true_facing(true_facing);
                                                     let thrust_mode = CompactThrustMode::calculate(my_actual_facing, x, y);
                                                     return Some((part, i, *details, rotated, thrust_mode, my_actual_facing));
                                                 }
