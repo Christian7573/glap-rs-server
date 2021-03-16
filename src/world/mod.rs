@@ -242,14 +242,15 @@ impl World {
                 let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
                 let delta_rel_part = true_facing.delta_rel_part();
                 self.recurse_part_mut_with_return(
-                    *attachment, func,
+                    *attachment,
                     x + delta_rel_part.0, y + delta_rel_part.1,
-                    attachment_dat.facing, true_facing
+                    attachment_dat.facing, true_facing,
+                    func
                 ); 
             }
         }
     }
-    pub fn recurse_part_mut<F>(&mut self, part_handle: MyHandle, func: &mut F, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing)
+    pub fn recurse_part_mut<F>(&mut self, part_handle: MyHandle, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing, func: &mut F)
     where F: FnMut(MyHandle, &mut Part, i32, i32, AttachedPartFacing, AttachedPartFacing) {
         if let Some(part) = self.get_part_mut(part_handle) {
             func(part_handle, part, x, y, my_facing, true_facing);
@@ -259,14 +260,15 @@ impl World {
                 let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
                 let delta_rel_part = true_facing.delta_rel_part();
                 self.recurse_part_mut_with_return(
-                    *attachment, func,
+                    *attachment,
                     x + delta_rel_part.0, y + delta_rel_part.1,
-                    attachment_dat.facing, true_facing
+                    attachment_dat.facing, true_facing,
+                    func,
                 ); 
             }
         }
     }
-    pub fn recurse_part_with_return<V, F>(&self, part_handle: MyHandle, func: &mut F, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing) -> Option<V>
+    pub fn recurse_part_with_return<V, F>(&self, part_handle: MyHandle, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing, func: &mut F) -> Option<V>
     where F: FnMut(MyHandle, &Part, i32, i32, AttachedPartFacing, AttachedPartFacing) -> Option<V> {
         if let Some(part) = self.get_part(part_handle) {
             let result = func(part_handle, part, x, y, my_facing, true_facing);
@@ -277,9 +279,10 @@ impl World {
                 let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
                 let delta_rel_part = true_facing.delta_rel_part();
                 if let Some(result) = self.recurse_part_mut_with_return(
-                    *attachment, func,
+                    *attachment,
                     x + delta_rel_part.0, y + delta_rel_part.1,
-                    attachment_dat.facing, true_facing
+                    attachment_dat.facing, true_facing,
+                    func,
                 ) {
                     return Some(result)
                 }
@@ -287,7 +290,7 @@ impl World {
         }
         return None;
     }
-    pub fn recurse_part_mut_with_return<V, F>(&mut self, part_handle: MyHandle, func: &mut F, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing) -> Option<V>
+    pub fn recurse_part_mut_with_return<V, F>(&mut self, part_handle: MyHandle, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing, func: &mut F) -> Option<V>
     where F: FnMut(MyHandle, &mut Part, i32, i32, AttachedPartFacing, AttachedPartFacing) -> Option<V> {
         if let Some(part) = self.get_part_mut(part_handle) {
             let result = func(part_handle, part, x, y, my_facing, true_facing);
@@ -298,9 +301,10 @@ impl World {
                 let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
                 let delta_rel_part = true_facing.delta_rel_part();
                 if let Some(result) = self.recurse_part_mut_with_return(
-                    *attachment, func,
+                    *attachment,
                     x + delta_rel_part.0, y + delta_rel_part.1,
-                    attachment_dat.facing, true_facing
+                    attachment_dat.facing, true_facing,
+                    func,
                 ) {
                     return Some(result)
                 }
