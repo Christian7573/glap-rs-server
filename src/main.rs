@@ -425,64 +425,44 @@ async fn main() {
                                 let mut attachment_msg: Option<Vec<u8>> = None;
                                 let core_location = simulation.world.get_rigid(player_meta.core).unwrap().position().clone();
                                 let grabbed_part_handle = **free_parts.get(&part_id).unwrap();
-                                let grabbed_part = simulation.world.get_part_mut(grabbed_part_handle);
+                                let grabbed_part = simulation.world.get_part_mut(grabbed_part_handle).unwrap();
                                 grabbed_part.body.set_local_inertia(grabbed_part.kind().inertia());
                                 grabbed_part.body.set_velocity(nphysics2d::algebra::Velocity2::new(Vector2::new(0.0,0.0), 0.0));
         
                                 use world::parts::CompactThrustMode;
                                 let target_x = x + core_location.translation.x;
                                 let target_y = y + core_location.translation.y; 
-                                //TODO: do
-                                if let Some(_) = simulation.world.recurse_part_mut_with_return(player_meta.core, AttachedPartFacing::Up, AttachedPartFacing::Up, |parent_handle, parent: world::parts::Part, _, true_facing| {
-                                    let attachments = parent.kind().attachment_locations();
-                                    let pos = parent.body().position().clone();
-                                    for (i, attachment) in parent.attachments().iter().enumerate() {
-                                        if attachment.is_none() {
-                                            if let Some(details) = &attachments[i] {
-                                                let mut rotated = rotate_vector(details.x, details.y, pos.rotation.im, pos.rotation.re);
-                                                rotated.0 += pos.translation.x;
-                                                rotated.1 += pos.translation.y;
-                                                if (rotated.0 - target_x).abs() <= 0.4 && (rotated.1 - target_y).abs() <= 0.4 {
-                                                    let my_actual_facing = details.facing.compute_true_facing(true_facing);
-                                                    let thrust_mode = CompactThrustMode::calculate(my_actual_facing, x, y);
-                                                    return Some((part, i, *details, rotated, thrust_mode, my_actual_facing));
+                                if let Some((parent_handle, attachment_slot, attachment_details, teleport_to, thrust_mode, true_facing)) = simulation.world.recurse_part_mut_with_return(
+                                    player_meta.core, AttachedPartFacing::Up, AttachedPartFacing::Up, 0, 0,
+                                    |parent_handle, parent: world::parts::Part, x: i32, y: i32, _, true_facing| {
+                                        let attachments = parent.kind().attachment_locations();
+                                        let pos = parent.body().position().clone();
+                                        for (i, attachment) in parent.attachments().iter().enumerate() {
+                                            if attachment.is_none() {
+                                                if let Some(details) = &attachments[i] {
+                                                    let mut rotated = rotate_vector(details.x, details.y, pos.rotation.im, pos.rotation.re);
+                                                    rotated.0 += pos.translation.x;
+                                                    rotated.1 += pos.translation.y;
+                                                    if (rotated.0 - target_x).abs() <= 0.4 && (rotated.1 - target_y).abs() <= 0.4 {
+                                                        let my_true_facing = details.facing.compute_true_facing(true_facing);
+                                                        let thrust_mode = CompactThrustMode::calculate(my_true_facing, x, y);
+                                                        return Some((parent_handle, i, *details, rotated, thrust_mode, my_true_facing));
+                                                    }
                                                 }
                                             }
                                         }
+                                        None
                                     }
-                                    None
-                                })
-                                /*fn recurse3<'a>(part: &'a mut Part, target_x: f32, target_y: f32, bodies: &world::World, parent_actual_rotation: world::parts::AttachedPartFacing, x: i16, y: i16) -> Result<(), (&'a mut Part, usize, world::parts::AttachmentPointDetails, (f32, f32), CompactThrustMode, world::parts::AttachedPartFacing)> {
-                                    
-                                    for (i, subpart) in part.attachments.iter_mut().enumerate() {
-                                        if let Some((part, _, _)) = subpart {
-                                            let my_actual_rotation = attachments[i].unwrap().facing.get_actual_rotation(parent_actual_rotation);
-                                            let deltas = my_actual_rotation.attachment_offset();
-                                            recurse3(part, target_x, target_y, bodies, my_actual_rotation, x + deltas.0, y + deltas.1)?
-                                        }
-                                    }
-                                    Ok(())
-                                }
-                                if let Err((part, slot_id, details, teleport_to, thrust_mode, my_actual_facing)) = recurse3(
-                                    core, 
-                                    x + core_location.translation.x, 
-                                    y + core_location.translation.y, 
-                                    &simulation.world,
-                                    world::parts::AttachedPartFacing::Up,
-                                    0, 0
-                                )*/ {
-                                    let grabbed_part_body = simulation.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
-                                    grabbed_part_body.set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), my_actual_facing.part_rotation() + core_location.rotation.angle()));
-                                    let (connection1, connection2) = simulation.equip_part_constraint(part.body_id, part_id, part.kind.attachment_locations()[slot_id].unwrap());
-        
-                                    let mut grabbed_part = free_parts.remove(&part_id).unwrap().extract();
-                                    player_meta.max_power += grabbed_part.kind.power_storage();
-                                    player_meta.power_regen_per_5_ticks += grabbed_part.kind.power_regen_per_5_ticks();
-                                    outbound_events.push(ToSerializer::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: player_meta.max_power, can_beamout: player_meta.can_beamout }));
+                                ) {
+                                    let parent = simulation.world.get_part_mut(parent_handle).unwrap();
+                                    //TODO: Check if we can use parent.body.position instead of core_location
+                                    parent.body_mut().set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), true_facing.part_rotation() + core_location.rotation.angle()));
+                                    parent.attach_part_player_agnostic(attachment_slot, grabbed_part_handle, &mut simulation.joints);
+                                    free_parts.remove(&part_id);
+                                    grabbed_part.join_to(player_meta);
+                                    outbound_events.push(ToSerializer::Message(id, player_meta.update_my_meta()));
                                     grabbed_part.thrust_mode = thrust_mode;
-                                    simulation.colliders.get_mut(grabbed_part.collider).unwrap().set_user_data(Some(Box::new(PartOfPlayer(id))));
-                                    part.attachments[slot_id] = Some((grabbed_part, connection1, connection2));
-                                    outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::UpdatePartMeta { id: part_id, owning_player: Some(id), thrust_mode: thrust_mode.into() }));
+                                    outbound_events.push(ToSerializer::Broadcast(grabbed_part.update_meta_msg()));
                                 } else {
                                     free_parts.get_mut(&part_id).unwrap().become_decaying();
                                 }
@@ -496,7 +476,8 @@ async fn main() {
                         }
                     },
                     ToServerMsg::BeamOut => {
-                        if let Some((player, core)) = players.remove(&id) {
+                        if let Some(player) = players.remove(&id) {
+                            //TODO: do
                             let beamout_layout = beamout::RecursivePartDescription::deflate(&core);
                             outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::BeamOutAnimation { player_id: id }));
                             recursive_beamout_remove(&core, &mut simulation);
@@ -684,6 +665,23 @@ impl PlayerMeta {
         ticks_til_cargo_transform: TICKS_PER_SECOND,
         can_beamout: false,
     } }
+
+    fn update_meta_msg(&self) -> ToClientMsg {
+        ToClientMsg::UpdatePlayerMeta {
+            id: self.id,
+            grabed_part: self.grabbed_part.as_ref().map(|(id, _, _, _)| *id),
+            thrust_forward: self.thrust_forwards,
+            thrust_backward: self.thrust_backwards,
+            thrust_clockwise: self.thrust_clockwise,
+            thrust_counter_clockwise: self.thrust_counterclockwise,
+        }
+    }
+    fn update_my_meta(&self) -> ToClientMsg {
+        ToClientMsg::UpdateMyMeta {
+            max_power: self.max_power,
+            can_beamout: self.can_beamout,
+        }
+    }
 }
 pub struct PartOfPlayer (u16);
 
