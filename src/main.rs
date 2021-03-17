@@ -144,8 +144,8 @@ async fn main() {
                         let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
                         let spawn_pos = Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0);
                         let part_handle = world::parts::PartKind::Cargo.into().inflate(&mut simulation.world, &mut simulation.colliders, &mut simulation.joints, spawn_pos);
-                        //let part = world::parts::Part::new(world::parts::PartKind::Cargo, &mut simulation.world, &mut simulation.colliders, &simulation.part_static);
-                        free_parts.insert(part_handle, FreePart::EarthCargo(TICKS_PER_SECOND as u16 * 60));
+                        let part_id = simulation.world.get_part(part_handle).unwrap().id;
+                        free_parts.insert(part_id, FreePart::EarthCargo(part_handle, TICKS_PER_SECOND as u16 * 60));
                         outbound_events.extend(simulation.world.get_part(part_handle).unwrap().inflation_msgs().into_iter().map(|msg| ToSerializer::Broadcast(msg)));
                     }
                 }
@@ -255,8 +255,7 @@ async fn main() {
                 for player in players.values_mut() { 
                     let mut max_power_lost = 0;
                     let mut regen_lost = 0;
-                    //TODO REWRITE
-                    recursive_broken_check(core, &mut simulation, &mut free_parts, &mut outbound_events, &mut max_power_lost, &mut regen_lost);
+                    recursive_broken_detach(player.core, &mut simulation, &mut free_parts, Some(player), &mut outbound_events);
                     player.max_power -= max_power_lost;
                     player.power_regen_per_5_ticks -= regen_lost;
                 }
@@ -477,10 +476,10 @@ async fn main() {
                     },
                     ToServerMsg::BeamOut => {
                         if let Some(player) = players.remove(&id) {
-                            //TODO: do
-                            let beamout_layout = beamout::RecursivePartDescription::deflate(&core);
+                            let core = simulation.world.get_part(player.core).unwrap();
+                            let beamout_layout = core.deflate(&simulation.world);
                             outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::BeamOutAnimation { player_id: id }));
-                            recursive_beamout_remove(&core, &mut simulation);
+                            simulation.delete_parts_recursive(player.core);
                             beamout::spawn_beamout_request(player.beamout_token, beamout_layout, api.clone());
                             let my_to_serializer = to_serializer.clone();
                             async_std::task::spawn(async move {
@@ -526,7 +525,6 @@ async fn main() {
 }
 
 
-//TODO: parallelize
 fn recursive_broken_detach(root: MyHandle, simulation: &mut world::Simulation, free_parts: &mut BTreeMap<u16, FreePart>, player: Option<&mut PlayerMeta>, out: &mut Vec<ToSerializerEvent> ) {
     let mut broken_parts = Vec::new();
     simulation.world.recurse_part(root, 0, 0, AttachedPartFacing::Up, AttachedPartFacing::Up, |part_handle, part, _, _, _, _| {
@@ -550,18 +548,6 @@ fn recursive_broken_detach(root: MyHandle, simulation: &mut world::Simulation, f
     }
 }
 
-
-fn recursive_beamout_remove(part: &Part, simulation: &mut world::Simulation) {
-    for slot in 0..part.attachments.len() {
-        if let Some((part, joint1, joint2)) = part.attachments[slot].as_ref() {
-            simulation.release_constraint(*joint1);
-            simulation.release_constraint(*joint2);
-            recursive_beamout_remove(part, simulation);
-        }
-    }
-    simulation.world.remove_part(MyHandle::Part(part.body_id));
-}
-
 fn is_string_numeric(str: String) -> bool {
     for c in str.chars() {
         if !c.is_numeric() {
@@ -569,22 +555,6 @@ fn is_string_numeric(str: String) -> bool {
         }
     }
     return true;
-}
-
-fn recursive_detatch(part: &mut Part, free_parts: &mut BTreeMap<u16, FreePart>, simulation: &mut world::Simulation, out: &mut Vec<ToSerializerEvent>, max_power_lost: &mut u32, regen_lost: &mut u32) {
-    for slot in part.attachments.iter_mut() {
-        if let Some((part, connection, connection2)) = slot {
-            simulation.release_constraint(*connection);
-            simulation.release_constraint(*connection2);
-            *max_power_lost += part.kind.power_storage();
-            *regen_lost += part.kind.power_regen_per_5_ticks();
-            recursive_detatch(part, free_parts, simulation, out, max_power_lost, regen_lost);
-            if let Some((part, _, _)) = std::mem::replace(slot, None) {
-                out.push(ToSerializerEvent::Broadcast(codec::ToClientMsg::UpdatePartMeta{ id: part.body_id, owning_player: None, thrust_mode: 0 }));
-                free_parts.insert(part.body_id, FreePart::Decaying(part, DEFAULT_PART_DECAY_TICKS));
-            }
-        }
-    }
 }
 
 enum FreePart {

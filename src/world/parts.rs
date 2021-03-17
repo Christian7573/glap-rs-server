@@ -116,10 +116,10 @@ impl Part {
         part.thrust_mode = self.thrust_mode;
         if let Some(player) = player { part.join_to(player) };
     }
-    pub fn deflate(&self) -> RecursivePartDescription {
+    pub fn deflate(&self, world: &MyBodySet) -> RecursivePartDescription {
         RecursivePartDescription {
             kind: self.kind,
-            attachments: self.attachments[..].iter().map(|attachment| attachment.map(|attachment| (*attachment).deflate())).collect()
+            attachments: self.attachments[..].iter().map(|attachment| attachment.map(|attachment| world.get_part(*attachment).unwrap().deflate(world))).collect()
         }
     }
 
