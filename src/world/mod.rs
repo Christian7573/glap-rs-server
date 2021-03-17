@@ -312,12 +312,24 @@ impl World {
         }
         return None;
     }
-    pub fn recursive_detach_part(&mut self, part_handle: MyHandle, player: Option<&mut crate::PlayerMeta>, joints: &mut MyJointSet) {
-        if let Some(part) = self.get_part_mut(part_handle) {
-            for (i, attachment) in part.attachments().iter().enumerate() {
-                self.recursive_detach_part(*attachment, player, joints);                
-                if let Some(player) = player { part.remove_from(player) };
-                part.detach_part_player_agnostic(i, joints);
+
+    pub fn recursive_detach_one(&mut self, parent_handle: MyHandle, attachment_slot: usize, player: Option<&mut crate::PlayerMeta>, joints: &mut MyJointSet, parts_affected: &mut BTreeSet<MyHandle>) {
+        if let Some(parent) = self.get_part_mut(parent_handle) {
+            if let Some(attachment_handle) = parent.detach_part_player_agnostic(attachment_slot, joints) {
+                parts_affected.insert(attachment_handle);
+                if let Some(player) = player {
+                    if let Some(attached_part) = self.get_part_mut(attachment_handle) {
+                        attached_part.remove_from(player);
+                    }
+                }
+                self.recursive_detach_all(attachment_handle, player, joints, parts_affected);                                
+            }
+        }
+    }
+    pub fn recursive_detach_all(&mut self, parent_handle: MyHandle, player: Option<&mut crate::PlayerMeta>, joints: &mut MyJointSet, parts_affected: &mut BTreeSet<MyHandle>) {
+        if let Some(part) = self.get_part_mut(parent_handle) {
+            for i in 0..part.attachments().len() {
+                self.recursive_detach_one(parent_handle, i, player, joints, parts_affected);
             }
         }
     }

@@ -256,11 +256,11 @@ impl PartAttachment {
             Point::new(-HALF_CONNECTION_WIDTH, 0.0)
         );
         const MAX_TORQUE: f32 = 100.0;
-        //const MAX_FORCE: f32 = MAX_TORQUE * 3.0;
+        const MAX_FORCE: f32 = MAX_TORQUE * 3.5;
         constraint1.set_break_torque(MAX_TORQUE);
-        //constraint1.set_break_force(MAX_FORCE);
+        constraint1.set_break_force(MAX_FORCE);
         constraint2.set_break_torque(MAX_TORQUE);
-        //constraint2.set_break_force(MAX_FORCE);
+        constraint2.set_break_force(MAX_FORCE);
         PartAttachment {
             part,
             connections: (joints.insert(constraint1), joints.insert(constraint2))
@@ -271,6 +271,11 @@ impl PartAttachment {
         joints.remove(self.connections.0);
         joints.remove(self.connections.1);
         self.part
+    }
+
+    pub fn is_broken(&self, joints: &MyJointSet) -> bool {
+        joints.get(self.connections.0).map(|joint| joint.is_broken()).unwrap_or(true)
+        || joints.get(self.connections.1).map(|joint| joint.is_broken()).unwrap_or(true)
     }
 }
 

@@ -527,23 +527,26 @@ async fn main() {
 
 
 //TODO: parallelize
-fn recursive_broken_check(part: &mut Part, simulation: &mut world::Simulation, free_parts: &mut BTreeMap<u16, FreePart>, out: &mut Vec<ToSerializerEvent>, max_power_lost: &mut u32, regen_lost: &mut u32) {
-    for i in 0..part.attachments.len() {
-        if let Some((attachment, joint1, joint2)) = &mut part.attachments[i] {
-            if simulation.is_constraint_broken(*joint1) || simulation.is_constraint_broken(*joint2) {
-                simulation.release_constraint(*joint1);
-                simulation.release_constraint(*joint2);
-                *max_power_lost += attachment.kind.power_storage();
-                *regen_lost += attachment.kind.power_regen_per_5_ticks();
-                recursive_detatch(attachment, free_parts, simulation, out, max_power_lost, regen_lost);
-                if let Some((part, _, _)) = std::mem::replace(&mut part.attachments[i], None) {
-                    out.push(ToSerializerEvent::Broadcast(codec::ToClientMsg::UpdatePartMeta{ id: part.body_id, owning_player: None, thrust_mode: 0 }));
-                    free_parts.insert(part.body_id, FreePart::Decaying(part, DEFAULT_PART_DECAY_TICKS));
-                }
-            } else {
-                recursive_broken_check(attachment, simulation, free_parts, out, max_power_lost, regen_lost);
+fn recursive_broken_detach(root: MyHandle, simulation: &mut world::Simulation, free_parts: &mut BTreeMap<u16, FreePart>, player: Option<&mut PlayerMeta>, out: &mut Vec<ToSerializerEvent> ) {
+    let mut broken_parts = Vec::new();
+    simulation.world.recurse_part(root, 0, 0, AttachedPartFacing::Up, AttachedPartFacing::Up, |part_handle, part, _, _, _, _| {
+        for (i, attachment) in part.attachments().iter().enumerate() {
+            if let Some(attachment) = attachment {
+                if attachment.is_broken() { broken_parts.push((part_handle, i)) };
             }
         }
+    });
+    let mut affected_parts = BTreeSet::new();
+    for (parent, attachment_slot) in broken_parts {
+        simulation.world.recursive_detach_one(parent, attachment_slot, player, &mut simulation.joints, &mut affected_parts);
+    }
+    for part_handle in affected_parts {
+        if let Some(part) = simulation.world.get_part(part_handle) {
+            out.push(ToSerializerEvent::Broadcast(part.update_meta_msg()));
+        }
+    }
+    if let Some(player) = player {
+        out.push(ToSerializerEvent::Message(player.id, player.update_my_meta()));
     }
 }
 
