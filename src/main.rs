@@ -114,11 +114,11 @@ async fn main() {
                             *ticks -= 1;
                             if *ticks < 1 { to_delete.push(*part_handle); }
                         },
-                        FreePart::EarthCargo(_part, ticks) => {
+                        FreePart::EarthCargo(part, ticks) => {
                             *ticks -= 1;
                             if *ticks < 1 {
                                 let earth_position = simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
-                                let part = simulation.world.get_part_mut(**meta).expect("Invalid Earth Cargo");
+                                let part = simulation.world.get_part_mut(*part).expect("Invalid Earth Cargo");
                                 let body = part.body_mut();
                                 let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                                 let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
@@ -149,7 +149,10 @@ async fn main() {
                         let part_handle = RecursivePartDescription::from(PartKind::Cargo).inflate(&(&mut simulation.world).into(), &mut simulation.colliders, &mut simulation.joints, spawn_pos);
                         let part_id = simulation.world.get_part(part_handle).unwrap().id();
                         free_parts.insert(part_id, FreePart::EarthCargo(part_handle, TICKS_PER_SECOND as u16 * 60));
-                        outbound_events.extend(simulation.world.get_part(part_handle).unwrap().inflation_msgs().into_iter().map(|msg| ToSerializer::Broadcast(*msg)));
+                        let part = simulation.world.get_part(part_handle).unwrap();
+                        outbound_events.push(ToSerializer::Broadcast(part.add_msg()));
+                        outbound_events.push(ToSerializer::Broadcast(part.move_msg()));
+                        outbound_events.push(ToSerializer::Broadcast(part.update_meta_msg()));
                     }
                 }
                 ticks_til_power_regen -= 1;
@@ -157,12 +160,12 @@ async fn main() {
                 if ticks_til_power_regen == 0 { ticks_til_power_regen = 5; is_power_regen_tick = true; }
                 else { is_power_regen_tick = false; }
                 for (id, player) in &mut players {
-                    let core = simulation.world.get_part_mut(player.core).expect("Player iter invalid core part");
                     if is_power_regen_tick {
                         player.power += player.power_regen_per_5_ticks;
                         if player.power > player.max_power { player.power = player.max_power; };
                     };
                     if player.power > 0 {
+                        let core = simulation.world.get_part_mut(player.core).expect("Player iter invalid core part");
                         core.thrust_no_recurse(&mut player.power, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise);
                         if player.power < 1 {
                             player.thrust_backwards = false; player.thrust_forwards = false; player.thrust_clockwise = false; player.thrust_counterclockwise = false;
@@ -174,6 +177,7 @@ async fn main() {
                         }
                     }
                     if let Some((part_id, constraint, x, y)) = player.grabbed_part {
+                        let core = simulation.world.get_part_mut(player.core).expect("Player iter invalid core part");
                         let position = core.body().position().translation;
                         simulation.move_mouse_constraint(constraint, x + position.x, y + position.y);
                     }
