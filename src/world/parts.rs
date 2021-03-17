@@ -102,7 +102,7 @@ impl Part {
     pub fn mutate(self, mutate_into: PartKind, player: Option<&mut PlayerMeta>, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet) -> MyHandle {
         if let Some(player) = player { self.remove_from(player); }
         let old_attachments = self.attachments;
-        let raw_attachments: [Option<Part>; 4] = [None, None, None, None];
+        let raw_attachments: [Option<MyHandle>; 4] = [None, None, None, None];
         for i in 0..4 {
             if let Some(attachment) = old_attachments[i] {
                 raw_attachments[i] = Some(attachment.deflate(joints));
@@ -111,10 +111,16 @@ impl Part {
         let position = self.body.position().clone();
         colliders.remove(self.collider);
         let add_handle = WorldAddHandle::from(bodies);
-        let part_index = RecursivePartDescription::from(mutate_into).inflate_component(add_handle, colliders, joints, position, AttachedPartFacing::Up, 0, 0, Some(self.id));
+        let part_index = RecursivePartDescription::from(mutate_into).inflate_component(&add_handle, colliders, joints, position, AttachedPartFacing::Up, 0, 0, Some(self.id));
         let part = bodies.get_part_mut(part_index).unwrap();
+        for i in 0..4 {
+            if let Some(attachment) = old_attachments[i] {
+                part.attach_part_player_agnostic(i, *attachment, part_index, joints);
+            }
+        }
         part.thrust_mode = self.thrust_mode;
         if let Some(player) = player { part.join_to(player) };
+        part_index
     }
     pub fn deflate(&self, world: &MyBodySet) -> RecursivePartDescription {
         RecursivePartDescription {
@@ -175,7 +181,7 @@ impl Part {
                 else {
                     match part.find_cargo_recursive(bodies) {
                         Some((Some(parent_handle), attachment_slot)) => return Some((Some(parent_handle), attachment_slot)),
-                        Some((None, attachment_slot)) => return Some((Some(*attachment), attachment_slot)),
+                        Some((None, attachment_slot)) => return Some((Some(**attachment), attachment_slot)),
                         None => ()
                     }
                 }
@@ -220,7 +226,7 @@ impl Part {
         });
         for attachment in &self.attachments {
             if let Some(attachment) = attachment {
-                bodies.get_part(*attachment).unwrap().physics_update_msg(bodies, out);
+                bodies.get_part(**attachment).unwrap().physics_update_msg(bodies, out);
             }
         }
     }
