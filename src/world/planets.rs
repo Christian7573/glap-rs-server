@@ -40,12 +40,14 @@ impl Planets {
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
+			let id = make_planet_id();
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
+				.user_data(AmPlanet {id})
                 .build(BodyPartHandle(body_handle, 0));
             colliders.insert(collider);
 
-            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+            
             
             CelestialObject {
                 name: String::from("earth"),
@@ -72,12 +74,14 @@ impl Planets {
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE / 4.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
+			let id = make_planet_id();
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
+				.user_data(AmPlanet {id})
                 .build(BodyPartHandle(body_handle, 0));
             colliders.insert(collider);
 
-            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+            
             
             CelestialObject {
                 name: String::from("moon"),
@@ -104,12 +108,14 @@ impl Planets {
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE / 2.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
+			let id = make_planet_id();
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
+				.user_data(AmPlanet {id})
                 .build(BodyPartHandle(body_handle, 0));
             colliders.insert(collider);
 
-            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+            
             
             CelestialObject {
                 name: String::from("mars"),
@@ -136,12 +142,14 @@ impl Planets {
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE * 0.38;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
+			let id = make_planet_id();
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
+				.user_data(AmPlanet {id})
                 .build(BodyPartHandle(body_handle, 0));
             colliders.insert(collider);
 
-            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+            
             
             CelestialObject {
                 name: String::from("mercury"),
@@ -168,12 +176,14 @@ impl Planets {
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE * 2.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
+			let id = make_planet_id();
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
+				.user_data(AmPlanet {id})
                 .build(BodyPartHandle(body_handle, 0));
             colliders.insert(collider);
 
-            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+            
 
             CelestialObject {
                 name: String::from("jupiter"),
@@ -200,12 +210,14 @@ impl Planets {
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE / 4.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
+			let id = make_planet_id();
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
+				.user_data(AmPlanet {id})
                 .build(BodyPartHandle(body_handle, 0));
             colliders.insert(collider);
 
-            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+            
 
             CelestialObject {
                 name: String::from("pluto"),
@@ -232,12 +244,14 @@ impl Planets {
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE * 2.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
+			let id = make_planet_id();
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
+				.user_data(AmPlanet {id})
                 .build(BodyPartHandle(body_handle, 0));
             colliders.insert(collider);
 
-            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+            
 
             CelestialObject {
                 name: String::from("saturn"),
@@ -264,12 +278,14 @@ impl Planets {
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE * 1.5;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
+			let id = make_planet_id();
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
+				.user_data(AmPlanet {id})
                 .build(BodyPartHandle(body_handle, 0));
             colliders.insert(collider);
 
-            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+            
 
             CelestialObject {
                 name: String::from("neptune"),
@@ -296,12 +312,14 @@ impl Planets {
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
+			let id = make_planet_id();
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
+				.user_data(AmPlanet {id})
                 .build(BodyPartHandle(body_handle, 0));
             colliders.insert(collider);
 
-            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+            
 
             CelestialObject {
                 name: String::from("venus"),
@@ -328,12 +346,14 @@ impl Planets {
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE * 2.0;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
+			let id = make_planet_id();
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
+				.user_data(AmPlanet {id})
                 .build(BodyPartHandle(body_handle, 0));
             colliders.insert(collider);
 
-            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+            
 
             CelestialObject {
                 name: String::from("uranus"),
@@ -360,12 +380,14 @@ impl Planets {
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE * 4.7;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
+			let id = make_planet_id();
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
+				.user_data(AmPlanet {id})
                 .build(BodyPartHandle(body_handle, 0));
             colliders.insert(collider);
 
-            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+            
             
             CelestialObject {
                 name: String::from("sun"),
@@ -392,12 +414,14 @@ impl Planets {
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE * 0.75;
             let shape = ShapeHandle::new(Ball::new(RADIUS));
+			let id = make_planet_id();
             let collider = ColliderDesc::new(shape)
                 .material(planet_material.clone())
+				.user_data(AmPlanet {id})
                 .build(BodyPartHandle(body_handle, 0));
             colliders.insert(collider);
 
-            let id = if let MyHandle::CelestialObject(id) = body_handle { id } else { panic!() };
+            
 
             CelestialObject {
                 name: String::from("trade"),
@@ -437,6 +461,11 @@ impl Planets {
     }
 }
 
+static mut NEXT_PLANET_ID: u16 = 1;
+fn make_planet_id() -> u16 {
+    unsafe { let id = NEXT_PLANET_ID; NEXT_PLANET_ID += 1; id }
+}
+
 pub struct CelestialObject {
     pub name: String,
     pub display_name: String,
@@ -455,3 +484,14 @@ pub fn planet_location(radius: f32) -> nalgebra::Matrix<f32, nalgebra::U2, nalge
     let pos = Vector2::new(f32::cos(angle) * radius, f32::sin(angle) * radius);
     pos
 }
+
+#[derive(Copy, Clone)]
+pub struct AmPlanet {
+    pub id: u16
+}
+//use nphysics2d::utils::UserData;
+/*impl UserData for AmPlanet {
+    fn clone_boxed(&self) -> Box<dyn UserData> { Box::new(*self) }
+    fn to_any(&self) -> Box<dyn std::any::Any + Send + Sync> { Box::new(*self) }
+    fn as_any(&self) -> &dyn std::any::Any { self }    
+}*/

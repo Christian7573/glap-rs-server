@@ -99,6 +99,7 @@ impl Part {
         player.power = player.power.min(player.max_power);
         self.part_of_player = None;
     }
+    pub fn part_of_player(&self) -> Option<u16> { self.part_of_player }
     pub fn mutate(self, mutate_into: PartKind, player: Option<&mut PlayerMeta>, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet) -> MyHandle {
         if let Some(player) = player { self.remove_from(player); }
         let old_attachments = self.attachments;
@@ -287,7 +288,7 @@ impl PartAttachment {
 
 impl std::ops::Deref for PartAttachment {
     type Target = MyHandle;
-    fn deref(&self) -> MyHandle { self.part }
+    fn deref(&self) -> &MyHandle { &self.part }
 }
 
 pub use crate::codec::PartKind;

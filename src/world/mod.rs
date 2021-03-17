@@ -14,6 +14,7 @@ use crate::codec::ToClientMsg;
 pub mod planets;
 pub mod parts;
 use parts::{Part, AttachedPartFacing, RecursivePartDescription};
+use planets::AmPlanet;
 
 pub mod nphysics_types {
     pub type MyUnits = f32;
@@ -41,8 +42,8 @@ pub struct Simulation {
     pub planets: planets::Planets,
 }
 pub enum SimulationEvent {
-    PlayerTouchPlanet { player: u16, part: u16, planet: u16, },
-    PlayerUntouchPlanet { player: u16, part: u16, planet: u16 },
+    PlayerTouchPlanet { player: u16, part: MyHandle, planet: u16, },
+    PlayerUntouchPlanet { player: u16, part: MyHandle, planet: u16 },
 }
 
 
@@ -65,6 +66,7 @@ impl Simulation {
 
     fn celestial_gravity(&mut self) {
         for (_part_handle, part) in self.world.iter_parts_mut() {
+            let part = part.body_mut();
             const GRAVITATION_CONSTANT: f32 = 1.0; //Lolrandom
             for body in &self.planets.celestial_objects() {
                 let distance: (f32, f32) = ((body.position.0 - part.position().translation.x),
@@ -89,30 +91,30 @@ impl Simulation {
                 ContactEvent::Started(handle1, handle2) => {
                     let planet: u16;
                     let other: DefaultColliderHandle;
-                    if let MyHandle::CelestialObject(planet_id) = self.colliders.get(*handle1).unwrap().body() {
-                        planet = planet_id; other = *handle2;
-                    } else if let MyHandle::CelestialObject(planet_id) = self.colliders.get(*handle2).unwrap().body() {
-                        planet = planet_id; other = *handle1;
+                    if let Some(am_planet) = self.colliders.get(*handle1).unwrap().user_data().map(|any| any.downcast_ref::<AmPlanet>()).flatten() {
+                        planet = am_planet.id; other = *handle2;
+                    } else if let Some(am_planet) = self.colliders.get(*handle2).unwrap().user_data().map(|any| any.downcast_ref::<AmPlanet>()).flatten() {
+                        planet = am_planet.id; other = *handle1;
                     } else { continue; }
                     let part_coll = self.colliders.get(other).unwrap();
-                    if let MyHandle::Part(part_id) = part_coll.body() {
-                        if let Some(PartOfPlayer(player_id)) = part_coll.user_data().map(|dat| dat.downcast_ref()).flatten() {
-                            events.push(SimulationEvent::PlayerTouchPlanet{ player: player_id, part: part_id, planet });
+                    if let Some(part) = self.world.get_part(part_coll.body()) {
+                        if let Some(player_id) = part.part_of_player() {
+                            events.push(SimulationEvent::PlayerTouchPlanet{ player: player_id, part: part_coll.body(), planet });
                         }
                     }
                 },
                 ContactEvent::Stopped(handle1, handle2) => {
                     let planet: u16;
                     let other: DefaultColliderHandle;
-                    if let MyHandle::CelestialObject(planet_id) = self.colliders.get(*handle1).unwrap().body() {
-                        planet = planet_id; other = *handle2;
-                    } else if let MyHandle::CelestialObject(planet_id) = self.colliders.get(*handle2).unwrap().body() {
-                        planet = planet_id; other = *handle1;
+                    if let Some(am_planet) = self.colliders.get(*handle1).unwrap().user_data().map(|any| any.downcast_ref::<AmPlanet>()).flatten() {
+                        planet = am_planet.id; other = *handle2;
+                    } else if let Some(am_planet) = self.colliders.get(*handle2).unwrap().user_data().map(|any| any.downcast_ref::<AmPlanet>()).flatten() {
+                        planet = am_planet.id; other = *handle1;
                     } else { continue; }
                     let part_coll = self.colliders.get(other).unwrap();
-                    if let MyHandle::Part(part_id) = part_coll.body() {
-                        if let Some(PartOfPlayer(player_id)) = part_coll.user_data().map(|dat| dat.downcast_ref()).flatten() {
-                            events.push(SimulationEvent::PlayerUntouchPlanet{ player: player_id, part: part_id, planet });
+                    if let Some(part) = self.world.get_part(part_coll.body()) {
+                        if let Some(player_id) = part.part_of_player() {
+                            events.push(SimulationEvent::PlayerUntouchPlanet{ player: player_id, part: part_coll.body(), planet });
                         }
                     }
                 }
@@ -120,13 +122,13 @@ impl Simulation {
         }
     }
 
-    pub fn equip_mouse_dragging(&mut self, part_id: u16) -> DefaultJointConstraintHandle {
-        let body = self.world.get_rigid_mut(MyHandle::Part(part_id)).unwrap();
+    pub fn equip_mouse_dragging(&mut self, part: MyHandle) -> DefaultJointConstraintHandle {
+        let body = self.world.get_rigid_mut(part).unwrap();
         body.set_local_inertia(Inertia2::new(0.00000001, body.augmented_mass().angular));
         let space = body.position().translation;
         let constraint = MouseConstraint::new(
-            BodyPartHandle(MyHandle::Part(part_id), 0),
-            BodyPartHandle(MyHandle::ReferencePoint, 0),
+            BodyPartHandle(part, 0),
+            BodyPartHandle(self.world.reference_point_body, 0),
             Point::new(0.0,0.0),
             Point::new(space.x, space.y),
             1000.0
@@ -149,7 +151,7 @@ impl Simulation {
     pub fn geometrical_world(&self) -> &MyGeometricalWorld { &self.geometry }
 
     pub fn inflate(&mut self, parts: &RecursivePartDescription, initial_location: MyIsometry) -> MyHandle {
-        parts.inflate(&mut self.world, &mut self.colliders, &mut self.joints, initial_location)
+        parts.inflate(&(&mut self.world).into(), &mut self.colliders, &mut self.joints, initial_location)
     }
     pub fn delete_parts_recursive(&mut self, index: MyHandle) -> Vec<ToClientMsg> {
         let mut removal_msgs = Vec::new();
@@ -210,8 +212,8 @@ impl World {
     pub fn get_part(&self, index: MyHandle) -> Option<&Part> {
         self.storage.get(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
     }
-    pub fn get_rigid_mut(&mut self, index: MyHandle) -> Option<&MyRigidBody> {
-        self.storage.get_mut(index).map(|obj| obj.rigid()).flatten()
+    pub fn get_rigid_mut(&mut self, index: MyHandle) -> Option<&mut MyRigidBody> {
+        self.storage.get_mut(index).map(|obj| obj.rigid_mut()).flatten()
     }
     pub fn get_part_mut(&mut self, index: MyHandle) -> Option<&mut Part> {
         self.storage.get_mut(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
@@ -219,7 +221,7 @@ impl World {
     pub fn delete_parts_recursive(&mut self, index: MyHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, removal_msgs: &mut Vec<ToClientMsg>) {
         match self.storage.remove(index) {
             Some(WorldlyObject::Part(part)) => {
-                self.removal_events.push(index);
+                self.removal_events.push_back(index);
                 part.delete_recursive(self, colliders, joints, removal_msgs);
             },
             None => (),
@@ -228,21 +230,22 @@ impl World {
     }
     pub fn add_celestial_object(&mut self, body: MyRigidBody) -> MyHandle { self.storage.insert(WorldlyObject::CelestialObject(body)) }
 
-    pub fn recurse_part<F>(&self, part_handle: MyHandle, func: &mut F, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing)
+    pub fn recurse_part<F>(&self, part_handle: MyHandle, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing, func: &mut F)
     where F: FnMut(MyHandle, &Part, i32, i32, AttachedPartFacing, AttachedPartFacing) {
         if let Some(part) = self.get_part(part_handle) {
             func(part_handle, part, x, y, my_facing, true_facing);
             let attachment_dat = part.kind().attachment_locations();
             for (i, attachment) in part.attachments().iter().enumerate() {
-                let attachment_dat = attachment_dat[i].unwrap();
-                let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
-                let delta_rel_part = true_facing.delta_rel_part();
-                self.recurse_part_mut_with_return(
-                    *attachment,
-                    x + delta_rel_part.0, y + delta_rel_part.1,
-                    attachment_dat.facing, true_facing,
-                    func
-                ); 
+                if let (Some(attachment), Some(attachment_dat)) = (attachment, attachment_dat[i]) {
+                    let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
+                    let delta_rel_part = true_facing.delta_rel_part();
+                    self.recurse_part(
+                        **attachment,
+                        x + delta_rel_part.0, y + delta_rel_part.1,
+                        attachment_dat.facing, true_facing,
+                        func
+                    ); 
+                }
             }
         }
     }
@@ -252,15 +255,16 @@ impl World {
             func(part_handle, part, x, y, my_facing, true_facing);
             let attachment_dat = part.kind().attachment_locations();
             for (i, attachment) in part.attachments().iter().enumerate() {
-                let attachment_dat = attachment_dat[i].unwrap();
-                let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
-                let delta_rel_part = true_facing.delta_rel_part();
-                self.recurse_part_mut_with_return(
-                    *attachment,
-                    x + delta_rel_part.0, y + delta_rel_part.1,
-                    attachment_dat.facing, true_facing,
-                    func,
-                ); 
+                if let (Some(attachment), Some(attachment_dat)) = (attachment, attachment_dat[i]) {
+                    let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
+                    let delta_rel_part = true_facing.delta_rel_part();
+                    self.recurse_part_mut(
+                        **attachment,
+                        x + delta_rel_part.0, y + delta_rel_part.1,
+                        attachment_dat.facing, true_facing,
+                        func,
+                    ); 
+                }
             }
         }
     }
@@ -271,16 +275,17 @@ impl World {
             if result.is_some() { return result };
             let attachment_dat = part.kind().attachment_locations();
             for (i, attachment) in part.attachments().iter().enumerate() {
-                let attachment_dat = attachment_dat[i].unwrap();
-                let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
-                let delta_rel_part = true_facing.delta_rel_part();
-                if let Some(result) = self.recurse_part_mut_with_return(
-                    *attachment,
-                    x + delta_rel_part.0, y + delta_rel_part.1,
-                    attachment_dat.facing, true_facing,
-                    func,
-                ) {
-                    return Some(result)
+                if let (Some(attachment), Some(attachment_dat)) = (attachment, attachment_dat[i]) {
+                    let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
+                    let delta_rel_part = true_facing.delta_rel_part();
+                    if let Some(result) = self.recurse_part_with_return(
+                        **attachment,
+                        x + delta_rel_part.0, y + delta_rel_part.1,
+                        attachment_dat.facing, true_facing,
+                        func,
+                    ) {
+                        return Some(result)
+                    }
                 }
             }
         }
@@ -293,16 +298,17 @@ impl World {
             if result.is_some() { return result };
             let attachment_dat = part.kind().attachment_locations();
             for (i, attachment) in part.attachments().iter().enumerate() {
-                let attachment_dat = attachment_dat[i].unwrap();
-                let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
-                let delta_rel_part = true_facing.delta_rel_part();
-                if let Some(result) = self.recurse_part_mut_with_return(
-                    *attachment,
-                    x + delta_rel_part.0, y + delta_rel_part.1,
-                    attachment_dat.facing, true_facing,
-                    func,
-                ) {
-                    return Some(result)
+                if let (Some(attachment), Some(attachment_dat)) = (attachment, attachment_dat[i]) {
+                    let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
+                    let delta_rel_part = true_facing.delta_rel_part();
+                    if let Some(result) = self.recurse_part_mut_with_return(
+                        **attachment,
+                        x + delta_rel_part.0, y + delta_rel_part.1,
+                        attachment_dat.facing, true_facing,
+                        func,
+                    ) {
+                        return Some(result)
+                    }
                 }
             }
         }
@@ -329,8 +335,14 @@ impl World {
             }
         }
     }
+    pub fn remove_part_unprotected(&mut self, part_handle: MyHandle) -> Part {
+        if let Some(WorldlyObject::Part(part)) = self.storage.remove(part_handle) {
+            self.removal_events.push_back(part_handle);
+            part
+        } else { panic!("remove_part_unprotected") }
+    }
 
-    pub fn iter_parts_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item=(MyHandle, &'a mut Part)>> {
+    pub fn iter_parts_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item=(MyHandle, &'a mut Part)> + 'a> {
         Box::new(self.storage.iter_mut().filter_map(|(handle, obj)| if let WorldlyObject::Part(part) = obj { Some((handle, part)) } else { None }))
     }
 }
