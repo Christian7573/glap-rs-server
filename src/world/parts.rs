@@ -24,6 +24,7 @@ static mut NEXT_PART_ID: AtomicU16 = AtomicU16::new(0);
 
 pub const ATTACHMENT_COLLIDER_COLLISION_GROUP: [usize; 1] = [5];
 
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct RecursivePartDescription {
     pub kind: PartKind,
     pub attachments: Vec<Option<RecursivePartDescription>>,
