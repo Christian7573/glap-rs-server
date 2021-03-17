@@ -63,7 +63,7 @@ impl RecursivePartDescription {
                     let attachment_part_x = rel_part_x + d_part_x;
                     let attachment_part_y = rel_part_y + d_part_y;
                     let part = recursive_part.inflate_component(bodies, colliders, joints, attachment_location, attachment_true_facing, attachment_part_x, attachment_part_y, None);
-                    Some(PartAttachment::inflate(part, self.kind, &body_handle, i, joints))
+                    Some(PartAttachment::inflate(part, self.kind, body_handle, i, joints))
                 } else { None }
             }).flatten();
         };
