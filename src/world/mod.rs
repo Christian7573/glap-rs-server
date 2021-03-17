@@ -17,7 +17,7 @@ use parts::{Part, AttachedPartFacing, RecursivePartDescription};
 
 pub mod nphysics_types {
     pub type MyUnits = f32;
-    pub type MyHandle = Index;
+    pub type MyHandle = generational_arena::Index;
     pub type MyIsometry = nphysics2d::math::Isometry<MyUnits>;
     pub type MyColliderHandle = nphysics2d::object::DefaultColliderHandle;
     pub type MyMechanicalWorld = nphysics2d::world::MechanicalWorld<MyUnits, MyHandle, MyColliderHandle>;
@@ -64,9 +64,9 @@ impl Simulation {
     }
 
     fn celestial_gravity(&mut self) {
-        fn do_gravity_for_part(part: &mut MyRigidBody, celestial_bodies: &[planets::CelestialObject]) {
+        for (_part_handle, part) in self.world.iter_parts_mut() {
             const GRAVITATION_CONSTANT: f32 = 1.0; //Lolrandom
-            for body in celestial_bodies {
+            for body in &self.planets.celestial_objects() {
                 let distance: (f32, f32) = ((body.position.0 - part.position().translation.x),
                                             (body.position.1 - part.position().translation.y));
                 let magnitude: f32 = part.augmented_mass().linear * body.mass
@@ -77,11 +77,7 @@ impl Simulation {
                 } else {
                     part.apply_force(0, &Force2::linear(Vector2::new(distance.0 / distance.1.abs() * magnitude, if distance.1 >= 0.0 { magnitude } else { -magnitude })), ForceType::Force, false);
                 }
-                
             }
-        }
-        for part in self.world.parts.values_mut() {
-            do_gravity_for_part(part, &self.world.celestial_objects);
         }
     }
 
@@ -101,7 +97,7 @@ impl Simulation {
                     let part_coll = self.colliders.get(other).unwrap();
                     if let MyHandle::Part(part_id) = part_coll.body() {
                         if let Some(PartOfPlayer(player_id)) = part_coll.user_data().map(|dat| dat.downcast_ref()).flatten() {
-                            events.push(SimulationEvent::PlayerTouchPlanet{ player: *player_id, part: part_id, planet: planet });
+                            events.push(SimulationEvent::PlayerTouchPlanet{ player: player_id, part: part_id, planet });
                         }
                     }
                 },
@@ -116,7 +112,7 @@ impl Simulation {
                     let part_coll = self.colliders.get(other).unwrap();
                     if let MyHandle::Part(part_id) = part_coll.body() {
                         if let Some(PartOfPlayer(player_id)) = part_coll.user_data().map(|dat| dat.downcast_ref()).flatten() {
-                            events.push(SimulationEvent::PlayerUntouchPlanet{ player: *player_id, part: part_id, planet: planet });
+                            events.push(SimulationEvent::PlayerUntouchPlanet{ player: player_id, part: part_id, planet });
                         }
                     }
                 }
@@ -332,6 +328,10 @@ impl World {
                 self.recursive_detach_one(parent_handle, i, player, joints, parts_affected);
             }
         }
+    }
+
+    pub fn iter_parts_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item=(MyHandle, &'a mut Part)>> {
+        Box::new(self.storage.iter_mut().filter_map(|(handle, obj)| if let WorldlyObject::Part(part) = obj { Some((handle, part)) } else { None }))
     }
 }
 impl Default for World {
