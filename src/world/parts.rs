@@ -170,7 +170,7 @@ impl Part {
     pub fn find_cargo_recursive(&self, bodies: &MyBodySet) -> Option<(Option<MyHandle>, usize)> {
         for (i, attachment) in self.attachments.iter().enumerate() {
             if let Some(attachment) = attachment {
-                let part = bodies.get_part(*attachment).expect("find_cargo_recursive: attached to body that didn't exist");
+                let part = bodies.get_part(**attachment).expect("find_cargo_recursive: attached to body that didn't exist");
                 if part.kind == PartKind::Cargo { return Some((None, i)) }
                 else {
                     match part.find_cargo_recursive(bodies) {
