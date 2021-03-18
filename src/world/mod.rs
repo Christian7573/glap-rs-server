@@ -231,9 +231,9 @@ impl World {
     pub fn add_celestial_object(&mut self, body: MyRigidBody) -> MyHandle { self.storage.insert(WorldlyObject::CelestialObject(body)) }
 
     pub fn recurse_part<F>(&self, part_handle: MyHandle, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing, func: &mut F)
-    where F: FnMut(MyHandle, &Part, i32, i32, AttachedPartFacing, AttachedPartFacing) {
+    where F: FnMut(MyHandle, &Part, i32, i32, AttachedPartFacing, AttachedPartFacing, &World) {
         if let Some(part) = self.get_part(part_handle) {
-            func(part_handle, part, x, y, my_facing, true_facing);
+            func(part_handle, part, x, y, my_facing, true_facing, self);
             let attachment_dat = part.kind().attachment_locations();
             for (i, attachment) in part.attachments().iter().enumerate() {
                 if let (Some(attachment), Some(attachment_dat)) = (attachment, attachment_dat[i]) {
@@ -250,9 +250,9 @@ impl World {
         }
     }
     pub fn recurse_part_mut<F>(&mut self, part_handle: MyHandle, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing, func: &mut F)
-    where F: FnMut(MyHandle, &mut Part, i32, i32, AttachedPartFacing, AttachedPartFacing) {
+    where F: FnMut(MyHandle, &mut Part, i32, i32, AttachedPartFacing, AttachedPartFacing, &mut World) {
         if let Some(part) = self.get_part_mut(part_handle) {
-            func(part_handle, part, x, y, my_facing, true_facing);
+            func(part_handle, part, x, y, my_facing, true_facing, self);
             let attachment_dat = part.kind().attachment_locations();
             for (i, attachment) in part.attachments().iter().enumerate() {
                 if let (Some(attachment), Some(attachment_dat)) = (attachment, attachment_dat[i]) {
@@ -269,9 +269,9 @@ impl World {
         }
     }
     pub fn recurse_part_with_return<V, F>(&self, part_handle: MyHandle, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing, func: &mut F) -> Option<V>
-    where F: FnMut(MyHandle, &Part, i32, i32, AttachedPartFacing, AttachedPartFacing) -> Option<V> {
+    where F: FnMut(MyHandle, &Part, i32, i32, AttachedPartFacing, AttachedPartFacing, &World) -> Option<V> {
         if let Some(part) = self.get_part(part_handle) {
-            let result = func(part_handle, part, x, y, my_facing, true_facing);
+            let result = func(part_handle, part, x, y, my_facing, true_facing, self);
             if result.is_some() { return result };
             let attachment_dat = part.kind().attachment_locations();
             for (i, attachment) in part.attachments().iter().enumerate() {
@@ -292,9 +292,9 @@ impl World {
         return None;
     }
     pub fn recurse_part_mut_with_return<V, F>(&mut self, part_handle: MyHandle, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing, func: &mut F) -> Option<V>
-    where F: FnMut(MyHandle, &mut Part, i32, i32, AttachedPartFacing, AttachedPartFacing) -> Option<V> {
+    where F: FnMut(MyHandle, &mut Part, i32, i32, AttachedPartFacing, AttachedPartFacing, &mut World) -> Option<V> {
         if let Some(part) = self.get_part_mut(part_handle) {
-            let result = func(part_handle, part, x, y, my_facing, true_facing);
+            let result = func(part_handle, part, x, y, my_facing, true_facing, self);
             if result.is_some() { return result };
             let attachment_dat = part.kind().attachment_locations();
             for (i, attachment) in part.attachments().iter().enumerate() {
