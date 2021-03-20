@@ -10,6 +10,7 @@ use ncollide2d::pipeline::ContactEvent;
 use crate::PartOfPlayer;
 use generational_arena::{Arena, Index};
 use crate::codec::ToClientMsg;
+use std::ops::{Deref, DerefMut};
 
 pub mod planets;
 pub mod parts;
@@ -230,60 +231,61 @@ impl World {
     }
     pub fn add_celestial_object(&mut self, body: MyRigidBody) -> MyHandle { self.storage.insert(WorldlyObject::CelestialObject(body)) }
 
-    pub fn recurse_part<F>(&self, part_handle: MyHandle, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing, func: &mut F)
-    where F: FnMut(MyHandle, &Part, i32, i32, AttachedPartFacing, AttachedPartFacing, &World) {
+    pub fn recurse_part<'a, F>(&'a self, part_handle: MyHandle, details: PartVisitDetails, func: &mut F)
+    where F: FnMut(PartVisitHandle<'a>) {
         if let Some(part) = self.get_part(part_handle) {
-            func(part_handle, part, x, y, my_facing, true_facing, self);
+            func(PartVisitHandle(self, part_handle, part, details));
             let attachment_dat = part.kind().attachment_locations();
             for (i, attachment) in part.attachments().iter().enumerate() {
                 if let (Some(attachment), Some(attachment_dat)) = (attachment, attachment_dat[i]) {
-                    let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
+                    let true_facing = attachment_dat.facing.compute_true_facing(details.true_facing);
                     let delta_rel_part = true_facing.delta_rel_part();
-                    self.recurse_part(
-                        **attachment,
-                        x + delta_rel_part.0, y + delta_rel_part.1,
-                        attachment_dat.facing, true_facing,
-                        func
-                    ); 
+                    self.recurse_part(**attachment, PartVisitDetails {
+                        part_rel_x: details.part_rel_x + delta_rel_part.0,
+                        part_rel_y: details.part_rel_y + delta_rel_part.1,
+                        my_facing: attachment_dat.facing,
+                        true_facing
+                    }, func);
                 }
             }
         }
     }
-    pub fn recurse_part_mut<F>(&mut self, part_handle: MyHandle, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing, func: &mut F)
-    where F: FnMut(MyHandle, &mut Part, i32, i32, AttachedPartFacing, AttachedPartFacing, &mut World) {
-        if let Some(part) = self.get_part_mut(part_handle) {
-            func(part_handle, part, x, y, my_facing, true_facing, self);
+    pub fn recurse_part_mut<'a, F>(&'a mut self, part_handle: MyHandle, details: PartVisitDetails, func: &mut F)
+    where F: FnMut(PartVisitHandleMut<'a>) {
+        if self.get_part_mut(part_handle).is_some() {
+            func(PartVisitHandleMut(self, part_handle, details));
+            let part = self.get_part(part_handle).unwrap();
             let attachment_dat = part.kind().attachment_locations();
             for (i, attachment) in part.attachments().iter().enumerate() {
                 if let (Some(attachment), Some(attachment_dat)) = (attachment, attachment_dat[i]) {
-                    let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
+                    let true_facing = attachment_dat.facing.compute_true_facing(details.true_facing);
                     let delta_rel_part = true_facing.delta_rel_part();
-                    self.recurse_part_mut(
-                        **attachment,
-                        x + delta_rel_part.0, y + delta_rel_part.1,
-                        attachment_dat.facing, true_facing,
-                        func,
-                    ); 
+                    self.recurse_part_mut(**attachment, PartVisitDetails {
+                        part_rel_x: details.part_rel_x + delta_rel_part.0,
+                        part_rel_y: details.part_rel_y + delta_rel_part.1,
+                        my_facing: attachment_dat.facing,
+                        true_facing
+                    }, func);
                 }
             }
         }
     }
-    pub fn recurse_part_with_return<V, F>(&self, part_handle: MyHandle, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing, func: &mut F) -> Option<V>
-    where F: FnMut(MyHandle, &Part, i32, i32, AttachedPartFacing, AttachedPartFacing, &World) -> Option<V> {
+    pub fn recurse_part_with_return<'a, V, F>(&'a self, part_handle: MyHandle, details: PartVisitDetails, func: &mut F) -> Option<V>
+    where F: FnMut(PartVisitHandle<'a>) -> Option<V> {
         if let Some(part) = self.get_part(part_handle) {
-            let result = func(part_handle, part, x, y, my_facing, true_facing, self);
+            let result = func(PartVisitHandle(self, part_handle, part, details));
             if result.is_some() { return result };
             let attachment_dat = part.kind().attachment_locations();
             for (i, attachment) in part.attachments().iter().enumerate() {
                 if let (Some(attachment), Some(attachment_dat)) = (attachment, attachment_dat[i]) {
-                    let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
+                    let true_facing = attachment_dat.facing.compute_true_facing(details.true_facing);
                     let delta_rel_part = true_facing.delta_rel_part();
-                    if let Some(result) = self.recurse_part_with_return(
-                        **attachment,
-                        x + delta_rel_part.0, y + delta_rel_part.1,
-                        attachment_dat.facing, true_facing,
-                        func,
-                    ) {
+                    if let Some(result) = self.recurse_part_with_return(**attachment, PartVisitDetails {
+                        part_rel_x: details.part_rel_x + delta_rel_part.0,
+                        part_rel_y: details.part_rel_y + delta_rel_part.1,
+                        my_facing: attachment_dat.facing,
+                        true_facing
+                    }, func) {
                         return Some(result)
                     }
                 }
@@ -291,22 +293,23 @@ impl World {
         }
         return None;
     }
-    pub fn recurse_part_mut_with_return<V, F>(&mut self, part_handle: MyHandle, x: i32, y: i32, my_facing: AttachedPartFacing, true_facing: AttachedPartFacing, func: &mut F) -> Option<V>
-    where F: FnMut(MyHandle, &mut Part, i32, i32, AttachedPartFacing, AttachedPartFacing, &mut World) -> Option<V> {
-        if let Some(part) = self.get_part_mut(part_handle) {
-            let result = func(part_handle, part, x, y, my_facing, true_facing, self);
+    pub fn recurse_part_mut_with_return<'a, V, F>(&'a mut self, part_handle: MyHandle, details: PartVisitDetails, func: &mut F) -> Option<V>
+    where F: FnMut(PartVisitHandleMut<'a>) -> Option<V> {
+        if self.get_part_mut(part_handle).is_some() {
+            let result = func(PartVisitHandleMut(self, part_handle, details));
             if result.is_some() { return result };
+            let part = self.get_part_mut(part_handle).unwrap();
             let attachment_dat = part.kind().attachment_locations();
             for (i, attachment) in part.attachments().iter().enumerate() {
                 if let (Some(attachment), Some(attachment_dat)) = (attachment, attachment_dat[i]) {
-                    let true_facing = attachment_dat.facing.compute_true_facing(true_facing);
+                    let true_facing = attachment_dat.facing.compute_true_facing(details.true_facing);
                     let delta_rel_part = true_facing.delta_rel_part();
-                    if let Some(result) = self.recurse_part_mut_with_return(
-                        **attachment,
-                        x + delta_rel_part.0, y + delta_rel_part.1,
-                        attachment_dat.facing, true_facing,
-                        func,
-                    ) {
+                    if let Some(result) = self.recurse_part_mut_with_return(**attachment, PartVisitDetails {
+                        part_rel_x: details.part_rel_x + delta_rel_part.0,
+                        part_rel_y: details.part_rel_y + delta_rel_part.1,
+                        my_facing: attachment_dat.facing,
+                        true_facing
+                    }, func) {
                         return Some(result)
                     }
                 }
@@ -358,6 +361,7 @@ impl Default for World {
         }
     }
 }
+
 impl nphysics2d::object::BodySet<MyUnits> for World {
     type Handle = MyHandle;
     fn get(&self, handle: Self::Handle) -> Option<&dyn nphysics2d::object::Body<MyUnits>> {
@@ -384,4 +388,48 @@ impl nphysics2d::object::BodySet<MyUnits> for World {
     fn pop_removal_event(&mut self) -> Option<Self::Handle> {
         self.removal_events.pop_front()
     }
+}
+
+#[derive(Copy, Clone)]
+pub struct PartVisitDetails {
+    pub part_rel_x: i32,
+    pub part_rel_y: i32,
+    pub my_facing: AttachedPartFacing,
+    pub true_facing: AttachedPartFacing,
+}
+impl Default for PartVisitDetails {
+    fn default() -> Self { PartVisitDetails {
+        part_rel_x: 0,
+        part_rel_y: 0,
+        my_facing: AttachedPartFacing::Up,
+        true_facing: AttachedPartFacing::Up,
+    } }
+}
+
+pub struct PartVisitHandle<'a> (&'a World, MyHandle, &'a Part, PartVisitDetails);
+impl<'a> PartVisitHandle<'a> {
+    pub fn get_part(&self, handle: MyHandle) -> Option<&Part> { self.0.get_part(handle) }
+    pub fn get_rigid(&self, handle: MyHandle) -> Option<&MyRigidBody> { self.0.get_rigid(handle) }
+    pub fn handle(&self) -> MyHandle { self.1 }
+    pub fn details(&self) -> &PartVisitDetails { &self.3 }
+}
+impl<'a> Deref for PartVisitHandle<'a> {
+    type Target = Part;
+    fn deref(&self) -> &Part { self.2 }
+}
+pub struct PartVisitHandleMut<'a> (&'a mut World, MyHandle, PartVisitDetails);
+impl<'a> PartVisitHandleMut<'a> {
+    pub fn get_part(&self, handle: MyHandle) -> Option<&Part> { self.0.get_part(handle) }
+    pub fn get_rigid(&self, handle: MyHandle) -> Option<&MyRigidBody> { self.0.get_rigid(handle) }
+    pub fn get_part_mut(&mut self, handle: MyHandle) -> Option<&mut Part> { self.0.get_part_mut(handle) }
+    pub fn get_rigid_mut(&mut self, handle: MyHandle) -> Option<&mut MyRigidBody> { self.0.get_rigid_mut(handle) }
+    pub fn handle(&self) -> MyHandle { self.1 }
+    pub fn details(&self) -> &PartVisitDetails { &self.2 }
+}
+impl<'a> Deref for PartVisitHandleMut<'a> {
+    type Target = Part;
+    fn deref(&self) -> &Part { self.get_part(self.1).unwrap() }
+}
+impl<'a> DerefMut for PartVisitHandleMut<'a> {
+    fn deref_mut(&mut self) -> &mut Part { self.get_part_mut(self.1).unwrap() }
 }

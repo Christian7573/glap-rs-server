@@ -322,7 +322,8 @@ async fn main() {
                 outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::AddPlayer { id, name: name.clone(), core_id: core.id() }));
                 
                 let mut player = PlayerMeta::new(id, core_handle, name.clone(), beamout_token);
-                simulation.world.recurse_part_mut(core_handle, 0, 0, AttachedPartFacing::Up, AttachedPartFacing::Up, &mut |_handle: MyHandle, part: &mut world::parts::Part, _, _, _, _, _world| {
+                simulation.world.recurse_part_mut(core_handle, Default::default(), &mut |handle| {
+                    let part = *handle;
                     part.join_to(&mut player);
                     outbound_events.push(ToSerializer::Broadcast(part.add_msg()));
                     outbound_events.push(ToSerializer::Broadcast(part.move_msg()));
