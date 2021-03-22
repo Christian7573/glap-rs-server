@@ -475,10 +475,10 @@ async fn main() {
                                 ) {
                                     let parent = simulation.world.get_part_mut(parent_handle).unwrap();
                                     //TODO: Check if we can use parent.body.position instead of core_location
-                                    parent.body_mut().set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), true_facing.part_rotation() + core_location.rotation.angle()));
                                     parent.attach_part_player_agnostic(attachment_slot, grabbed_part_handle, parent_handle, &mut simulation.joints);
                                     free_parts.remove(&part_id);
                                     let grabbed_part = simulation.world.get_part_mut(grabbed_part_handle).unwrap();
+                                    grabbed_part.body_mut().set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), true_facing.part_rotation() + core_location.rotation.angle()));
                                     grabbed_part.join_to(player_meta);
                                     outbound_events.push(ToSerializer::Message(id, player_meta.update_my_meta()));
                                     grabbed_part.thrust_mode = thrust_mode;
