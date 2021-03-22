@@ -199,7 +199,7 @@ async fn main() {
                                             player.can_beamout = false;
                                         }
                                     }
-                                    let new_part_handle = old_part.mutate(upgrade_into, Some(player), &mut simulation.world, &mut simulation.colliders, &mut simulation.joints);
+                                    let new_part_handle = old_part.mutate(upgrade_into, &mut Some(player), &mut simulation.world, &mut simulation.colliders, &mut simulation.joints);
                                     let parent_part = simulation.world.get_part_mut(parent_part_handle).unwrap();
                                     parent_part.attach_part_player_agnostic(slot, new_part_handle, parent_part_handle, &mut simulation.joints);
                                     let new_part = simulation.world.get_part(new_part_handle).unwrap();
@@ -261,11 +261,7 @@ async fn main() {
                 }
 
                 for player in players.values_mut() { 
-                    let mut max_power_lost = 0;
-                    let mut regen_lost = 0;
-                    recursive_broken_detach(player.core, &mut simulation, &mut free_parts, Some(player), &mut outbound_events);
-                    player.max_power -= max_power_lost;
-                    player.power_regen_per_5_ticks -= regen_lost;
+                    recursive_broken_detach(player.core, &mut simulation, &mut free_parts, &mut Some(player), &mut outbound_events);
                 }
 
                 outbound_events.push(ToSerializer::WorldUpdate(
@@ -322,8 +318,8 @@ async fn main() {
                 outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::AddPlayer { id, name: name.clone(), core_id: core.id() }));
                 
                 let mut player = PlayerMeta::new(id, core_handle, name.clone(), beamout_token);
-                simulation.world.recurse_part_mut(core_handle, Default::default(), &mut |handle| {
-                    let part = *handle;
+                simulation.world.recurse_part_mut(core_handle, Default::default(), &mut |mut handle| {
+                    let part = &mut handle;
                     part.join_to(&mut player);
                     outbound_events.push(ToSerializer::Broadcast(part.add_msg()));
                     outbound_events.push(ToSerializer::Broadcast(part.move_msg()));
@@ -338,22 +334,21 @@ async fn main() {
                         id: planet.id, radius: planet.radius, position: (position.x, position.y)
                     }));
                 }
-                let mut send_parts = |_handle, part: &world::parts::Part, _, _, _, _, _world| {
+                for (_id, part) in &free_parts { simulation.world.recurse_part(**part, Default::default(), &mut |handle: world::PartVisitHandle| {
+                    let part = &handle;
                     outbound_events.push(ToSerializer::Broadcast(part.add_msg()));
                     outbound_events.push(ToSerializer::Broadcast(part.move_msg()));
                     outbound_events.push(ToSerializer::Broadcast(part.update_meta_msg()));
-                };
-                for (_id, part) in &free_parts { simulation.world.recurse_part(**part, 0, 0, AttachedPartFacing::Up, AttachedPartFacing::Up, &mut send_parts); }
+                }); }
                 for (other_id, other_player) in &players {
                     let other_core = simulation.world.get_part(other_player.core).unwrap();
                     outbound_events.push(ToSerializer::Message(id, codec::ToClientMsg::AddPlayer{ id: *other_id, name: other_player.name.clone(), core_id: other_core.id() }));
-                    //Do again lol
-                    let mut send_parts = |_handle, part: &world::parts::Part, _, _, _, _, _world| {
+                    simulation.world.recurse_part(other_player.core, Default::default(), &mut |handle: world::PartVisitHandle| {
+                        let part = &handle;
                         outbound_events.push(ToSerializer::Broadcast(part.add_msg()));
                         outbound_events.push(ToSerializer::Broadcast(part.move_msg()));
                         outbound_events.push(ToSerializer::Broadcast(part.update_meta_msg()));
-                    };
-                    simulation.world.recurse_part(other_player.core, 0, 0, AttachedPartFacing::Up, AttachedPartFacing::Up, &mut send_parts);
+                    });
                 }
                 
                 outbound_events.push(ToSerializer::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
@@ -393,11 +388,13 @@ async fn main() {
                                         free_part.become_grabbed(&mut earth_cargos);
                                     }
                                 } else {
-                                    if let Some(part_handle) = simulation.world.recurse_part_mut_with_return(player_meta.core, 0, 0, AttachedPartFacing::Up, AttachedPartFacing::Up, &mut |_parent_handle, parent: &mut world::parts::Part, _, _, _, _, world| {
-                                        for (i, attachment) in parent.attachments().iter().enumerate() {
+                                    let world = &mut simulation.world;
+                                    let joints = &mut simulation.joints;
+                                    if let Some(part_handle) = simulation.world.recurse_part_mut_with_return(player_meta.core, Default::default(), &mut |mut handle| {
+                                        for (i, attachment) in (*handle).attachments().iter().enumerate() {
                                             if let Some(attachment) = attachment {
-                                                if world.get_part(**attachment).unwrap().id() == grabbed_id {
-                                                    return Some(parent.detach_part_player_agnostic(i, &mut simulation.joints).unwrap())
+                                                if handle.get_part(**attachment).unwrap().id() == grabbed_id {
+                                                    return Some((*handle).detach_part_player_agnostic(i, joints).unwrap())
                                                 };
                                             }
                                         };
@@ -407,7 +404,7 @@ async fn main() {
                                         //what was I thinking here simulation.world.recurse_part_mut(part_handle, 0, 0, AttachedPartFacing::Up, AttachedPartFacing::Up, &mut |_handle, part: &mut world::parts::Part, _, _, _, _| part.join_to(player_meta));
                                         let mut parts_affected = BTreeSet::new();
                                         parts_affected.insert(part_handle);
-                                        simulation.world.recursive_detach_all(part_handle, Some(player_meta), &mut simulation.joints, &mut parts_affected);
+                                        simulation.world.recursive_detach_all(part_handle, &mut Some(player_meta), &mut simulation.joints, &mut parts_affected);
                                         player_meta.grabbed_part = Some((grabbed_id, simulation.equip_mouse_dragging(part_handle), x, y));
                                         if player_meta.parts_touching_planet.remove(&part_handle) {
                                             if player_meta.parts_touching_planet.is_empty() { 
@@ -446,15 +443,17 @@ async fn main() {
                                 let core_location = simulation.world.get_rigid(player_meta.core).unwrap().position().clone();
                                 let grabbed_part_handle = **free_parts.get(&part_id).unwrap();
                                 let grabbed_part = simulation.world.get_part_mut(grabbed_part_handle).unwrap();
-                                grabbed_part.body_mut().set_local_inertia(grabbed_part.kind().inertia());
+                                let inertia = grabbed_part.kind().inertia();
+                                grabbed_part.body_mut().set_local_inertia(inertia);
                                 grabbed_part.body_mut().set_velocity(nphysics2d::algebra::Velocity2::new(Vector2::new(0.0,0.0), 0.0));
         
                                 use world::parts::CompactThrustMode;
                                 let target_x = x + core_location.translation.x;
                                 let target_y = y + core_location.translation.y; 
                                 if let Some((parent_handle, attachment_slot, attachment_details, teleport_to, thrust_mode, true_facing)) = simulation.world.recurse_part_mut_with_return(
-                                    player_meta.core, 0, 0, AttachedPartFacing::Up, AttachedPartFacing::Up, 
-                                    &mut |parent_handle, parent: &mut world::parts::Part, x: i32, y: i32, _, true_facing, _world| {
+                                    player_meta.core, Default::default(),
+                                    &mut |mut handle| {
+                                        let parent = &mut handle;
                                         let attachments = parent.kind().attachment_locations();
                                         let pos = parent.body().position().clone();
                                         for (i, attachment) in parent.attachments().iter().enumerate() {
@@ -464,9 +463,9 @@ async fn main() {
                                                     rotated.0 += pos.translation.x;
                                                     rotated.1 += pos.translation.y;
                                                     if (rotated.0 - target_x).abs() <= 0.4 && (rotated.1 - target_y).abs() <= 0.4 {
-                                                        let my_true_facing = details.facing.compute_true_facing(true_facing);
-                                                        let thrust_mode = CompactThrustMode::calculate(my_true_facing, x, y);
-                                                        return Some((parent_handle, i, *details, rotated, thrust_mode, my_true_facing));
+                                                        let my_true_facing = details.facing.compute_true_facing(handle.details().true_facing);
+                                                        let thrust_mode = CompactThrustMode::calculate(my_true_facing, handle.details().part_rel_x, handle.details().part_rel_y);
+                                                        return Some((handle.handle(), i, *details, rotated, thrust_mode, my_true_facing));
                                                     }
                                                 }
                                             }
@@ -479,6 +478,7 @@ async fn main() {
                                     parent.body_mut().set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), true_facing.part_rotation() + core_location.rotation.angle()));
                                     parent.attach_part_player_agnostic(attachment_slot, grabbed_part_handle, parent_handle, &mut simulation.joints);
                                     free_parts.remove(&part_id);
+                                    let grabbed_part = simulation.world.get_part_mut(grabbed_part_handle).unwrap();
                                     grabbed_part.join_to(player_meta);
                                     outbound_events.push(ToSerializer::Message(id, player_meta.update_my_meta()));
                                     grabbed_part.thrust_mode = thrust_mode;
@@ -523,11 +523,12 @@ async fn main() {
                                 if let Some(player_meta) = players.get_mut(&id) {
                                     let core_pos = simulation.world.get_rigid(player_meta.core).unwrap().position().translation.vector;
                                     println!("Teleporting {} to: {} {}", player_meta.name, x, y);
-                                    simulation.world.recurse_part_mut(player_meta.core, 0, 0, AttachedPartFacing::Up, AttachedPartFacing::Up, &mut |_, part: &mut world::parts::Part, _, _, _, _, _world| {
-                                        part.body_mut().set_position(Isometry2::new(
-                                                part.body().position().clone().translation.vector - core_pos + teleport_to,
-                                                part.body().position().rotation.angle()
-                                        ));
+                                    simulation.world.recurse_part_mut(player_meta.core, Default::default(), &mut |mut handle: world::PartVisitHandleMut| {
+                                        let pos = Isometry2::new(
+                                                (*handle).body().position().clone().translation.vector - core_pos + teleport_to,
+                                                (*handle).body().position().rotation.angle()
+                                        );
+                                        (*handle).body_mut().set_position(pos);
                                     });
                                 }
                             }
@@ -546,12 +547,14 @@ async fn main() {
 }
 
 
-fn recursive_broken_detach(root: MyHandle, simulation: &mut world::Simulation, free_parts: &mut BTreeMap<u16, FreePart>, player: Option<&mut PlayerMeta>, out: &mut Vec<ToSerializerEvent> ) {
+fn recursive_broken_detach(root: MyHandle, simulation: &mut world::Simulation, free_parts: &mut BTreeMap<u16, FreePart>, player: &mut Option<&mut PlayerMeta>, out: &mut Vec<ToSerializerEvent> ) {
     let mut broken_parts = Vec::new();
-    simulation.world.recurse_part(root, 0, 0, AttachedPartFacing::Up, AttachedPartFacing::Up, &mut |part_handle, part: &Part, _, _, _, _, _world| {
-        for (i, attachment) in part.attachments().iter().enumerate() {
+    let world = &mut simulation.world;
+    let joints = &mut simulation.joints;
+    world.recurse_part(root, Default::default(), &mut |handle| {
+        for (i, attachment) in (*handle).attachments().iter().enumerate() {
             if let Some(attachment) = attachment {
-                if attachment.is_broken(&mut simulation.joints) { broken_parts.push((part_handle, i)) };
+                if attachment.is_broken(joints) { broken_parts.push((handle.handle(), i)) };
             }
         }
     });

@@ -100,12 +100,12 @@ impl Part {
         self.part_of_player = None;
     }
     pub fn part_of_player(&self) -> Option<u16> { self.part_of_player }
-    pub fn mutate(self, mutate_into: PartKind, player: Option<&mut PlayerMeta>, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet) -> MyHandle {
+    pub fn mutate(mut self, mutate_into: PartKind, player: &mut Option<&mut PlayerMeta>, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet) -> MyHandle {
         if let Some(player) = player { self.remove_from(player); }
-        let old_attachments = self.attachments;
-        let raw_attachments: [Option<MyHandle>; 4] = [None, None, None, None];
+        let mut old_attachments = self.attachments;
+        let mut raw_attachments: [Option<MyHandle>; 4] = [None, None, None, None];
         for i in 0..4 {
-            if let Some(attachment) = old_attachments[i] {
+            if let Some(attachment) = std::mem::replace(&mut old_attachments[i], None) {
                 raw_attachments[i] = Some(attachment.deflate(joints));
             }
         };
@@ -113,9 +113,10 @@ impl Part {
         colliders.remove(self.collider);
         let add_handle = WorldAddHandle::from(bodies);
         let part_index = RecursivePartDescription::from(mutate_into).inflate_component(&add_handle, colliders, joints, position, AttachedPartFacing::Up, 0, 0, Some(self.id));
+        let bodies = add_handle.deconstruct();
         let part = bodies.get_part_mut(part_index).unwrap();
         for i in 0..4 {
-            if let Some(attachment) = old_attachments[i] {
+            if let Some(attachment) = &raw_attachments[i] {
                 part.attach_part_player_agnostic(i, *attachment, part_index, joints);
             }
         }
@@ -126,7 +127,7 @@ impl Part {
     pub fn deflate(&self, world: &MyBodySet) -> RecursivePartDescription {
         RecursivePartDescription {
             kind: self.kind,
-            attachments: self.attachments[..].iter().map(|attachment| attachment.map(|attachment| world.get_part(*attachment).unwrap().deflate(world))).collect()
+            attachments: self.attachments[..].iter().map(|attachment| attachment.as_ref().map(|attachment| world.get_part(**attachment).unwrap().deflate(world))).collect()
         }
     }
 
@@ -191,11 +192,11 @@ impl Part {
         None
     }
 
-    pub fn delete_recursive(self, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet, removal_msgs: &mut Vec<ToClientMsg>) {
+    pub fn delete_recursive(mut self, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet, removal_msgs: &mut Vec<ToClientMsg>) {
         colliders.remove(self.collider);
         removal_msgs.push(self.remove_msg());
-        for attachment in self.attachments.into_iter() {
-            if let Some(attachment) = attachment {
+        for attachment in self.attachments.iter_mut() {
+            if let Some(attachment) = std::mem::replace(attachment, None) {
                 let attachment = attachment.deflate(joints);
                 bodies.delete_parts_recursive(attachment, colliders, joints, removal_msgs);
             }
@@ -205,7 +206,7 @@ impl Part {
     pub fn id(&self) -> u16 { self.id }
     pub fn kind(&self) -> PartKind { self.kind }
     pub fn body(&self) -> &MyRigidBody { &self.body }
-    pub fn body_mut(&self) -> &mut MyRigidBody { &mut self.body }
+    pub fn body_mut(&mut self) -> &mut MyRigidBody { &mut self.body }
 
     pub fn inflation_msgs(&self) -> [ToClientMsg; 3] {
         [ self.add_msg(), self.move_msg(), self.update_meta_msg() ]

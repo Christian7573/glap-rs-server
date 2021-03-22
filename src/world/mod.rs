@@ -191,19 +191,20 @@ impl WorldlyObject {
 
 }
 
-pub struct WorldAddHandle<'a>(&'a mut MyStorage); 
+pub struct WorldAddHandle<'a>(&'a mut World); 
 impl<'a> WorldAddHandle<'a> {
-    pub fn add_now(&self, object: WorldlyObject) -> Index { self.0.insert(object) }
-    pub fn add_later(&self) -> Index { self.0.insert(WorldlyObject::Uninitialized) }
-    pub fn add_its_later(&self, index: Index, object: WorldlyObject) {
-        match std::mem::replace(self.0.get_mut(index).expect("add_its_later: the index doesn't exist"), object) {
+    pub fn add_now(&mut self, object: WorldlyObject) -> Index { self.0.storage.insert(object) }
+    pub fn add_later(&mut self) -> Index { self.0.storage.insert(WorldlyObject::Uninitialized) }
+    pub fn add_its_later(&mut self, index: Index, object: WorldlyObject) {
+        match std::mem::replace(self.0.storage.get_mut(index).expect("add_its_later: the index doesn't exist"), object) {
             WorldlyObject::Uninitialized => {},
             _ => panic!("add_its_later: the index wasn't WorldlyObject::Uninitialized. Storage is now poisioned(?)")
         }
     }
+    pub fn deconstruct(self) -> &'a mut World { self.0 }
 }
 impl<'a> From<&'a mut World> for WorldAddHandle<'a> {
-    fn from(world: &'a mut World) -> WorldAddHandle<'a> { WorldAddHandle(&mut world.storage) }
+    fn from(world: &'a mut World) -> WorldAddHandle<'a> { WorldAddHandle(world) }
 }
 
 impl World {
@@ -251,21 +252,22 @@ impl World {
         }
     }
     pub fn recurse_part_mut<'a, F>(&'a mut self, part_handle: MyHandle, details: PartVisitDetails, func: &mut F)
-    where F: FnMut(PartVisitHandleMut<'a>) {
+    where F: FnMut(PartVisitHandleMut<'_>) {
         if self.get_part_mut(part_handle).is_some() {
             func(PartVisitHandleMut(self, part_handle, details));
             let part = self.get_part(part_handle).unwrap();
             let attachment_dat = part.kind().attachment_locations();
-            for (i, attachment) in part.attachments().iter().enumerate() {
-                if let (Some(attachment), Some(attachment_dat)) = (attachment, attachment_dat[i]) {
+            for i in 0..part.attachments().len() {
+                if let (Some(attachment), Some(attachment_dat)) = (&part.attachments()[i].as_ref().map(|attach| **attach), attachment_dat[i]) {
                     let true_facing = attachment_dat.facing.compute_true_facing(details.true_facing);
                     let delta_rel_part = true_facing.delta_rel_part();
-                    self.recurse_part_mut(**attachment, PartVisitDetails {
+                    let details = PartVisitDetails {
                         part_rel_x: details.part_rel_x + delta_rel_part.0,
                         part_rel_y: details.part_rel_y + delta_rel_part.1,
                         my_facing: attachment_dat.facing,
                         true_facing
-                    }, func);
+                    };
+                    self.recurse_part_mut(*attachment, details, func);
                 }
             }
         }
@@ -318,20 +320,20 @@ impl World {
         return None;
     }
 
-    pub fn recursive_detach_one(&mut self, parent_handle: MyHandle, attachment_slot: usize, player: Option<&mut crate::PlayerMeta>, joints: &mut MyJointSet, parts_affected: &mut BTreeSet<MyHandle>) {
+    pub fn recursive_detach_one(&mut self, parent_handle: MyHandle, attachment_slot: usize, player: &mut Option<&mut crate::PlayerMeta>, joints: &mut MyJointSet, parts_affected: &mut BTreeSet<MyHandle>) {
         if let Some(parent) = self.get_part_mut(parent_handle) {
             if let Some(attachment_handle) = parent.detach_part_player_agnostic(attachment_slot, joints) {
                 parts_affected.insert(attachment_handle);
                 if let Some(player) = player {
                     if let Some(attached_part) = self.get_part_mut(attachment_handle) {
-                        attached_part.remove_from(player);
+                        attached_part.remove_from(*player);
                     }
                 }
                 self.recursive_detach_all(attachment_handle, player, joints, parts_affected);                                
             }
         }
     }
-    pub fn recursive_detach_all(&mut self, parent_handle: MyHandle, player: Option<&mut crate::PlayerMeta>, joints: &mut MyJointSet, parts_affected: &mut BTreeSet<MyHandle>) {
+    pub fn recursive_detach_all(&mut self, parent_handle: MyHandle, player: &mut Option<&mut crate::PlayerMeta>, joints: &mut MyJointSet, parts_affected: &mut BTreeSet<MyHandle>) {
         if let Some(part) = self.get_part_mut(parent_handle) {
             for i in 0..part.attachments().len() {
                 self.recursive_detach_one(parent_handle, i, player, joints, parts_affected);
