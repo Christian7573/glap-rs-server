@@ -152,7 +152,7 @@ impl Simulation {
     pub fn geometrical_world(&self) -> &MyGeometricalWorld { &self.geometry }
 
     pub fn inflate(&mut self, parts: &RecursivePartDescription, initial_location: MyIsometry) -> MyHandle {
-        parts.inflate(&(&mut self.world).into(), &mut self.colliders, &mut self.joints, initial_location)
+        parts.inflate(&mut (&mut self.world).into(), &mut self.colliders, &mut self.joints, initial_location)
     }
     pub fn delete_parts_recursive(&mut self, index: MyHandle) -> Vec<ToClientMsg> {
         let mut removal_msgs = Vec::new();
@@ -257,8 +257,8 @@ impl World {
             func(PartVisitHandleMut(self, part_handle, details));
             let part = self.get_part(part_handle).unwrap();
             let attachment_dat = part.kind().attachment_locations();
-            for i in 0..part.attachments().len() {
-                if let (Some(attachment), Some(attachment_dat)) = (&part.attachments()[i].as_ref().map(|attach| **attach), attachment_dat[i]) {
+            for (i, attachment) in part.attachments().iter().map(|attachment| attachment.as_ref().map(|attach| **attach)).collect::<Vec<_>>().into_iter().enumerate() {
+                if let (Some(attachment), Some(attachment_dat)) = (attachment, attachment_dat[i]) {
                     let true_facing = attachment_dat.facing.compute_true_facing(details.true_facing);
                     let delta_rel_part = true_facing.delta_rel_part();
                     let details = PartVisitDetails {
@@ -267,7 +267,7 @@ impl World {
                         my_facing: attachment_dat.facing,
                         true_facing
                     };
-                    self.recurse_part_mut(*attachment, details, func);
+                    self.recurse_part_mut(attachment, details, func);
                 }
             }
         }
@@ -296,17 +296,18 @@ impl World {
         return None;
     }
     pub fn recurse_part_mut_with_return<'a, V, F>(&'a mut self, part_handle: MyHandle, details: PartVisitDetails, func: &mut F) -> Option<V>
-    where F: FnMut(PartVisitHandleMut<'a>) -> Option<V> {
+    where F: FnMut(PartVisitHandleMut<'_>) -> Option<V> {
         if self.get_part_mut(part_handle).is_some() {
             let result = func(PartVisitHandleMut(self, part_handle, details));
             if result.is_some() { return result };
+            drop(result);
             let part = self.get_part_mut(part_handle).unwrap();
             let attachment_dat = part.kind().attachment_locations();
-            for (i, attachment) in part.attachments().iter().enumerate() {
+            for (i, attachment) in part.attachments().iter().map(|attachment| attachment.as_ref().map(|attach| **attach)).collect::<Vec<_>>().into_iter().enumerate() {
                 if let (Some(attachment), Some(attachment_dat)) = (attachment, attachment_dat[i]) {
                     let true_facing = attachment_dat.facing.compute_true_facing(details.true_facing);
                     let delta_rel_part = true_facing.delta_rel_part();
-                    if let Some(result) = self.recurse_part_mut_with_return(**attachment, PartVisitDetails {
+                    if let Some(result) = self.recurse_part_mut_with_return(attachment, PartVisitDetails {
                         part_rel_x: details.part_rel_x + delta_rel_part.0,
                         part_rel_y: details.part_rel_y + delta_rel_part.1,
                         my_facing: attachment_dat.facing,

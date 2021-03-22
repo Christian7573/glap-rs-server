@@ -146,7 +146,7 @@ async fn main() {
                         let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                         let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
                         let spawn_pos = Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0);
-                        let part_handle = RecursivePartDescription::from(PartKind::Cargo).inflate(&(&mut simulation.world).into(), &mut simulation.colliders, &mut simulation.joints, spawn_pos);
+                        let part_handle = RecursivePartDescription::from(PartKind::Cargo).inflate(&mut (&mut simulation.world).into(), &mut simulation.colliders, &mut simulation.joints, spawn_pos);
                         let part_id = simulation.world.get_part(part_handle).unwrap().id();
                         free_parts.insert(part_id, FreePart::EarthCargo(part_handle, TICKS_PER_SECOND as u16 * 60));
                         let part = simulation.world.get_part(part_handle).unwrap();

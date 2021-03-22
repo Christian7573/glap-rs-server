@@ -44,10 +44,10 @@ pub struct PartAttachment {
 }
 
 impl RecursivePartDescription {
-    pub fn inflate(&self, bodies: &WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry) -> MyHandle {
+    pub fn inflate(&self, bodies: &mut WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry) -> MyHandle {
         self.inflate_component(bodies, colliders, joints, initial_location, AttachedPartFacing::Up, 0, 0, None)        
     }
-    pub fn inflate_component(&self, bodies: &WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry, true_facing: AttachedPartFacing, rel_part_x: i32, rel_part_y: i32, id: Option<u16>) -> MyHandle {
+    pub fn inflate_component(&self, bodies: &mut WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry, true_facing: AttachedPartFacing, rel_part_x: i32, rel_part_y: i32, id: Option<u16>) -> MyHandle {
         let (body_desc, collider_desc) = self.kind.physics_components();
         let mut body = body_desc.build();
         body.set_position(initial_location.clone());
@@ -111,8 +111,8 @@ impl Part {
         };
         let position = self.body.position().clone();
         colliders.remove(self.collider);
-        let add_handle = WorldAddHandle::from(bodies);
-        let part_index = RecursivePartDescription::from(mutate_into).inflate_component(&add_handle, colliders, joints, position, AttachedPartFacing::Up, 0, 0, Some(self.id));
+        let mut add_handle = WorldAddHandle::from(bodies);
+        let part_index = RecursivePartDescription::from(mutate_into).inflate_component(&mut add_handle, colliders, joints, position, AttachedPartFacing::Up, 0, 0, Some(self.id));
         let bodies = add_handle.deconstruct();
         let part = bodies.get_part_mut(part_index).unwrap();
         for i in 0..4 {
