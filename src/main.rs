@@ -336,6 +336,7 @@ async fn main() {
                     outbound_events.push(ToSerializer::Broadcast(part.move_msg()));
                     outbound_events.push(ToSerializer::Broadcast(part.update_meta_msg()));
                 });
+                player.power = player.max_power;
 
                 //Send over celestial object locations
                 for planet in simulation.planets.celestial_objects().iter() {
