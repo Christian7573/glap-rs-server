@@ -304,14 +304,14 @@ async fn main() {
             },
             
             Event::InboundEvent(NewPlayer{ id, name, parts, beamout_token }) => { 
-                let earth_position = *simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
+                let earth_position = simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation.vector;
                 let earth_radius = simulation.planets.earth.radius;
                 use rand::Rng;
 
                 let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                 let core_handle = simulation.inflate(&parts, Isometry2::new(Vector2::new(0.0,0.0), spawn_degrees - std::f32::consts::FRAC_PI_2));
-                let spawn_radius = earth_radius * 1.25 + 1.0;
-                let spawn_center = Vector2::new(spawn_degrees.cos() * spawn_radius + earth_position.x, spawn_degrees.sin() * spawn_radius + earth_position.y);
+                let spawn_radius: f32 = earth_radius * 1.25 + 1.0;
+                let spawn_center = (Vector2::new(spawn_degrees.cos(), spawn_degrees.sin()) * spawn_radius) + earth_position;
                 let mut max_extent: i32 = 1;
                 simulation.world.recurse_part(core_handle, Default::default(), &mut |handle: world::PartVisitHandle| max_extent = max_extent.max(handle.details().part_rel_x.abs()).max(handle.details().part_rel_y.abs()));
                 simulation.world.recurse_part_mut(core_handle, Default::default(), &mut |mut handle: world::PartVisitHandleMut| {

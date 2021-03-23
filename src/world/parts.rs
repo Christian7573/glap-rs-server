@@ -239,7 +239,7 @@ impl Part {
 impl PartAttachment {
     pub fn calculate_attachment_position(parent: PartKind, parent_location: &MyIsometry, attachment_slot: usize) -> Option<MyIsometry> {
         if let Some(attachment) = parent.attachment_locations()[attachment_slot] {
-            Some(MyIsometry::new(Vector2::new(attachment.x, attachment.y), attachment.facing.part_rotation()) * parent_location)
+            Some(MyIsometry::new(parent_location.transform_point(&Point2::new(attachment.x, attachment.y)).coords, attachment.facing.part_rotation() + parent_location.rotation.angle()))
         } else {
             eprintln!("calculate_attachment_position: PartKind {:?} doesn't have attachment slot {}", parent, attachment_slot);
             None
