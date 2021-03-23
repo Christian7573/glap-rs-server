@@ -165,8 +165,9 @@ async fn main() {
                         if player.power > player.max_power { player.power = player.max_power; };
                     };
                     if player.power > 0 {
-                        let core = simulation.world.get_part_mut(player.core).expect("Player iter invalid core part");
-                        core.thrust_no_recurse(&mut player.power, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise);
+                        simulation.world.recurse_part_mut(player.core, Default::default(), &mut |mut handle: world::PartVisitHandleMut| {
+                            (*handle).thrust_no_recurse(&mut player.power, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise);
+                        });
                         if player.power < 1 {
                             player.thrust_backwards = false; player.thrust_forwards = false; player.thrust_clockwise = false; player.thrust_counterclockwise = false;
                             outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::UpdatePlayerMeta {
@@ -577,6 +578,7 @@ fn recursive_broken_detach(root: MyHandle, simulation: &mut world::Simulation, f
     for part_handle in affected_parts {
         if let Some(part) = simulation.world.get_part(part_handle) {
             out.push(ToSerializerEvent::Broadcast(part.update_meta_msg()));
+            free_parts.insert(part.id(), FreePart::Decaying(part_handle, DEFAULT_PART_DECAY_TICKS));
         }
     }
     if let Some(player) = player {
