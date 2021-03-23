@@ -580,6 +580,7 @@ fn recursive_broken_detach(root: MyHandle, simulation: &mut world::Simulation, f
             out.push(ToSerializerEvent::Broadcast(part.update_meta_msg()));
             free_parts.insert(part.id(), FreePart::Decaying(part_handle, DEFAULT_PART_DECAY_TICKS));
         }
+        //TODO parts_touching_planet
     }
     if let Some(player) = player {
         out.push(ToSerializerEvent::Message(player.id, player.update_my_meta()));
