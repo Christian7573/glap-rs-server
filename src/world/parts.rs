@@ -97,7 +97,6 @@ impl Part {
         player.max_power -= self.kind.power_storage();
         player.power_regen_per_5_ticks -= self.kind.power_regen_per_5_ticks();
         player.power = player.power.min(player.max_power);
-        player.parts_touching_planet.remove();
         self.part_of_player = None;
     }
     pub fn part_of_player(&self) -> Option<u16> { self.part_of_player }

@@ -580,20 +580,18 @@ fn recursive_broken_detach(root: MyHandle, simulation: &mut world::Simulation, f
             out.push(ToSerializerEvent::Broadcast(part.update_meta_msg()));
             free_parts.insert(part.id(), FreePart::Decaying(part_handle, DEFAULT_PART_DECAY_TICKS));
         }
-        //TODO parts_touching_planet
+        if let Some(player) = player {
+            if player.parts_touching_planet.remove(&part_handle) {
+                if player.parts_touching_planet.is_empty() {
+                    player.can_beamout = false;
+                    player.touching_planet = None;
+                }
+            }
+        }
     }
     if let Some(player) = player {
         out.push(ToSerializerEvent::Message(player.id, player.update_my_meta()));
     }
-}
-
-fn is_string_numeric(str: String) -> bool {
-    for c in str.chars() {
-        if !c.is_numeric() {
-            return false;
-        }
-    }
-    return true;
 }
 
 enum FreePart {
