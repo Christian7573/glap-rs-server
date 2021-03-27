@@ -603,6 +603,7 @@ enum FreePart {
 
 impl FreePart {
     pub fn become_grabbed(&mut self, earth_cargo_count: &mut u8) {
+        if let FreePart::EarthCargo(_, _) = self { *earth_cargo_count -= 1 };
         match self {
             FreePart::Decaying(part, _) | FreePart::EarthCargo(part, _) => { *self = FreePart::Grabbed(*part) }
             FreePart::PlaceholderLol | FreePart::Grabbed(_) => panic!("FreePart::Grabbed called on bad")
