@@ -58,12 +58,12 @@ async fn main() {
         password: std::env::var("API_PASSWORD").unwrap_or(String::with_capacity(0)),
     });
 
-    let _useless_api: Option<ApiDat> = if let Some(api) = api.clone() {
+    let api = if let Some(api) = api {
         let ping_addr = api.prefix.clone() + "/ping";
         println!("Pinging API at ${}", ping_addr);
         let res = surf::get(ping_addr).await;
         if let Ok(mut res) = res {
-            if res.status().is_success() && res.body_string().await.map(|body| body == "PONG" ).unwrap_or(false) { println!("API Ping success"); /*Some(api)*/ None }
+            if res.status().is_success() && res.body_string().await.map(|body| body == "PONG" ).unwrap_or(false) { println!("API Ping success"); Some(api) }
             else { eprintln!("API Ping Failed"); None }
         } else { eprintln!("API Ping Failed Badly"); None }
     } else { println!("No API"); None };
