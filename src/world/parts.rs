@@ -385,6 +385,13 @@ impl PartKind {
             _ => 0,
         }
     }
+
+    pub fn can_beamout(&self) -> bool {
+        match self {
+            PartKind::Cargo => false,
+            _ => true
+        }
+    }
     // pub fn get_attachable_positions(&self) -> [(Isometry<super::MyUnits>, )] {
         
     // }

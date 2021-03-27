@@ -21,7 +21,17 @@ impl<'de> Deserialize<'de> for PartKind {
     }
 }
 
-pub fn spawn_beamout_request(beamout_token: Option<String>, beamout_layout: RecursivePartDescription, api: Option<Arc<ApiDat>>) {
+pub fn spawn_beamout_request(beamout_token: Option<String>, mut beamout_layout: RecursivePartDescription, api: Option<Arc<ApiDat>>) {
+    fn recurse_can_beamout(part: &mut RecursivePartDescription) {
+        for attachment in &mut part.attachments {
+            if let Some(part) = attachment {
+                if !part.kind.can_beamout() { *attachment = None }
+                else { recurse_can_beamout(part) }
+            }
+        }
+    }
+    recurse_can_beamout(&mut beamout_layout);
+
     if let Some(api) = &api {
         if let Some(beamout_token) = beamout_token {
             let uri = api.beamout.replacen("^^^^", &beamout_token, 1);
