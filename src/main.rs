@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::any::Any;
 use async_std::sync::{Sender, Receiver, channel};
 use nphysics2d::object::Body;
+use async_std::sync::Mutex;
 
 pub mod world;
 pub mod codec;
@@ -57,13 +58,14 @@ async fn main() {
 
     let (to_game, to_me) = channel::<session::ToGameEvent>(1024);
     let (to_serializer, to_me_serializer) = channel::<Vec<session::ToSerializerEvent>>(256);
+    let suspended_players = Arc::new(Mutex::new(BTreeMap::new()));
     println!("Hello from game task");
     let _incoming_connection_acceptor = async_std::task::Builder::new()
         .name("incoming_connection_acceptor".to_string())
-        .spawn(session::incoming_connection_acceptor(listener, to_game.clone(), to_serializer.clone(), api.clone()));
+        .spawn(session::incoming_connection_acceptor(listener, to_game.clone(), to_serializer.clone(), api.clone(), suspended_players.clone()));
     let _serializer = async_std::task::Builder::new()
         .name("serializer".to_string())
-        .spawn(session::serializer(to_me_serializer, to_game.clone()));
+        .spawn(session::serializer(to_me_serializer, to_game.clone(), suspended_players.clone(), to_serializer.clone()));
 
     const TIMESTEP: f32 = 1.0/(TICKS_PER_SECOND as f32);
     let ticker = async_std::stream::interval(std::time::Duration::from_secs_f32(TIMESTEP));
@@ -302,6 +304,26 @@ async fn main() {
                     }
                     outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage{ username: String::from("Server"), msg: player.name.clone() + " left the game", color: String::from("#e270ff") }));
                 } 
+            },
+
+            Event::InboundEvent(PlayerSuspend { id }) => {
+                if let Some(player) = players.get_mut(&id) {
+                    player.thrust_forwards = false;
+                    player.thrust_backwards = false;
+                    player.thrust_counterclockwise = false;
+                    player.thrust_clockwise = false;
+                    if let Some((id, constraint, _, _)) = std::mem::replace(&mut player.grabbed_part, None) {
+                        simulation.release_constraint(constraint);
+                        free_parts.get_mut(&id).unwrap().become_decaying();
+                    }
+                    outbound_events.push(ToSerializer::Broadcast(player.update_meta_msg()));
+                    outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage { username: "Server".to_owned(), msg: format!("{} has disconnected", player.name), color: "#e270ff".to_owned() }));
+                }
+            },
+            Event::InboundEvent(PlayerReconnect { id }) => {
+                if let Some(player) = players.get(&id) {
+                    outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage { username: "Server".to_owned(), msg: format!("{} has reconnected", player.name), color: "#e270ff".to_owned() }));
+                }
             },
             
             Event::InboundEvent(NewPlayer{ id, name, parts, beamout_token }) => { 

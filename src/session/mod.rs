@@ -15,6 +15,8 @@ use crate::world::parts::RecursivePartDescription;
 use crate::ApiDat;
 use std::sync::Arc;
 use std::time::Duration;
+use async_std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::codec::*;
 
@@ -26,7 +28,9 @@ pub enum ToGameEvent {
     SendEntireWorld { to_player: u16, send_self: bool },
     PlayerMessage { id: u16, msg: ToServerMsg },
     PlayerQuit { id: u16 },
-    AdminCommand { id: u16, command: String }
+    AdminCommand { id: u16, command: String },
+    PlayerSuspend { id: u16 },
+    PlayerReconnect { id: u16 },
 }
 pub enum ToSerializerEvent {
     Message (u16, ToClientMsg),
@@ -37,8 +41,8 @@ pub enum ToSerializerEvent {
     NewWriter (u16, Sender<Vec<OutboundWsMessage>>),
     RequestUpdate (u16),
     SendPong (u16),
-    //BeamoutWriter (u16, RecursivePartDescription),
     DeleteWriter (u16),
+    WriterDisconnect (u16, String),
 }
 
 pub struct WorldUpdatePartMove {
@@ -49,16 +53,7 @@ pub struct WorldUpdatePartMove {
     pub rot_cos: f32,
 }
 pub struct WorldUpdatePlayerUpdate { pub id: u16, pub core_x: f32, pub core_y: f32, pub parts: Vec<WorldUpdatePartMove> }
-
-/*enum Event {
-    NewSocket { socket: TcpStream },
-    PotentialSessionMessage { id: u16, msg: Vec<u8> },
-    PotentialSessionBeamin { id: u16, parts: Option<RecursivePartDescription>, beamout_token: Option<String> },
-    PotentialSessionDisconnect { id: u16 },
-    SessionMessage { id: u16, msg: Vec<u8> },
-    SessionDisconnect { id: u16 },
-    OutboundEvent(Vec<OutboundEvent>)
-}*/
+pub type SuspendedPlayers = Arc<Mutex<BTreeMap<String, (u16, Arc<AtomicBool>)>>>;
 
 pub enum GuarenteeOnePoll {
     Yesnt, Yes
@@ -73,7 +68,7 @@ impl Future for GuarenteeOnePoll {
     }
 }
 
-pub async fn incoming_connection_acceptor(listener: TcpListener, to_game: Sender<ToGameEvent>, to_serializer: Sender<Vec<ToSerializerEvent>>, api: Option<Arc<ApiDat>>) {
+pub async fn incoming_connection_acceptor(listener: TcpListener, to_game: Sender<ToGameEvent>, to_serializer: Sender<Vec<ToSerializerEvent>>, api: Option<Arc<ApiDat>>, suspended_players: SuspendedPlayers) {
     println!("Hello from incomming connection acceptor");
     let mut next_client_id: u16 = 1;
     while let Ok((socket, addr)) = listener.accept().await {
@@ -86,12 +81,12 @@ pub async fn incoming_connection_acceptor(listener: TcpListener, to_game: Sender
 
         async_std::task::Builder::new()
             .name(format!("inbound_{:?}", addr).to_string())
-            .spawn(socket_reader(client_id, socket, addr, to_game, to_serializer, api)).expect("Failed to launch inbound");
+            .spawn(socket_reader(client_id, socket, addr, to_game, to_serializer, api, suspended_players.clone())).expect("Failed to launch inbound");
     }
     panic!("Incoming connections closed");
 }
 
-async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketAddr, to_game: Sender<ToGameEvent>, to_serializer: Sender<Vec<ToSerializerEvent>>, api: Option<Arc<ApiDat>>) -> Result<(),()> {
+async fn socket_reader(suggested_id: u16, socket: TcpStream, addr: async_std::net::SocketAddr, to_game: Sender<ToGameEvent>, to_serializer: Sender<Vec<ToSerializerEvent>>, api: Option<Arc<ApiDat>>, suspended_players: SuspendedPlayers) -> Result<(),()> {
     println!("New socket from {:?}", addr);
     let (mut socket_in, mut socket_out) = accept_websocket(socket).await?;
     println!("Accepted websocket");
@@ -103,7 +98,7 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
         }
     }?;
     let first_msg = ToServerMsg::deserialize(&mut first_msg).await?;
-    let (session, name) = if let ToServerMsg::Handshake{ session, client, name} = first_msg { (session, name) }
+    let (session, name) = if let ToServerMsg::Handshake{ session, client, name } = first_msg { (session, name) }
     else { return Err(()) };
     let name = {
         let tmp_name = name.trim();
@@ -111,25 +106,39 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
         else { tmp_name.to_owned() }
     };
 
+    let new_id = if let Some(session) = session.as_ref() {
+        if let Some((new_id, is_cancelled)) = suspended_players.lock().await.remove(session) {
+            is_cancelled.store(true, Ordering::Release);
+            Some(new_id)
+        } else { None }
+    } else { None };
 
-    let beamin_data = beamin_request(session.clone(), api.clone()).await;
-
-    let layout: Option<RecursivePartDescription>;
-    let mut is_admin: bool;
-    let beamout_token: Option<String>;
-    if let Some(beamin_data) = beamin_data {
-        layout = beamin_data.layout;
-        is_admin = beamin_data.is_admin;
-        beamout_token = Some(beamin_data.beamout_token);
+    let id;
+    let is_admin: bool;
+    if let Some(new_id) = new_id {
+        id = new_id;
+        is_admin = false; //TODO: Fix
+        to_game.send(ToGameEvent::SendEntireWorld { to_player: id, send_self: true }).await;
+        to_game.send(ToGameEvent::PlayerReconnect { id }).await;
     } else {
-        layout = None;
-        is_admin = false;
-        beamout_token = None;
-    }
+        id = suggested_id;
+        let beamin_data = beamin_request(session.clone(), api.clone()).await;
+        let layout: Option<RecursivePartDescription>;
+        let beamout_token: Option<String>;
+        if let Some(beamin_data) = beamin_data {
+            layout = beamin_data.layout;
+            is_admin = beamin_data.is_admin;
+            beamout_token = Some(beamin_data.beamout_token);
+        } else {
+            layout = None;
+            is_admin = false;
+            beamout_token = None;
+        }
 
-    let layout = layout.unwrap_or( RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() } );                                   
-    to_game.send(ToGameEvent::NewPlayer { id, name: name.clone(), parts: layout, beamout_token }).await;
-    to_game.send(ToGameEvent::SendEntireWorld { to_player: id, send_self: false }).await;
+        let layout = layout.unwrap_or( RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() } );                                   
+        to_game.send(ToGameEvent::NewPlayer { id, name: name.clone(), parts: layout, beamout_token }).await;
+        to_game.send(ToGameEvent::SendEntireWorld { to_player: id, send_self: false }).await;
+    }
     let (to_writer, from_serializer) = channel::<Vec<OutboundWsMessage>>(50);
     async_std::task::Builder::new()
         .name(format!("outbound_${}", id))
@@ -171,11 +180,12 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
         };
     };
 
-    to_serializer.send(vec! [ToSerializerEvent::DeleteWriter(id)]).await;
+    if let Some(session) = session { to_serializer.send(vec! [ToSerializerEvent::WriterDisconnect(id, session)]).await; }
+    else { to_serializer.send(vec![ ToSerializerEvent::DeleteWriter(id) ]).await; };
     Ok(())
 }
 
-pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Sender<ToGameEvent>) {
+pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Sender<ToGameEvent>, suspended_players: SuspendedPlayers, send_to_me: Sender<Vec<ToSerializerEvent>>) {
     println!("Hello from serializer task");
     let mut writers: BTreeMap<u16, (Sender<Vec<OutboundWsMessage>>, Vec<OutboundWsMessage>, bool)> = BTreeMap::new();
     while let Some(events) = to_me.next().await {
@@ -273,9 +283,27 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
                         *request_update = false;
                     };
                 },
+                ToSerializerEvent::WriterDisconnect(id, ref_handle) => {
+                    if let Some(_) = writers.remove(&id) {
+                        let has_been_cancelled = Arc::new(AtomicBool::new(false));
+                        suspended_players.lock().await.insert(ref_handle.clone(), (id, has_been_cancelled.clone()));
+                        let my_suspended_players = suspended_players.clone();
+                        let my_send_to_me = send_to_me.clone();
+                        async_std::task::spawn(async move {
+                            async_std::task::sleep(std::time::Duration::from_secs(70)).await;                                                        
+                            if !has_been_cancelled.load(Ordering::Acquire) {
+                                my_suspended_players.lock().await.remove(&ref_handle);                                
+                                my_send_to_me.send(vec![ ToSerializerEvent::DeleteWriter(id) ]).await;
+                            }
+                        });
+                        to_game.send(ToGameEvent::PlayerSuspend { id }).await;
+                    }
+                }
             }
         }
         for (to_writer, queue, _needs_update) in writers.values_mut() {
+            //TODO: Maybe replace the queue system with unboundded channels?
+            //Maybe return the Vecs somehow to not do constant memory allocations?
             to_writer.send(std::mem::replace(queue, Vec::new())).await;
         }
     };
