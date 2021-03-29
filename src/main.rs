@@ -347,26 +347,33 @@ async fn main() {
                         id: planet.id, radius: planet.radius, position: (position.x, position.y)
                     }));
                 }
-                for (_id, part) in &free_parts { simulation.world.recurse_part(**part, Default::default(), &mut |handle: world::PartVisitHandle| {
-                    let part = &handle;
-                    outbound_events.push(ToSerializer::Message(id, part.add_msg()));
-                    outbound_events.push(ToSerializer::Message(id, part.move_msg()));
-                    outbound_events.push(ToSerializer::Message(id, part.update_meta_msg()));
-                }); }
-                for (other_id, other_player) in &players {
-                    let other_core = simulation.world.get_part(other_player.core).unwrap();
-                    outbound_events.push(ToSerializer::Message(id, codec::ToClientMsg::AddPlayer{ id: *other_id, name: other_player.name.clone(), core_id: other_core.id() }));
-                    simulation.world.recurse_part(other_player.core, Default::default(), &mut |handle: world::PartVisitHandle| {
-                        let part = &handle;
-                        outbound_events.push(ToSerializer::Message(id, part.add_msg()));
-                        outbound_events.push(ToSerializer::Message(id, part.move_msg()));
-                        outbound_events.push(ToSerializer::Message(id, part.update_meta_msg()));
-                    });
-                }
-                
                 outbound_events.push(ToSerializer::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
                 players.insert(id, player);
                 outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage{ username: String::from("Server"), msg: name + " joined the game", color: String::from("#e270ff") }));
+            },
+            Event::InboundEvent(SendEntireWorld{ to_player, send_self }) => {
+                for (_id, part) in &free_parts { simulation.world.recurse_part(**part, Default::default(), &mut |handle: world::PartVisitHandle| {
+                    let part = &handle;
+                    outbound_events.push(ToSerializer::Message(to_player, part.add_msg()));
+                    outbound_events.push(ToSerializer::Message(to_player, part.move_msg()));
+                    outbound_events.push(ToSerializer::Message(to_player, part.update_meta_msg()));
+                }); }
+                for (other_id, other_player) in &players {
+                    if !send_self && *other_id == to_player { continue };
+                    let other_core = simulation.world.get_part(other_player.core).unwrap();
+                    outbound_events.push(ToSerializer::Message(to_player, codec::ToClientMsg::AddPlayer{ id: *other_id, name: other_player.name.clone(), core_id: other_core.id() }));
+                    simulation.world.recurse_part(other_player.core, Default::default(), &mut |handle: world::PartVisitHandle| {
+                        let part = &handle;
+                        outbound_events.push(ToSerializer::Message(to_player, part.add_msg()));
+                        outbound_events.push(ToSerializer::Message(to_player, part.move_msg()));
+                        outbound_events.push(ToSerializer::Message(to_player, part.update_meta_msg()));
+                    });
+                }
+                if send_self {
+                    if let Some(player) = players.get(&to_player) {
+                        outbound_events.push(ToSerializer::Message(to_player, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
+                    }
+                }
             },
 
             Event::InboundEvent(PlayerMessage{ id, msg }) => {

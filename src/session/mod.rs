@@ -23,6 +23,7 @@ use websocket::*;
 
 pub enum ToGameEvent {
     NewPlayer { id: u16, name: String, parts: RecursivePartDescription, beamout_token: Option<String> },
+    SendEntireWorld { to_player: u16, send_self: bool },
     PlayerMessage { id: u16, msg: ToServerMsg },
     PlayerQuit { id: u16 },
     AdminCommand { id: u16, command: String }
@@ -128,6 +129,7 @@ async fn socket_reader(id: u16, socket: TcpStream, addr: async_std::net::SocketA
 
     let layout = layout.unwrap_or( RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() } );                                   
     to_game.send(ToGameEvent::NewPlayer { id, name: name.clone(), parts: layout, beamout_token }).await;
+    to_game.send(ToGameEvent::SendEntireWorld { to_player: id, send_self: false }).await;
     let (to_writer, from_serializer) = channel::<Vec<OutboundWsMessage>>(50);
     async_std::task::Builder::new()
         .name(format!("outbound_${}", id))
