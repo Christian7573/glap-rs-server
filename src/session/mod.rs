@@ -118,8 +118,8 @@ async fn socket_reader(suggested_id: u16, socket: TcpStream, addr: async_std::ne
     if let Some(new_id) = new_id {
         id = new_id;
         is_admin = false; //TODO: Fix
-        to_game.send(ToGameEvent::SendEntireWorld { to_player: id, send_self: true }).await;
         to_game.send(ToGameEvent::PlayerReconnect { id }).await;
+        to_game.send(ToGameEvent::SendEntireWorld { to_player: id, send_self: true }).await;
     } else {
         id = suggested_id;
         let beamin_data = beamin_request(session.clone(), api.clone()).await;
@@ -198,8 +198,8 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
                     if let Some((writer, mut queue, _request_update)) = writers.remove(&id) {
                         queue.push(websocket::close_message());
                         writer.send(queue).await;
-                        to_game.send(ToGameEvent::PlayerQuit { id }).await;
                     }
+                    to_game.send(ToGameEvent::PlayerQuit { id }).await;
                 },
                 ToSerializerEvent::RequestUpdate(id) => {
                     if let Some((_to_writer, _queue, request_update)) = writers.get_mut(&id) {
