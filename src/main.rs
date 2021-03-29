@@ -147,9 +147,9 @@ async fn main() {
                         let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
                         let spawn_pos = Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0);
                         let part_handle = RecursivePartDescription::from(PartKind::Cargo).inflate(&mut (&mut simulation.world).into(), &mut simulation.colliders, &mut simulation.joints, spawn_pos);
-                        let part_id = simulation.world.get_part(part_handle).unwrap().id();
-                        free_parts.insert(part_id, FreePart::EarthCargo(part_handle, TICKS_PER_SECOND as u16 * 60));
                         let part = simulation.world.get_part(part_handle).unwrap();
+                        let part_id = part.id();
+                        free_parts.insert(part_id, FreePart::EarthCargo(part_handle, TICKS_PER_SECOND as u16 * 60));
                         outbound_events.push(ToSerializer::Broadcast(part.add_msg()));
                         outbound_events.push(ToSerializer::Broadcast(part.move_msg()));
                         outbound_events.push(ToSerializer::Broadcast(part.update_meta_msg()));
@@ -513,6 +513,7 @@ async fn main() {
                             let core = simulation.world.get_part(player.core).unwrap();
                             let beamout_layout = core.deflate(&simulation.world);
                             outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::BeamOutAnimation { player_id: id }));
+                            outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::ChatMessage { username: "Server".to_owned(), msg: format!("{} has left the game", player.name), color: "#e270ff".to_owned() }));
                             simulation.delete_parts_recursive(player.core);
                             beamout::spawn_beamout_request(player.beamout_token, beamout_layout, api.clone());
                             let my_to_serializer = to_serializer.clone();
