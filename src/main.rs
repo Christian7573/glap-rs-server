@@ -349,18 +349,18 @@ async fn main() {
                 }
                 for (_id, part) in &free_parts { simulation.world.recurse_part(**part, Default::default(), &mut |handle: world::PartVisitHandle| {
                     let part = &handle;
-                    outbound_events.push(ToSerializer::Broadcast(part.add_msg()));
-                    outbound_events.push(ToSerializer::Broadcast(part.move_msg()));
-                    outbound_events.push(ToSerializer::Broadcast(part.update_meta_msg()));
+                    outbound_events.push(ToSerializer::Message(id, part.add_msg()));
+                    outbound_events.push(ToSerializer::Message(id, part.move_msg()));
+                    outbound_events.push(ToSerializer::Message(id, part.update_meta_msg()));
                 }); }
                 for (other_id, other_player) in &players {
                     let other_core = simulation.world.get_part(other_player.core).unwrap();
                     outbound_events.push(ToSerializer::Message(id, codec::ToClientMsg::AddPlayer{ id: *other_id, name: other_player.name.clone(), core_id: other_core.id() }));
                     simulation.world.recurse_part(other_player.core, Default::default(), &mut |handle: world::PartVisitHandle| {
                         let part = &handle;
-                        outbound_events.push(ToSerializer::Broadcast(part.add_msg()));
-                        outbound_events.push(ToSerializer::Broadcast(part.move_msg()));
-                        outbound_events.push(ToSerializer::Broadcast(part.update_meta_msg()));
+                        outbound_events.push(ToSerializer::Message(id, part.add_msg()));
+                        outbound_events.push(ToSerializer::Message(id, part.move_msg()));
+                        outbound_events.push(ToSerializer::Message(id, part.update_meta_msg()));
                     });
                 }
                 
