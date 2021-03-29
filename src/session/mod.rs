@@ -198,8 +198,8 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
                     if let Some((writer, mut queue, _request_update)) = writers.remove(&id) {
                         queue.push(websocket::close_message());
                         writer.send(queue).await;
-                        to_game.send(ToGameEvent::PlayerQuit { id }).await;
                     }
+                    to_game.send(ToGameEvent::PlayerQuit { id }).await;
                 },
                 ToSerializerEvent::RequestUpdate(id) => {
                     if let Some((_to_writer, _queue, request_update)) = writers.get_mut(&id) {

@@ -322,6 +322,7 @@ async fn main() {
             },
             Event::InboundEvent(PlayerReconnect { id }) => {
                 if let Some(player) = players.get(&id) {
+                    outbound_events.push(ToSerializer::Message(id, ToClientMsg::HandshakeAccepted{ id, core_id: simulation.world.get_part(player.core).unwrap().id(), can_beamout: player.beamout_token.is_some() }));
                     outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage { username: "Server".to_owned(), msg: format!("{} has reconnected", player.name), color: "#e270ff".to_owned() }));
                 }
             },
@@ -369,7 +370,7 @@ async fn main() {
                         id: planet.id, radius: planet.radius, position: (position.x, position.y)
                     }));
                 }
-                outbound_events.push(ToSerializer::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
+                outbound_events.push(ToSerializer::Message(id, player.update_my_meta()));
                 players.insert(id, player);
                 outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage{ username: String::from("Server"), msg: name + " joined the game", color: String::from("#e270ff") }));
             },
@@ -393,7 +394,7 @@ async fn main() {
                 }
                 if send_self {
                     if let Some(player) = players.get(&to_player) {
-                        outbound_events.push(ToSerializer::Message(to_player, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
+                        outbound_events.push(ToSerializer::Message(to_player, player.update_my_meta()));
                     }
                 }
             },
@@ -605,22 +606,24 @@ fn recursive_broken_detach(root: MyHandle, simulation: &mut world::Simulation, f
     for (parent, attachment_slot) in broken_parts {
         simulation.world.recursive_detach_one(parent, attachment_slot, player, &mut simulation.joints, &mut affected_parts);
     }
-    for part_handle in affected_parts {
-        if let Some(part) = simulation.world.get_part(part_handle) {
-            out.push(ToSerializerEvent::Broadcast(part.update_meta_msg()));
-            free_parts.insert(part.id(), FreePart::Decaying(part_handle, DEFAULT_PART_DECAY_TICKS));
-        }
-        if let Some(player) = player {
-            if player.parts_touching_planet.remove(&part_handle) {
-                if player.parts_touching_planet.is_empty() {
-                    player.can_beamout = false;
-                    player.touching_planet = None;
+    if !affected_parts.is_empty() {
+        for part_handle in affected_parts {
+            if let Some(part) = simulation.world.get_part(part_handle) {
+                out.push(ToSerializerEvent::Broadcast(part.update_meta_msg()));
+                free_parts.insert(part.id(), FreePart::Decaying(part_handle, DEFAULT_PART_DECAY_TICKS));
+            }
+            if let Some(player) = player {
+                if player.parts_touching_planet.remove(&part_handle) {
+                    if player.parts_touching_planet.is_empty() {
+                        player.can_beamout = false;
+                        player.touching_planet = None;
+                    }
                 }
             }
         }
-    }
-    if let Some(player) = player {
-        out.push(ToSerializerEvent::Message(player.id, player.update_my_meta()));
+        if let Some(player) = player {
+            out.push(ToSerializerEvent::Message(player.id, player.update_my_meta()));
+        }
     }
 }
 
