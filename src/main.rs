@@ -362,19 +362,20 @@ async fn main() {
                 });
                 player.power = player.max_power;
 
-                //Send over celestial object locations
-                for planet in simulation.planets.celestial_objects().iter() {
-                    let position = simulation.world.get_rigid(planet.body).unwrap().position().translation;
-                    outbound_events.push(ToSerializer::Message(id, ToClientMsg::AddCelestialObject {
-                        name: planet.name.clone(), display_name: planet.name.clone(),
-                        id: planet.id, radius: planet.radius, position: (position.x, position.y)
-                    }));
-                }
                 outbound_events.push(ToSerializer::Message(id, player.update_my_meta()));
                 players.insert(id, player);
                 outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage{ username: String::from("Server"), msg: name + " joined the game", color: String::from("#e270ff") }));
             },
             Event::InboundEvent(SendEntireWorld{ to_player, send_self }) => {
+                //Send over celestial object locations
+                for planet in simulation.planets.celestial_objects().iter() {
+                    let position = simulation.world.get_rigid(planet.body).unwrap().position().translation;
+                    outbound_events.push(ToSerializer::Message(to_player, ToClientMsg::AddCelestialObject {
+                        name: planet.name.clone(), display_name: planet.name.clone(),
+                        id: planet.id, radius: planet.radius, position: (position.x, position.y)
+                    }));
+                }
+
                 for (_id, part) in &free_parts { simulation.world.recurse_part(**part, Default::default(), &mut |handle: world::PartVisitHandle| {
                     let part = &handle;
                     outbound_events.push(ToSerializer::Message(to_player, part.add_msg()));
