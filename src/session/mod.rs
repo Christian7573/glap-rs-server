@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::pin::Pin;
 use std::task::{Poll, Context};
 use async_std::prelude::*;
@@ -53,7 +53,12 @@ pub struct WorldUpdatePartMove {
     pub rot_cos: f32,
 }
 pub struct WorldUpdatePlayerUpdate { pub id: u16, pub core_x: f32, pub core_y: f32, pub parts: Vec<WorldUpdatePartMove> }
-pub type SuspendedPlayers = Arc<Mutex<BTreeMap<String, (u16, Arc<AtomicBool>)>>>;
+pub type SuspendedPlayers = Arc<Mutex<VecDeque<SuspendedPlayer>>>;
+pub struct SuspendedPlayer {
+    pub id: u16,
+    pub session: String,
+    pub cancelled: Arc<AtomicBool>,
+}
 
 pub enum GuarenteeOnePoll {
     Yesnt, Yes
@@ -107,10 +112,18 @@ async fn socket_reader(suggested_id: u16, socket: TcpStream, addr: async_std::ne
     };
 
     let new_id = if let Some(session) = session.as_ref() {
-        if let Some((new_id, is_cancelled)) = suspended_players.lock().await.remove(session) {
-            is_cancelled.store(true, Ordering::Release);
-            Some(new_id)
-        } else { None }
+        let mut suspended_players = suspended_players.lock().await;
+        let mut new_id = None;
+        for i in 0..suspended_players.len() {
+            let player = &suspended_players[i];
+            if &player.session == session {
+                player.cancelled.store(true, Ordering::Release);
+                new_id = Some(player.id);
+                suspended_players.remove(i);
+                break;
+            }
+        }
+        new_id
     } else { None };
 
     let id;
@@ -195,6 +208,14 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
                     writers.insert(id, (to_writer, Vec::new(), false));
                 },
                 ToSerializerEvent::DeleteWriter(id) => {
+                    let mut suspended_players = suspended_players.lock().await;
+                    for i in 0..suspended_players.len() {
+                        if suspended_players[i].id == id {
+                            suspended_players.remove(i);
+                            break;
+                        }
+                    }
+                    drop(suspended_players);
                     if let Some((writer, mut queue, _request_update)) = writers.remove(&id) {
                         queue.push(websocket::close_message());
                         writer.send(queue).await;
@@ -286,13 +307,21 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
                 ToSerializerEvent::WriterDisconnect(id, ref_handle) => {
                     if let Some(_) = writers.remove(&id) {
                         let has_been_cancelled = Arc::new(AtomicBool::new(false));
-                        suspended_players.lock().await.insert(ref_handle.clone(), (id, has_been_cancelled.clone()));
+                        suspended_players.lock().await.push_back(SuspendedPlayer { id, session: ref_handle, cancelled: has_been_cancelled.clone() });
                         let my_suspended_players = suspended_players.clone();
                         let my_send_to_me = send_to_me.clone();
+                        //TODO: Don't use atomic bool, just check for existance in
+                        //suspended_players
                         async_std::task::spawn(async move {
                             async_std::task::sleep(std::time::Duration::from_secs(70)).await;                                                        
                             if !has_been_cancelled.load(Ordering::Acquire) {
-                                my_suspended_players.lock().await.remove(&ref_handle);                                
+                                let mut suspended_players = my_suspended_players.lock().await;
+                                for i in 0..suspended_players.len() {
+                                    if suspended_players[i].id == id {
+                                        suspended_players.remove(i);
+                                        break;
+                                    }
+                                }
                                 my_send_to_me.send(vec![ ToSerializerEvent::DeleteWriter(id) ]).await;
                             }
                         });

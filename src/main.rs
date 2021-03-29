@@ -4,7 +4,7 @@ use async_std::prelude::*;
 use std::net::SocketAddr;
 use futures::{FutureExt, StreamExt};
 use std::pin::Pin;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::task::Poll;
 use rand::Rng;
 use world::nphysics_types::*;
@@ -58,7 +58,7 @@ async fn main() {
 
     let (to_game, to_me) = channel::<session::ToGameEvent>(1024);
     let (to_serializer, to_me_serializer) = channel::<Vec<session::ToSerializerEvent>>(256);
-    let suspended_players = Arc::new(Mutex::new(BTreeMap::new()));
+    let suspended_players = Arc::new(Mutex::new(VecDeque::new()));
     println!("Hello from game task");
     let _incoming_connection_acceptor = async_std::task::Builder::new()
         .name("incoming_connection_acceptor".to_string())
@@ -548,17 +548,19 @@ async fn main() {
                     },
                     ToServerMsg::BeamOut => {
                         if let Some(player) = players.remove(&id) {
-                            let core = simulation.world.get_part(player.core).unwrap();
-                            let beamout_layout = core.deflate(&simulation.world);
-                            outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::BeamOutAnimation { player_id: id }));
-                            outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::ChatMessage { username: "Server".to_owned(), msg: format!("{} has left the game", player.name), color: "#e270ff".to_owned() }));
-                            simulation.delete_parts_recursive(player.core);
-                            beamout::spawn_beamout_request(player.beamout_token, beamout_layout, api.clone());
-                            let my_to_serializer = to_serializer.clone();
-                            async_std::task::spawn(async move {
-                                futures_timer::Delay::new(std::time::Duration::from_millis(2500)).await;
-                                my_to_serializer.send(vec![ ToSerializer::DeleteWriter(id) ]).await;
-                            });
+                            if player.can_beamout {
+                                let core = simulation.world.get_part(player.core).unwrap();
+                                let beamout_layout = core.deflate(&simulation.world);
+                                outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::BeamOutAnimation { player_id: id }));
+                                outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::ChatMessage { username: "Server".to_owned(), msg: format!("{} has left the game", player.name), color: "#e270ff".to_owned() }));
+                                simulation.delete_parts_recursive(player.core);
+                                beamout::spawn_beamout_request(player.beamout_token, beamout_layout, api.clone());
+                                let my_to_serializer = to_serializer.clone();
+                                async_std::task::spawn(async move {
+                                    futures_timer::Delay::new(std::time::Duration::from_millis(2500)).await;
+                                    my_to_serializer.send(vec![ ToSerializer::DeleteWriter(id) ]).await;
+                                });
+                            }
                         }
                     },
                     _ => { outbound_events.push(ToSerializer::DeleteWriter(id)); }
