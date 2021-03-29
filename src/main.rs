@@ -294,7 +294,14 @@ async fn main() {
 
             Event::InboundEvent(PlayerQuit { id }) => {
                 outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::RemovePlayer{ id }));
-                if let Some(player) = players.remove(&id) {
+                if let Some(mut player) = players.remove(&id) {
+                    let mut affected_parts = BTreeSet::new(); //Why is this a b tree set
+                    simulation.world.recursive_detach_all(player.core, &mut Some(&mut player), &mut simulation.joints, &mut affected_parts);
+                    for handle in affected_parts {
+                        let part = simulation.world.get_part(handle).unwrap();
+                        outbound_events.push(ToSerializer::Broadcast(part.update_meta_msg()));
+                        free_parts.insert(part.id(), FreePart::Decaying(handle, DEFAULT_PART_DECAY_TICKS));
+                    }
                     outbound_events.extend(simulation.delete_parts_recursive(player.core).into_iter().map(|msg| ToSerializer::Broadcast(msg)));
                     if let Some((part_id, constraint_id, _, _)) = player.grabbed_part {
                         if let Some(part) = free_parts.get_mut(&part_id) {
