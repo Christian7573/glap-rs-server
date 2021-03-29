@@ -323,7 +323,7 @@ impl PartKind {
             PartKind::Thruster => Some(ThrustDetails{ fuel_cost: 4, force: Force2::linear_at_point(Vector2::new(0.0, -9.0), &Point2::new(0.0, 1.0)) }),
             PartKind::SuperThruster => Some(ThrustDetails { fuel_cost: 7, force: Force2::linear_at_point(Vector2::new(0.0, -13.5), &Point2::new(0.0, 1.0)) }),
             PartKind::HubThruster => Some(ThrustDetails { fuel_cost: 4, force: Force2::linear_at_point(Vector2::new(0.0, -6.0), &Point2::new(0.0, 1.0)) }),
-            PartKind::EcoThruster => Some(ThrustDetails { fuel_cost: 1, force: Force2::linear_at_point(Vector2::new(0.0, -3.5), &Point2::new(0.0, 1.0)) }),
+            PartKind::EcoThruster => Some(ThrustDetails { fuel_cost: 1, force: Force2::linear_at_point(Vector2::new(0.0, -5.5), &Point2::new(0.0, 1.0)) }),
             PartKind::PowerHub | PartKind::LandingWheel => None,
         }
     }
@@ -369,13 +369,13 @@ impl PartKind {
         const CORE_MAX_POWER: u32 = 100 * crate::TICKS_PER_SECOND as u32;
         match self {
             PartKind::Core => CORE_MAX_POWER,
-            PartKind::Cargo => CORE_MAX_POWER / 10,
+            PartKind::Cargo => 0, //CORE_MAX_POWER / 10,
             PartKind::LandingThruster | PartKind::HubThruster => CORE_MAX_POWER / 5,
             PartKind::Hub => CORE_MAX_POWER / 3,
             PartKind::SolarPanel => 0,
             PartKind::Thruster | PartKind::SuperThruster => CORE_MAX_POWER / 4,
-            PartKind::EcoThruster => 0,
-            PartKind::PowerHub => CORE_MAX_POWER / 6 * 2,
+            PartKind::EcoThruster => CORE_MAX_POWER / 6,
+            PartKind::PowerHub => CORE_MAX_POWER / 3 * 2,
             PartKind::LandingWheel => 0,
         }
     }
