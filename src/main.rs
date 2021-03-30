@@ -310,6 +310,7 @@ async fn main() {
             Event::InboundEvent(PlayerQuit { id }) => {
                 outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::RemovePlayer{ id }));
                 if let Some(mut player) = players.remove(&id) {
+                    println!("Player {} disconnected with id {}", player.name, id);
                     let mut affected_parts = BTreeSet::new(); //Why is this a b tree set
                     simulation.world.recursive_detach_all(player.core, &mut Some(&mut player), &mut simulation.joints, &mut affected_parts);
                     for handle in affected_parts {
@@ -330,6 +331,7 @@ async fn main() {
 
             Event::InboundEvent(PlayerSuspend { id }) => {
                 if let Some(player) = players.get_mut(&id) {
+                    println!("Player {} suspended with id {}", player.name, id);
                     player.thrust_forwards = false;
                     player.thrust_backwards = false;
                     player.thrust_counterclockwise = false;
@@ -344,6 +346,7 @@ async fn main() {
             },
             Event::InboundEvent(PlayerReconnect { id }) => {
                 if let Some(player) = players.get(&id) {
+                    println!("Player {} reconnected with id {}", player.name, id);
                     outbound_events.push(ToSerializer::Message(id, ToClientMsg::HandshakeAccepted{ id, core_id: simulation.world.get_part(player.core).unwrap().id(), can_beamout: player.beamout_token.is_some() }));
                     outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage { username: "Server".to_owned(), msg: format!("{} has reconnected", player.name), color: "#e270ff".to_owned() }));
                 } else {
@@ -352,6 +355,7 @@ async fn main() {
             },
             
             Event::InboundEvent(NewPlayer{ id, name, parts, beamout_token }) => { 
+                println!("New Player {} with id {}", name, id);
                 let earth_position = simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation.vector;
                 let earth_radius = simulation.planets.earth.radius;
                 use rand::Rng;

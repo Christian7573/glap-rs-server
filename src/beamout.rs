@@ -35,11 +35,11 @@ pub fn spawn_beamout_request(beamout_token: String, mut beamout_layout: Recursiv
 
     let uri = api.beamout.replacen("^^^^", &beamout_token, 1);
     let password = api.password.clone();
-    async_std::task::spawn(async {
+    async_std::task::spawn(async move {
         let beamout_layout = beamout_layout;
         match surf::post(uri).header("password", password).body(serde_json::to_string(&beamout_layout).unwrap()).await {
-            Ok(res) if !res.status().is_success() => { eprintln!("Beamout post does not indicate success {}", res.status()); },
-            Err(err) => { eprintln!("Beamout post failed\n{}", err); },
+            Ok(res) if !res.status().is_success() => { eprintln!("Beamout post for {} does not indicate success {}", beamout_token, res.status()); },
+            Err(err) => { eprintln!("Beamout post failed for {}\n{}", beamout_token, err); },
             _ => {}
         };
     })
@@ -52,14 +52,14 @@ pub struct BeaminResponse {
     pub layout: Option<RecursivePartDescription>
 }
 
-pub async fn beamin_request(session: Option<String>, api: Option<Arc<ApiDat>>) -> Option<BeaminResponse> {
-    let api = api.as_ref()?;
-    let session = session?;
+pub async fn beamin_request(session: String, api: Arc<ApiDat>) -> Result<BeaminResponse, Box<dyn std::error::Error>> {
+    let api = api.as_ref();
+    let session = session;
     let uri = api.beamin.replacen("^^^^", &session, 1);
     let password = api.password.clone();
-    let mut response = surf::get(uri).header("password", password).await.ok()?;
+    let mut response = surf::get(uri).header("password", password).await?;
     if response.status().is_success() {
-        let body_json = response.body_json().await.ok()?;
-        serde_json::from_value::<BeaminResponse>(body_json).ok()
-    } else { eprintln!("Beamin bad {}", response.status()); None }
+        let body_json = response.body_json().await?;
+        serde_json::from_value::<BeaminResponse>(body_json).map_err(|err| Box::new(err) as Box<dyn std::error::Error>)
+    } else { eprintln!("Beamin bad for {}\n{}", session, response.status()); Err(Box::new(serde_json::Error::custom("Invalid response"))) }
 }

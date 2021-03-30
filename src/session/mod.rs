@@ -103,13 +103,14 @@ async fn socket_reader(suggested_id: u16, socket: TcpStream, addr: async_std::ne
         }
     }?;
     let first_msg = ToServerMsg::deserialize(&mut first_msg).await?;
-    let (session, name) = if let ToServerMsg::Handshake{ session, client, name } = first_msg { (session, name) }
+    let (session, name, client) = if let ToServerMsg::Handshake{ session, client, name } = first_msg { (session, name, client) }
     else { return Err(()) };
     let name = {
         let tmp_name = name.trim();
         if tmp_name.is_empty() { "Unnamed".to_owned() }
         else { tmp_name.to_owned() }
     };
+    println!("{} joined; Ip: {}; Session: {:?}; Client {}", name, addr, session, client);
 
     let new_id = if let Some(session) = session.as_ref() {
         let mut suspended_players = suspended_players.lock().await;
@@ -118,6 +119,7 @@ async fn socket_reader(suggested_id: u16, socket: TcpStream, addr: async_std::ne
             let player = &suspended_players[i];
             if &player.session == session {
                 new_id = Some(player.id);
+                println!("Reconnected {} with id {}", name, player.id);
                 suspended_players.remove(i);
                 break;
             }
@@ -136,7 +138,13 @@ async fn socket_reader(suggested_id: u16, socket: TcpStream, addr: async_std::ne
         to_game.send(ToGameEvent::SendEntireWorld { to_player: id, send_self: true }).await;
     } else {
         id = suggested_id;
-        let beamin_data = beamin_request(session.clone(), api.clone()).await;
+        println!("Beamin in {} with id {}", name, id);
+        let beamin_data = if let (Some(session), Some(api)) = (session.clone(), api.clone()) {
+            match beamin_request(session.clone(), api.clone()).await {
+                Ok(beamin_data) => { println!("Successfully beamed in {} ( session: {:?} )", name, session); Some(beamin_data) },
+                Err(err) => { println!("Failed to beam in {} (session: {:?})\n{}", name, session, err); None }
+            }
+        } else { None };
         let layout: Option<RecursivePartDescription>;
         let beamout_token: Option<String>;
         if let Some(beamin_data) = beamin_data {
@@ -213,6 +221,7 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
                     writers.insert(id, (to_writer, Vec::new(), false));
                 },
                 ToSerializerEvent::DeleteWriter(id) => {
+                    println!("Deleted writer {}", id);
                     let mut suspended_players = suspended_players.lock().await;
                     for i in 0..suspended_players.len() {
                         if suspended_players[i].id == id {
@@ -310,6 +319,7 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
                     };
                 },
                 ToSerializerEvent::WriterDisconnect(id, ref_handle) => {
+                    println!("Disconnected writer {} (ref_handle: {}", id, ref_handle);
                     if let Some(_) = writers.remove(&id) {
                         let suspended_player = Arc::new(SuspendedPlayer { id, session: ref_handle });
                         let my_suspended_player = Arc::downgrade(&suspended_player);
