@@ -772,7 +772,13 @@ async fn emergency_stop(players: &BTreeMap<u16, PlayerMeta>, world: &world::Worl
         for player in players.values() {
             let core = world.get_part(player.core).unwrap();
             let beamout_layout = core.deflate(world);
-            if let Some(beamout_token) = &player.beamout_token { beamout::spawn_beamout_request(beamout_token.to_owned(), beamout_layout, api.clone()).await; };
+            if let Some(beamout_token) = &player.beamout_token {
+                println!("Beaming out {} (token: {})", player.name, beamout_token);
+                beamout::spawn_beamout_request(beamout_token.to_owned(), beamout_layout, api.clone()).await; 
+                println!("Finished taht player");
+            } else {
+                println!("Player {} has no beamout token", player.name);
+            }
         }
     }
     std::process::exit(1);
