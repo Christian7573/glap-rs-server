@@ -606,6 +606,11 @@ async fn main() {
                         }
                     },
 
+                    "/stop" => {
+                        println!("{:?} called an emergency stop", players.get(&id).map(|player| &player.name));
+                        emergency_stop(&players, &simulation.world, &api).await;
+                    },
+
                     _ => {
                         to_serializer.send(vec! [ToSerializerEvent::Message(id, ToClientMsg::ChatMessage{ username: String::from("Server"), msg: String::from("You cannot use that command"), color: String::from("#FF0000") })]).await;
                     }

@@ -173,6 +173,10 @@ async fn socket_reader(suggested_id: u16, socket: TcpStream, addr: async_std::ne
                                 "/shrug" => {
                                     to_serializer.send(vec! [ToSerializerEvent::Broadcast(ToClientMsg::ChatMessage{ username: name.clone(), msg: String::from("¯\\_(ツ)_/¯"), color: String::from("#dd55ff") })]).await;
                                 },
+                                "/disconnect" => {
+                                    to_serializer.send(vec! [ToSerializerEvent::DeleteWriter(id)]).await;
+                                    break;
+                                },
                                 
                                 _ => {
                                     if is_admin {
