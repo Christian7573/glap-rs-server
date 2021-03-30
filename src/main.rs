@@ -329,7 +329,7 @@ async fn main() {
                 } 
             },
 
-            Event::InboundEvent(PlayerSuspend { id }) => {
+            Event::InboundEvent(PlayerSuspend { id, ref_handle }) => {
                 if let Some(player) = players.get_mut(&id) {
                     println!("Player {} suspended with id {}", player.name, id);
                     player.thrust_forwards = false;
@@ -342,6 +342,28 @@ async fn main() {
                     }
                     outbound_events.push(ToSerializer::Broadcast(player.update_meta_msg()));
                     outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage { username: "Server".to_owned(), msg: format!("{} has disconnected", player.name), color: "#e270ff".to_owned() }));
+
+                    let suspended_player = Arc::new(session::SuspendedPlayer { id, session: ref_handle });
+                    let my_suspended_player = Arc::downgrade(&suspended_player);
+                    suspended_players.lock().await.push_back(suspended_player);
+                    let my_suspended_players = suspended_players.clone();
+                    let my_to_game = to_game.clone();
+                    async_std::task::spawn(async move {
+                        async_std::task::sleep(std::time::Duration::from_secs(70)).await;
+                        let mut my_suspended_players = my_suspended_players.lock().await;
+                        if let Some(my_suspended_player) = my_suspended_player.upgrade() {
+                            for i in 0..my_suspended_players.len() {
+                                if Arc::ptr_eq(&my_suspended_player, &my_suspended_players[i]) {
+                                    my_suspended_players.remove(i);
+                                    break;
+                                }
+                            }
+                            my_to_game.send(PlayerQuit { id }).await;
+                        }
+                        drop(my_suspended_players);
+                    });
+                } else {
+                    println!("FAILED to suspend player {}", id);
                 }
             },
             Event::InboundEvent(PlayerReconnect { id }) => {
@@ -350,6 +372,7 @@ async fn main() {
                     outbound_events.push(ToSerializer::Message(id, ToClientMsg::HandshakeAccepted{ id, core_id: simulation.world.get_part(player.core).unwrap().id(), can_beamout: player.beamout_token.is_some() }));
                     outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage { username: "Server".to_owned(), msg: format!("{} has reconnected", player.name), color: "#e270ff".to_owned() }));
                 } else {
+                    println!("FAILED to reconnect player {}", id);
                     outbound_events.push(ToSerializer::DeleteWriter(id));
                 }
             },

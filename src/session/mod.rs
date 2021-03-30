@@ -30,7 +30,7 @@ pub enum ToGameEvent {
     PlayerMessage { id: u16, msg: ToServerMsg },
     PlayerQuit { id: u16 },
     AdminCommand { id: u16, command: String },
-    PlayerSuspend { id: u16 },
+    PlayerSuspend { id: u16, ref_handle: String, },
     PlayerReconnect { id: u16 },
 }
 pub enum ToSerializerEvent {
@@ -206,7 +206,7 @@ async fn socket_reader(suggested_id: u16, socket: TcpStream, addr: async_std::ne
         };
     };
 
-    if let Some(session) = session { to_serializer.send(vec! [ToSerializerEvent::WriterDisconnect(id, session)]).await; }
+    if let Some(session) = session { to_serializer.send(vec![ ToSerializerEvent::WriterDisconnect(id, session) ]).await; }
     else { to_serializer.send(vec![ ToSerializerEvent::DeleteWriter(id) ]).await; };
     Ok(())
 }
@@ -233,8 +233,8 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
                     if let Some((writer, mut queue, _request_update)) = writers.remove(&id) {
                         queue.push(websocket::close_message());
                         writer.send(queue).await;
+                        to_game.send(ToGameEvent::PlayerQuit { id }).await;
                     }
-                    to_game.send(ToGameEvent::PlayerQuit { id }).await;
                 },
                 ToSerializerEvent::RequestUpdate(id) => {
                     if let Some((_to_writer, _queue, request_update)) = writers.get_mut(&id) {
@@ -321,26 +321,7 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
                 ToSerializerEvent::WriterDisconnect(id, ref_handle) => {
                     println!("Disconnected writer {} (ref_handle: {}", id, ref_handle);
                     if let Some(_) = writers.remove(&id) {
-                        let suspended_player = Arc::new(SuspendedPlayer { id, session: ref_handle });
-                        let my_suspended_player = Arc::downgrade(&suspended_player);
-                        suspended_players.lock().await.push_back(suspended_player);
-                        let my_suspended_players = suspended_players.clone();
-                        let my_send_to_me = send_to_me.clone();
-                        async_std::task::spawn(async move {
-                            async_std::task::sleep(std::time::Duration::from_secs(70)).await;
-                            let mut my_suspended_players = my_suspended_players.lock().await;
-                            if let Some(my_suspended_player) = my_suspended_player.upgrade() {
-                                for i in 0..my_suspended_players.len() {
-                                    if Arc::ptr_eq(&my_suspended_player, &my_suspended_players[i]) {
-                                        my_suspended_players.remove(i);
-                                        break;
-                                    }
-                                }
-                                my_send_to_me.send(vec![ ToSerializerEvent::DeleteWriter(id) ]).await;
-                            }
-                            drop(my_suspended_players);
-                        });
-                        to_game.send(ToGameEvent::PlayerSuspend { id }).await;
+                        to_game.send(ToGameEvent::PlayerSuspend { id, ref_handle }).await;
                     }
                 }
             }
@@ -374,4 +355,6 @@ async fn socket_writer(_id: u16, mut out: TcpWriter, mut from_serializer: Receiv
         }
     }
     out.await; //Flush
+    async_std::task::sleep(Duration::from_secs(5)).await;
+    drop(from_serializer);
 }
