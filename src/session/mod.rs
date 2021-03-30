@@ -17,6 +17,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use async_std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use crate::is_emergency_stop;
 
 use crate::codec::*;
 
@@ -125,6 +126,8 @@ async fn socket_reader(suggested_id: u16, socket: TcpStream, addr: async_std::ne
         }
         new_id
     } else { None };
+
+    if is_emergency_stop() { futures::future::pending().await };
 
     let id;
     let is_admin: bool;

@@ -16,6 +16,7 @@ use std::any::Any;
 use async_std::sync::{Sender, Receiver, channel};
 use nphysics2d::object::Body;
 use async_std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 
 pub mod world;
 pub mod codec;
@@ -28,6 +29,9 @@ use world::parts::{RecursivePartDescription, PartKind};
 
 pub const TICKS_PER_SECOND: u8 = 20;
 pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 20;
+
+static mut EMERGENCY_STOP: AtomicBool = AtomicBool::new(false);
+pub fn is_emergency_stop() -> bool { unsafe { EMERGENCY_STOP.load(AtomicOrdering::Acquire) } }
 
 #[derive(Clone)]
 pub struct ApiDat { prefix: String, beamout: String, beamin: String, password: String }
@@ -77,17 +81,22 @@ async fn main() {
     let mut earth_cargos: u8 = 0; let mut ticks_til_earth_cargo_spawn: u8 = TICKS_PER_EARTH_CARGO_SPAWN;
     let mut rand = rand::thread_rng();
 
+    let signals = signal_hook_async_std::Signals::new(&[signal_hook::consts::SIGQUIT, signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT]).expect("Failed to do signals");
+
     struct EventSource {
         pub inbound: async_std::sync::Receiver<session::ToGameEvent>,
         pub ticker: async_std::stream::Interval,
+        pub signals: signal_hook_async_std::Signals,
     }
     enum Event {
         InboundEvent(session::ToGameEvent),
-        Simulate
+        Simulate,
+        EmergencyStop
     }
     impl Stream for EventSource {
         type Item = Event;
         fn poll_next(mut self: Pin<&mut Self>, ctx: &mut std::task::Context) -> Poll<Option<Event>> {
+            if let Poll::Ready(Some(_)) = self.signals.poll_next_unpin(ctx) { return Poll::Ready(Some(Event::EmergencyStop)); }
             if let Poll::Ready(Some(_)) = self.ticker.poll_next_unpin(ctx) { return Poll::Ready(Some(Event::Simulate)); }
             match self.inbound.poll_next_unpin(ctx) {
                 Poll::Ready(Some(event)) => return Poll::Ready(Some(Event::InboundEvent(event))),
@@ -97,7 +106,7 @@ async fn main() {
             Poll::Pending
         }
     }
-    let mut event_source = EventSource { inbound: to_me, ticker };
+    let mut event_source = EventSource { inbound: to_me, ticker, signals };
     let mut simulation_events = Vec::new();
     const TICKS_PER_CARGO_UPGRADE: u8 = TICKS_PER_SECOND;
 
@@ -216,7 +225,13 @@ async fn main() {
                     }
                 }
 
-                simulation.simulate(&mut simulation_events);
+                let mut my_simulation_events = std::panic::AssertUnwindSafe(&mut simulation_events);
+                let mut my_simulation = std::panic::AssertUnwindSafe(&mut simulation);
+                if let Err(err) = std::panic::catch_unwind(move || my_simulation.simulate(&mut my_simulation_events)) {
+                    eprintln!("{:?}", err);
+                    emergency_stop(&players, &simulation.world, &api).await;
+                }
+
                 for event in simulation_events.drain(..) {
                     use world::SimulationEvent::*;
                     match event {
@@ -554,7 +569,9 @@ async fn main() {
                                 outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::BeamOutAnimation { player_id: id }));
                                 outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::ChatMessage { username: "Server".to_owned(), msg: format!("{} has left the game", player.name), color: "#e270ff".to_owned() }));
                                 simulation.delete_parts_recursive(player.core);
-                                beamout::spawn_beamout_request(player.beamout_token, beamout_layout, api.clone());
+                                if let (Some(beamout_token), Some(api)) = (player.beamout_token, api.as_ref()) { 
+                                    beamout::spawn_beamout_request(beamout_token, beamout_layout, api.clone());
+                                };
                                 let my_to_serializer = to_serializer.clone();
                                 async_std::task::spawn(async move {
                                     futures_timer::Delay::new(std::time::Duration::from_millis(2500)).await;
@@ -594,6 +611,11 @@ async fn main() {
                     }
                     
                 }
+            },
+
+            Event::EmergencyStop => {
+                println!("Recieved a signal or something");
+                emergency_stop(&players, &simulation.world, &api).await;
             }
         }
         to_serializer.send(outbound_events).await;
@@ -732,3 +754,15 @@ impl PlayerMeta {
 }
 pub struct PartOfPlayer (u16);
 
+async fn emergency_stop(players: &BTreeMap<u16, PlayerMeta>, world: &world::World, api: &Option<Arc<ApiDat>>) {
+    unsafe { EMERGENCY_STOP.store(true, AtomicOrdering::Release) };
+    println!("EMERGENCY STOP");
+    if let Some(api) = api {
+        for player in players.values() {
+            let core = world.get_part(player.core).unwrap();
+            let beamout_layout = core.deflate(world);
+            if let Some(beamout_token) = &player.beamout_token { beamout::spawn_beamout_request(beamout_token.to_owned(), beamout_layout, api.clone()).await; };
+        }
+    }
+    std::process::exit(1);
+}

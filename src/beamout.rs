@@ -4,6 +4,7 @@ use serde::de::{Deserialize, Deserializer, Error};
 use crate::ApiDat;
 use std::sync::Arc;
 use futures::FutureExt;
+use async_std::task::JoinHandle;
 
 
 impl Serialize for PartKind {
@@ -21,7 +22,7 @@ impl<'de> Deserialize<'de> for PartKind {
     }
 }
 
-pub fn spawn_beamout_request(beamout_token: Option<String>, mut beamout_layout: RecursivePartDescription, api: Option<Arc<ApiDat>>) {
+pub fn spawn_beamout_request(beamout_token: String, mut beamout_layout: RecursivePartDescription, api: Arc<ApiDat>) -> JoinHandle<()> {
     fn recurse_can_beamout(part: &mut RecursivePartDescription) {
         for attachment in &mut part.attachments {
             if let Some(part) = attachment {
@@ -32,20 +33,16 @@ pub fn spawn_beamout_request(beamout_token: Option<String>, mut beamout_layout: 
     }
     recurse_can_beamout(&mut beamout_layout);
 
-    if let Some(api) = &api {
-        if let Some(beamout_token) = beamout_token {
-            let uri = api.beamout.replacen("^^^^", &beamout_token, 1);
-            let password = api.password.clone();
-            async_std::task::spawn(async {
-                let beamout_layout = beamout_layout;
-                match surf::post(uri).header("password", password).body(serde_json::to_string(&beamout_layout).unwrap()).await {
-                    Ok(res) if !res.status().is_success() => { eprintln!("Beamout post does not indicate success {}", res.status()); },
-                    Err(err) => { eprintln!("Beamout post failed\n{}", err); },
-                    _ => {}
-                };
-            });
-        } else { println!("Session didn't have beamout token"); }
-    } 
+    let uri = api.beamout.replacen("^^^^", &beamout_token, 1);
+    let password = api.password.clone();
+    async_std::task::spawn(async {
+        let beamout_layout = beamout_layout;
+        match surf::post(uri).header("password", password).body(serde_json::to_string(&beamout_layout).unwrap()).await {
+            Ok(res) if !res.status().is_success() => { eprintln!("Beamout post does not indicate success {}", res.status()); },
+            Err(err) => { eprintln!("Beamout post failed\n{}", err); },
+            _ => {}
+        };
+    })
 }
 
 #[derive(Serialize, Deserialize, Debug)]
