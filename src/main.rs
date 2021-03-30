@@ -346,6 +346,8 @@ async fn main() {
                 if let Some(player) = players.get(&id) {
                     outbound_events.push(ToSerializer::Message(id, ToClientMsg::HandshakeAccepted{ id, core_id: simulation.world.get_part(player.core).unwrap().id(), can_beamout: player.beamout_token.is_some() }));
                     outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage { username: "Server".to_owned(), msg: format!("{} has reconnected", player.name), color: "#e270ff".to_owned() }));
+                } else {
+                    outbound_events.push(ToSerializer::DeleteWriter(id));
                 }
             },
             

@@ -13,7 +13,7 @@ use std::ops::{Deref, DerefMut};
 use crate::beamout::{BeaminResponse, beamin_request, spawn_beamout_request};
 use crate::world::parts::RecursivePartDescription;
 use crate::ApiDat;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 use async_std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -54,11 +54,10 @@ pub struct WorldUpdatePartMove {
     pub rot_cos: f32,
 }
 pub struct WorldUpdatePlayerUpdate { pub id: u16, pub core_x: f32, pub core_y: f32, pub parts: Vec<WorldUpdatePartMove> }
-pub type SuspendedPlayers = Arc<Mutex<VecDeque<SuspendedPlayer>>>;
+pub type SuspendedPlayers = Arc<Mutex<VecDeque<Arc<SuspendedPlayer>>>>;
 pub struct SuspendedPlayer {
     pub id: u16,
     pub session: String,
-    pub cancelled: Arc<AtomicBool>,
 }
 
 pub enum GuarenteeOnePoll {
@@ -118,7 +117,6 @@ async fn socket_reader(suggested_id: u16, socket: TcpStream, addr: async_std::ne
         for i in 0..suspended_players.len() {
             let player = &suspended_players[i];
             if &player.session == session {
-                player.cancelled.store(true, Ordering::Release);
                 new_id = Some(player.id);
                 suspended_players.remove(i);
                 break;
@@ -313,24 +311,24 @@ pub async fn serializer(mut to_me: Receiver<Vec<ToSerializerEvent>>, to_game: Se
                 },
                 ToSerializerEvent::WriterDisconnect(id, ref_handle) => {
                     if let Some(_) = writers.remove(&id) {
-                        let has_been_cancelled = Arc::new(AtomicBool::new(false));
-                        suspended_players.lock().await.push_back(SuspendedPlayer { id, session: ref_handle, cancelled: has_been_cancelled.clone() });
+                        let suspended_player = Arc::new(SuspendedPlayer { id, session: ref_handle });
+                        let my_suspended_player = Arc::downgrade(&suspended_player);
+                        suspended_players.lock().await.push_back(suspended_player);
                         let my_suspended_players = suspended_players.clone();
                         let my_send_to_me = send_to_me.clone();
-                        //TODO: Don't use atomic bool, just check for existance in
-                        //suspended_players
                         async_std::task::spawn(async move {
-                            async_std::task::sleep(std::time::Duration::from_secs(70)).await;                                                        
-                            if !has_been_cancelled.load(Ordering::Acquire) {
-                                let mut suspended_players = my_suspended_players.lock().await;
-                                for i in 0..suspended_players.len() {
-                                    if suspended_players[i].id == id {
-                                        suspended_players.remove(i);
+                            async_std::task::sleep(std::time::Duration::from_secs(70)).await;
+                            let mut my_suspended_players = my_suspended_players.lock().await;
+                            if let Some(my_suspended_player) = my_suspended_player.upgrade() {
+                                for i in 0..my_suspended_players.len() {
+                                    if Arc::ptr_eq(&my_suspended_player, &my_suspended_players[i]) {
+                                        my_suspended_players.remove(i);
                                         break;
                                     }
                                 }
                                 my_send_to_me.send(vec![ ToSerializerEvent::DeleteWriter(id) ]).await;
                             }
+                            drop(my_suspended_players);
                         });
                         to_game.send(ToGameEvent::PlayerSuspend { id }).await;
                     }
