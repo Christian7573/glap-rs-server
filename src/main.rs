@@ -260,7 +260,9 @@ async fn main() {
                                     outbound_events.push(ToSerializer::Message(player_id, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
                                 }
                             } else if planet == simulation.planets.sun.id {
-                                outbound_events.push(ToSerializer::Broadcast(simulation.world.get_part(part).unwrap().remove_msg()));
+                                if let Some(part) = simulation.world.get_part(part) {
+                                    outbound_events.push(ToSerializer::Broadcast(part.remove_msg()));
+                                }
                             }
                         },
                         PlayerUntouchPlanet{ player, planet, part } => {
