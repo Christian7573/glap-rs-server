@@ -40,7 +40,8 @@ pub struct Part {
 }
 pub struct PartAttachment {
     part: MyHandle,
-    connections: (DefaultJointConstraintHandle, DefaultJointConstraintHandle),
+    //connections: (DefaultJointConstraintHandle, DefaultJointConstraintHandle),
+    connections: DefaultJointConstraintHandle,
 }
 
 impl RecursivePartDescription {
@@ -250,40 +251,30 @@ impl PartAttachment {
         use nphysics2d::math::Point;
         let attachment = parent.attachment_locations()[attachment_slot].expect("PartAttachment tried to inflate on invalid slot");
         const HALF_CONNECTION_WIDTH: f32 = 0.25;
-        let offset = (attachment.perpendicular.0 * HALF_CONNECTION_WIDTH, attachment.perpendicular.1 * HALF_CONNECTION_WIDTH);
-        let mut constraint1 = nphysics2d::joint::RevoluteConstraint::new(
+        let constraint = nphysics2d::joint::FixedConstraint::new(
             BodyPartHandle(parent_body_handle.clone(), 0),
             BodyPartHandle(part, 0),
-            Point::new(attachment.x + offset.0, attachment.y + offset.1),
-            Point::new(HALF_CONNECTION_WIDTH, 0.0)
+            Point::new(attachment.x, attachment.y),
+            nalgebra::UnitComplex::new(0f32),
+            Point::new(0f32, 0f32),
+            nalgebra::UnitComplex::new(-attachment.facing.part_rotation()),
         );
-        let mut constraint2 = nphysics2d::joint::RevoluteConstraint::new(
-            BodyPartHandle(parent_body_handle.clone(), 0),
-            BodyPartHandle(part, 0),
-            Point::new(attachment.x - offset.0, attachment.y - offset.1),
-            Point::new(-HALF_CONNECTION_WIDTH, 0.0)
-        );
-        const MAX_TORQUE: f32 = 100.0;
-        const MAX_FORCE: f32 = MAX_TORQUE * 3.5;
-        constraint1.set_break_torque(MAX_TORQUE);
-        constraint1.set_break_force(MAX_FORCE);
-        constraint2.set_break_torque(MAX_TORQUE);
-        constraint2.set_break_force(MAX_FORCE);
         PartAttachment {
             part,
-            connections: (joints.insert(constraint1), joints.insert(constraint2))
+            //connections: (joints.insert(constraint1), joints.insert(constraint2))
+            connections: joints.insert(constraint),
         }
     }
 
     pub fn deflate(self, joints: &mut MyJointSet) -> MyHandle {
-        joints.remove(self.connections.0);
-        joints.remove(self.connections.1);
+        joints.remove(self.connections);
         self.part
     }
 
     pub fn is_broken(&self, joints: &MyJointSet) -> bool {
-        joints.get(self.connections.0).map(|joint| joint.is_broken()).unwrap_or(true)
-        || joints.get(self.connections.1).map(|joint| joint.is_broken()).unwrap_or(true)
+        return false;
+        /*joints.get(self.connections.0).map(|joint| joint.is_broken()).unwrap_or(true)
+        || joints.get(self.connections.1).map(|joint| joint.is_broken()).unwrap_or(true)*/
     }
 }
 
