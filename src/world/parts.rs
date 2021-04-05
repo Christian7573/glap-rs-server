@@ -13,6 +13,7 @@ use super::{WorldAddHandle, World, WorldlyObject};
 use crate::session::WorldUpdatePartMove;
 use std::sync::atomic::{AtomicU16, Ordering as AtomicOrdering};
 
+
 lazy_static! {
     static ref UNIT_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.5)));
     static ref CARGO_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(0.38, 0.5)));
@@ -252,7 +253,7 @@ impl PartAttachment {
         let attachment = parent.attachment_locations()[attachment_slot].expect("PartAttachment tried to inflate on invalid slot");
         const HALF_CONNECTION_WIDTH: f32 = 0.5;
         let offset = (attachment.perpendicular.0 * HALF_CONNECTION_WIDTH, attachment.perpendicular.1 * HALF_CONNECTION_WIDTH);
-        let constraint1 = nphysics2d::joint::FixedConstraint::new(
+        let mut constraint1 = nphysics2d::joint::FixedConstraint::new(
             BodyPartHandle(parent_body_handle.clone(), 0),
             BodyPartHandle(part, 0),
             Point::new(attachment.x + offset.0, attachment.y + offset.1),
@@ -260,7 +261,7 @@ impl PartAttachment {
             Point::new(HALF_CONNECTION_WIDTH, 0f32),
             nalgebra::UnitComplex::new(-attachment.facing.part_rotation()),
         );
-        let constraint2 = nphysics2d::joint::FixedConstraint::new(
+        let mut constraint2 = nphysics2d::joint::FixedConstraint::new(
             BodyPartHandle(parent_body_handle.clone(), 0),
             BodyPartHandle(part, 0),
             Point::new(attachment.x - offset.0, attachment.y - offset.1),
@@ -268,6 +269,12 @@ impl PartAttachment {
             Point::new(-HALF_CONNECTION_WIDTH, 0f32),
             nalgebra::UnitComplex::new(-attachment.facing.part_rotation()),
         );
+        const MAX_TORQUE: f32 = 100.0;
+        const MAX_FORCE: f32 = MAX_TORQUE * 3.5;
+        constraint1.set_break_torque(MAX_TORQUE);
+        constraint1.set_break_force(MAX_FORCE);
+        constraint2.set_break_torque(MAX_TORQUE);
+        constraint2.set_break_force(MAX_FORCE);
         PartAttachment {
             part,
             connections: (joints.insert(constraint1), joints.insert(constraint2))
@@ -282,9 +289,8 @@ impl PartAttachment {
     }
 
     pub fn is_broken(&self, joints: &MyJointSet) -> bool {
-        return false;
-        /*joints.get(self.connections.0).map(|joint| joint.is_broken()).unwrap_or(true)
-        || joints.get(self.connections.1).map(|joint| joint.is_broken()).unwrap_or(true)*/
+        joints.get(self.connections.0).map(|joint| joint.is_broken()).unwrap_or(true)
+        || joints.get(self.connections.1).map(|joint| joint.is_broken()).unwrap_or(true)
     }
 }
 
