@@ -52,6 +52,7 @@ impl Simulation {
     pub fn new(step_time: f32) -> Simulation {
         let mut mechanics = MyMechanicalWorld::new(Vector2::new(0.0, 0.0));
         mechanics.set_timestep(step_time);
+        mechanics.integration_parameters.max_ccd_substeps = 5;
         let geometry: MyGeometricalWorld = MyGeometricalWorld::new();
         let mut colliders: MyColliderSet = MyColliderSet::new();
         let mut bodies = World::default();

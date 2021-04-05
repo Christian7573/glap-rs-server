@@ -40,8 +40,8 @@ pub struct Part {
 }
 pub struct PartAttachment {
     part: MyHandle,
-    //connections: (DefaultJointConstraintHandle, DefaultJointConstraintHandle),
-    connections: DefaultJointConstraintHandle,
+    connections: (DefaultJointConstraintHandle, DefaultJointConstraintHandle),
+    //connections: DefaultJointConstraintHandle,
 }
 
 impl RecursivePartDescription {
@@ -250,24 +250,34 @@ impl PartAttachment {
     pub fn inflate(part: MyHandle, parent: PartKind, parent_body_handle: MyHandle, attachment_slot: usize, joints: &mut MyJointSet) -> PartAttachment {
         use nphysics2d::math::Point;
         let attachment = parent.attachment_locations()[attachment_slot].expect("PartAttachment tried to inflate on invalid slot");
-        const HALF_CONNECTION_WIDTH: f32 = 0.25;
-        let constraint = nphysics2d::joint::FixedConstraint::new(
+        const HALF_CONNECTION_WIDTH: f32 = 0.5;
+        let offset = (attachment.perpendicular.0 * HALF_CONNECTION_WIDTH, attachment.perpendicular.1 * HALF_CONNECTION_WIDTH);
+        let constraint1 = nphysics2d::joint::FixedConstraint::new(
             BodyPartHandle(parent_body_handle.clone(), 0),
             BodyPartHandle(part, 0),
-            Point::new(attachment.x, attachment.y),
+            Point::new(attachment.x + offset.0, attachment.y + offset.1),
             nalgebra::UnitComplex::new(0f32),
-            Point::new(0f32, 0f32),
+            Point::new(HALF_CONNECTION_WIDTH, 0f32),
+            nalgebra::UnitComplex::new(-attachment.facing.part_rotation()),
+        );
+        let constraint2 = nphysics2d::joint::FixedConstraint::new(
+            BodyPartHandle(parent_body_handle.clone(), 0),
+            BodyPartHandle(part, 0),
+            Point::new(attachment.x - offset.0, attachment.y - offset.1),
+            nalgebra::UnitComplex::new(0f32),
+            Point::new(-HALF_CONNECTION_WIDTH, 0f32),
             nalgebra::UnitComplex::new(-attachment.facing.part_rotation()),
         );
         PartAttachment {
             part,
-            //connections: (joints.insert(constraint1), joints.insert(constraint2))
-            connections: joints.insert(constraint),
+            connections: (joints.insert(constraint1), joints.insert(constraint2))
+            //connections: joints.insert(constraint),
         }
     }
 
     pub fn deflate(self, joints: &mut MyJointSet) -> MyHandle {
-        joints.remove(self.connections);
+        joints.remove(self.connections.0);
+        joints.remove(self.connections.1);
         self.part
     }
 
