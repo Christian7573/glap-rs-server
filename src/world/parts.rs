@@ -269,7 +269,7 @@ impl PartAttachment {
             Point::new(-HALF_CONNECTION_WIDTH, 0f32),
             nalgebra::UnitComplex::new(-attachment.facing.part_rotation()),
         );
-        const MAX_TORQUE: f32 = 100.0;
+        const MAX_TORQUE: f32 = 200.0;
         const MAX_FORCE: f32 = MAX_TORQUE * 3.5;
         constraint1.set_break_torque(MAX_TORQUE);
         constraint1.set_break_force(MAX_FORCE);

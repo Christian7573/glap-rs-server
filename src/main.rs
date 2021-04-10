@@ -28,7 +28,7 @@ use session::ToSerializerEvent;
 use world::parts::{RecursivePartDescription, PartKind};
 
 pub const TICKS_PER_SECOND: u8 = 20;
-pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 20;
+pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 90;
 
 static mut EMERGENCY_STOP: AtomicBool = AtomicBool::new(false);
 pub fn is_emergency_stop() -> bool { unsafe { EMERGENCY_STOP.load(AtomicOrdering::Acquire) } }
