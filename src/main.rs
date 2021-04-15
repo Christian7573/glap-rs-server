@@ -28,7 +28,7 @@ use session::ToSerializerEvent;
 use world::parts::{RecursivePartDescription, PartKind};
 
 pub const TICKS_PER_SECOND: u8 = 20;
-pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 20;
+pub const DEFAULT_PART_DECAY_TICKS: u16 = TICKS_PER_SECOND as u16 * 90;
 
 static mut EMERGENCY_STOP: AtomicBool = AtomicBool::new(false);
 pub fn is_emergency_stop() -> bool { unsafe { EMERGENCY_STOP.load(AtomicOrdering::Acquire) } }
@@ -387,10 +387,11 @@ async fn main() {
 
                 let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                 let core_handle = simulation.inflate(&parts, Isometry2::new(Vector2::new(0.0,0.0), spawn_degrees - std::f32::consts::FRAC_PI_2));
-                let spawn_radius: f32 = earth_radius * 1.25 + 1.0;
-                let spawn_center = (Vector2::new(spawn_degrees.cos(), spawn_degrees.sin()) * spawn_radius) + earth_position;
                 let mut max_extent: i32 = 1;
-                simulation.world.recurse_part(core_handle, Default::default(), &mut |handle: world::PartVisitHandle| max_extent = max_extent.max(handle.details().part_rel_x.abs()).max(handle.details().part_rel_y.abs()));
+                simulation.world.recurse_part(core_handle, Default::default(), &mut |handle: world::PartVisitHandle| max_extent = max_extent.min(handle.details().part_rel_y));
+                let max_extent = max_extent as f32 / 3.0;
+                let spawn_radius: f32 = earth_radius * 1.25 + 1.0 + max_extent.abs();
+                let spawn_center = (Vector2::new(spawn_degrees.cos(), spawn_degrees.sin()) * spawn_radius) + earth_position;
                 simulation.world.recurse_part_mut(core_handle, Default::default(), &mut |mut handle: world::PartVisitHandleMut| {
                     let part = &mut handle;
                     let new_pos = Isometry2::new(
