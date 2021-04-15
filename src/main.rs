@@ -452,6 +452,8 @@ async fn main() {
                         outbound_events.push(ToSerializer::Message(to_player, player.update_my_meta()));
                     }
                 }
+
+                outbound_events.push(ToSerializer::Message(to_player, codec::ToClientMsg::ChatMessage{ color: "#e270ff".to_owned(), username: "Server".to_owned(), msg: format!("There are {} players online", players.len()) }));
             },
 
             Event::InboundEvent(PlayerMessage{ id, msg }) => {
