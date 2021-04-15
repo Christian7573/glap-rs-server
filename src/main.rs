@@ -594,8 +594,9 @@ async fn main() {
                         }
                     },
                     ToServerMsg::BeamOut => {
-                        if let Some(player) = players.remove(&id) {
+                        if let Some(player) = players.get(&id) {
                             if player.can_beamout {
+                                let player = players.remove(&id).unwrap();
                                 let core = simulation.world.get_part(player.core).unwrap();
                                 let beamout_layout = core.deflate(&simulation.world);
                                 outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::BeamOutAnimation { player_id: id }));
