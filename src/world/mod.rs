@@ -1,46 +1,40 @@
-use nalgebra::Vector2;
-use nphysics2d::object::{RigidBody, Body, BodyPartHandle, DefaultColliderHandle};
+use rapier2d::na::Vector2;
 use std::collections::{BTreeMap, BTreeSet};
-use nphysics2d::force_generator::DefaultForceGeneratorSet;
-use num_traits::Pow;
-use nphysics2d::algebra::{Force2, ForceType, Inertia2};
-use nphysics2d::joint::{DefaultJointConstraintHandle, MouseConstraint, JointConstraint};
-use nphysics2d::math::Point;
-use ncollide2d::pipeline::ContactEvent;
+//use num_traits::Pow;
+
 use crate::PartOfPlayer;
 use generational_arena::{Arena, Index};
 use crate::codec::ToClientMsg;
 use std::ops::{Deref, DerefMut};
+
+use rapier2d::dynamics::{BodyStatus, CCDSolver, JointSet, RigidBody, RigidBodyBuilder, RigidBodyHandle, RigidBodySet, IntegrationParameters};
+use rapier2d::geometry::{BroadPhase, NarrowPhase, ColliderSet};
+use rapier2d::pipeline::PhysicsPipeline;
 
 pub mod planets;
 pub mod parts;
 use parts::{Part, AttachedPartFacing, RecursivePartDescription};
 use planets::AmPlanet;
 
-pub mod nphysics_types {
+pub mod typedef {
     pub type MyUnits = f32;
     pub type MyHandle = generational_arena::Index;
     pub type MyIsometry = nphysics2d::math::Isometry<MyUnits>;
-    pub type MyColliderHandle = nphysics2d::object::DefaultColliderHandle;
-    pub type MyMechanicalWorld = nphysics2d::world::MechanicalWorld<MyUnits, MyHandle, MyColliderHandle>;
-    pub type MyBodySet = super::World;
-    pub type MyRigidBody = nphysics2d::object::RigidBody<MyUnits>;
-    pub type MyGeometricalWorld = nphysics2d::world::GeometricalWorld<MyUnits, MyHandle, MyColliderHandle>;
-    pub type MyColliderSet = nphysics2d::object::DefaultColliderSet<MyUnits, MyHandle>;
-    pub type MyJointSet = nphysics2d::joint::DefaultJointConstraintSet<MyUnits, MyHandle>;
-    pub type MyJointHandle = nphysics2d::joint::DefaultJointConstraintHandle;
-    pub type MyForceSet = nphysics2d::force_generator::DefaultForceGeneratorSet<MyUnits, MyHandle>;
 }
-use nphysics_types::*;
+use typedef::*;
 
 pub struct Simulation {
     pub world: World,
-    mechanics: MyMechanicalWorld,
-    geometry: MyGeometricalWorld,
-    pub colliders: MyColliderSet,
-    pub joints: MyJointSet,
-    persistant_forces: MyForceSet,
     pub planets: planets::Planets,
+
+    pipeline: PhysicsPipeline,
+    integration_parameters: IntegrationParameters,
+    broad_phase: BroadPhase,
+    narrow_phase: NarrowPhase,
+    bodies: RigidBodySet,
+    colliders: ColliderSet,
+    joints: JointSet,
+    ccd_solver: CCDSolver,
 }
 pub enum SimulationEvent {
     PlayerTouchPlanet { player: u16, part: MyHandle, planet: u16, },
@@ -57,6 +51,14 @@ impl Simulation {
         let mut colliders: MyColliderSet = MyColliderSet::new();
         let mut bodies = World::default();
         let planets = planets::Planets::new(&mut colliders, &mut bodies);
+
+        let simulation = Simulation {
+            pipeline: PhysicsPipeline::new(),
+            integration_parameters: IntegrationParameters::default(),
+            broad_phase: BroadPhase::new(),
+            narrow_phase: NarrowPhase::new(),
+        };
+
         let simulation = Simulation {
             mechanics, geometry, colliders, world: bodies,
             joints: MyJointSet::new(),
@@ -162,37 +164,14 @@ impl Simulation {
     }
 }
 
-type MyStorage = Arena<WorldlyObject>;
 pub struct World {
-    storage: MyStorage,
-    removal_events: std::collections::VecDeque<MyHandle>,
+    parts: Arena<Part>,
+    bodies: RigidBodySet,
+    planets: planets::Planets,
     reference_point_body: Index,
 }
 
-pub enum WorldlyObject {
-    CelestialObject(MyRigidBody),
-    Part(Part),
-    Uninitialized,
-}
-impl WorldlyObject {
-    pub fn rigid(&self) -> Option<&MyRigidBody> {
-         match self {
-            WorldlyObject::Part(part) => Some(part.body()),
-            WorldlyObject::CelestialObject(body) => Some(body),
-            WorldlyObject::Uninitialized => None
-        }
-    }
-    pub fn rigid_mut(&mut self) -> Option<&mut MyRigidBody> {
-        match self {
-            WorldlyObject::Part(part) => Some(part.body_mut()),
-            WorldlyObject::CelestialObject(body) => Some(body),
-            WorldlyObject::Uninitialized => None
-        }
-    }
-
-}
-
-pub struct WorldAddHandle<'a>(&'a mut World); 
+/*pub struct WorldAddHandle<'a>(&'a mut World); 
 impl<'a> WorldAddHandle<'a> {
     pub fn add_now(&mut self, object: WorldlyObject) -> Index { self.0.storage.insert(object) }
     pub fn add_later(&mut self) -> Index { self.0.storage.insert(WorldlyObject::Uninitialized) }
@@ -206,32 +185,32 @@ impl<'a> WorldAddHandle<'a> {
 }
 impl<'a> From<&'a mut World> for WorldAddHandle<'a> {
     fn from(world: &'a mut World) -> WorldAddHandle<'a> { WorldAddHandle(world) }
-}
+}*/
 
 impl World {
-    pub fn get_rigid(&self, index: MyHandle) -> Option<&MyRigidBody> {
-        self.storage.get(index).map(|obj| obj.rigid()).flatten()
+    pub fn get_part_rigid(&self, index: MyHandle) -> Option<&RigidBody> {
+        self.parts.get(index).map(|obj| obj.rigid()).flatten()
     }
     pub fn get_part(&self, index: MyHandle) -> Option<&Part> {
-        self.storage.get(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
+        self.parts.get(index)
     }
-    pub fn get_rigid_mut(&mut self, index: MyHandle) -> Option<&mut MyRigidBody> {
-        self.storage.get_mut(index).map(|obj| obj.rigid_mut()).flatten()
+    pub fn get_part_rigid_mut(&mut self, index: MyHandle) -> Option<&mut RigidBody> {
+        self.parts.get(index).map(|obj| self.bodies.get(obj.body_handle)).flatten()
     }
     pub fn get_part_mut(&mut self, index: MyHandle) -> Option<&mut Part> {
-        self.storage.get_mut(index).map(|obj| match obj { WorldlyObject::Part(part) => Some(part), _ => None }).flatten()
+        self.storage.get_mut(index)
     }
-    pub fn delete_parts_recursive(&mut self, index: MyHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, removal_msgs: &mut Vec<ToClientMsg>) {
-        match self.storage.remove(index) {
-            Some(WorldlyObject::Part(part)) => {
+    pub fn delete_parts_recursive(&mut self, index: MyHandle, colliders: &mut ColliderSet, joints: &mut JointSet, removal_msgs: &mut Vec<ToClientMsg>) {
+        match self.parts.remove(index) {
+            Some(part) => {
                 self.removal_events.push_back(index);
                 part.delete_recursive(self, colliders, joints, removal_msgs);
             },
             None => (),
-            _ => panic!("Delete part called on non-part")
         }
     }
-    pub fn add_celestial_object(&mut self, body: MyRigidBody) -> MyHandle { self.storage.insert(WorldlyObject::CelestialObject(body)) }
+    pub fn bodies_unchecked(&self) -> &RigidBodySet { &self.bodies }
+    pub fn bodies_mut_unchecked(&mut self) -> &mut RigidBodySet { &mut self.bodies }
 
     pub fn recurse_part<'a, F>(&'a self, part_handle: MyHandle, details: PartVisitDetails, func: &mut F)
     where F: FnMut(PartVisitHandle<'a>) {
@@ -322,7 +301,7 @@ impl World {
         return None;
     }
 
-    pub fn recursive_detach_one(&mut self, parent_handle: MyHandle, attachment_slot: usize, player: &mut Option<&mut crate::PlayerMeta>, joints: &mut MyJointSet, parts_affected: &mut BTreeSet<MyHandle>) {
+    pub fn recursive_detach_one(&mut self, parent_handle: MyHandle, attachment_slot: usize, player: &mut Option<&mut crate::PlayerMeta>, joints: &mut JointSet, parts_affected: &mut BTreeSet<MyHandle>) {
         if let Some(parent) = self.get_part_mut(parent_handle) {
             if let Some(attachment_handle) = parent.detach_part_player_agnostic(attachment_slot, joints) {
                 parts_affected.insert(attachment_handle);
@@ -335,62 +314,31 @@ impl World {
             }
         }
     }
-    pub fn recursive_detach_all(&mut self, parent_handle: MyHandle, player: &mut Option<&mut crate::PlayerMeta>, joints: &mut MyJointSet, parts_affected: &mut BTreeSet<MyHandle>) {
+    pub fn recursive_detach_all(&mut self, parent_handle: MyHandle, player: &mut Option<&mut crate::PlayerMeta>, joints: &mut JointSet, parts_affected: &mut BTreeSet<MyHandle>) {
         if let Some(part) = self.get_part_mut(parent_handle) {
             for i in 0..part.attachments().len() {
                 self.recursive_detach_one(parent_handle, i, player, joints, parts_affected);
             }
         }
     }
-    pub fn remove_part_unprotected(&mut self, part_handle: MyHandle) -> Part {
-        if let Some(WorldlyObject::Part(part)) = self.storage.remove(part_handle) {
-            self.removal_events.push_back(part_handle);
-            part
-        } else { panic!("remove_part_unprotected") }
+    pub fn remove_part_unchecked(&mut self, part_handle: MyHandle) -> Part {
+        self.parts.remove(part_handle).expect("remove_part_unchecked")
     }
 
-    pub fn iter_parts_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item=(MyHandle, &'a mut Part)> + 'a> {
-        Box::new(self.storage.iter_mut().filter_map(|(handle, obj)| if let WorldlyObject::Part(part) = obj { Some((handle, part)) } else { None }))
+    pub fn iter_parts_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item=(MyHandle, &'a mut Part, &'a mut RigidBody)> + 'a> {
+        Box::new(self.parts.iter_mut().map(|(handle, part)| (handle, part, self.bodies[part.body_handle])))
     }
-}
-impl Default for World {
-    fn default() -> World { 
-        let mut storage = Arena::new();
-        let reference_point_body = nphysics2d::object::RigidBodyDesc::new().status(nphysics2d::object::BodyStatus::Static).mass(0f32).build();
-        let reference_point_body = storage.insert(WorldlyObject::CelestialObject(reference_point_body));
+
+    fn new(colliders: &mut ColliderSet) -> World { 
+        let bodies = RigidBodySet::new();
+        let reference_point_body = RigidBodyBuilder::new(BodyStatus::Static).mass(0f32).build();
+        let reference_point_body = bodies.insert(reference_point_body);
         World {
-            storage,
+            bodies,
+            parts: Arena::new(),
+            planets: planets::Planets::new(&mut bodies, colliders),
             reference_point_body,
-            removal_events: std::collections::VecDeque::<MyHandle>::new(),
         }
-    }
-}
-
-impl nphysics2d::object::BodySet<MyUnits> for World {
-    type Handle = MyHandle;
-    fn get(&self, handle: Self::Handle) -> Option<&dyn nphysics2d::object::Body<MyUnits>> {
-        if let Some(ptr) = self.get_rigid(handle) { Some(ptr) }
-        else { None }
-    }
-    fn get_mut(&mut self, handle: Self::Handle) -> Option<&mut dyn nphysics2d::object::Body<MyUnits>> {
-        if let Some(ptr) = self.get_rigid_mut(handle) { Some(ptr) }
-        else { None }
-    }
-    fn contains(&self, handle: Self::Handle) -> bool {
-        self.get_rigid(handle).is_some()
-    }
-    fn foreach(&self, f: &mut dyn FnMut(Self::Handle, &dyn nphysics2d::object::Body<MyUnits>)) {
-        for (id, obj) in &self.storage {
-            if let Some(body) = obj.rigid() { f(id, body) }
-        }
-    }
-    fn foreach_mut(&mut self, f: &mut dyn FnMut(Self::Handle, &mut dyn nphysics2d::object::Body<MyUnits>)) {
-        for (id, obj) in &mut self.storage {
-            if let Some(body) = obj.rigid_mut() { f(id, body) }
-        }
-    }
-    fn pop_removal_event(&mut self) -> Option<Self::Handle> {
-        self.removal_events.pop_front()
     }
 }
 
@@ -412,8 +360,8 @@ impl Default for PartVisitDetails {
 
 pub struct PartVisitHandle<'a> (&'a World, MyHandle, &'a Part, PartVisitDetails);
 impl<'a> PartVisitHandle<'a> {
-    pub fn get_part(&self, handle: MyHandle) -> Option<&Part> { self.0.get_part(handle) }
-    pub fn get_rigid(&self, handle: MyHandle) -> Option<&MyRigidBody> { self.0.get_rigid(handle) }
+    pub fn get_part(&self, handle: MyHandle) -> &'a Part { self.2 }
+    pub fn get_rigid(&mut self, handle: MyHandle) -> &RigidBody { self.0.get_part_rigid(self.2.body_handle).unwrap() }
     pub fn handle(&self) -> MyHandle { self.1 }
     pub fn details(&self) -> &PartVisitDetails { &self.3 }
 }
@@ -424,9 +372,9 @@ impl<'a> Deref for PartVisitHandle<'a> {
 pub struct PartVisitHandleMut<'a> (&'a mut World, MyHandle, PartVisitDetails);
 impl<'a> PartVisitHandleMut<'a> {
     pub fn get_part(&self, handle: MyHandle) -> Option<&Part> { self.0.get_part(handle) }
-    pub fn get_rigid(&self, handle: MyHandle) -> Option<&MyRigidBody> { self.0.get_rigid(handle) }
+    pub fn get_rigid(&self, handle: MyHandle) -> Option<&RigidBody> { self.0.get_part_rigid(handle) }
     pub fn get_part_mut(&mut self, handle: MyHandle) -> Option<&mut Part> { self.0.get_part_mut(handle) }
-    pub fn get_rigid_mut(&mut self, handle: MyHandle) -> Option<&mut MyRigidBody> { self.0.get_rigid_mut(handle) }
+    pub fn get_rigid_mut(&mut self, handle: MyHandle) -> Option<&mut RigidBody> { self.0.get_rigid_mut(handle) }
     pub fn handle(&self) -> MyHandle { self.1 }
     pub fn details(&self) -> &PartVisitDetails { &self.2 }
 }
