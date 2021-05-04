@@ -1,4 +1,3 @@
-#[macro_use] extern crate serde_derive;
 #[macro_use] extern crate lazy_static;
 use async_std::prelude::*;
 use std::net::SocketAddr;
@@ -13,7 +12,7 @@ use nalgebra::Vector2; use nalgebra::geometry::{Isometry2, UnitComplex};
 use ncollide2d::pipeline::object::CollisionGroups;
 use std::sync::Arc;
 use std::any::Any;
-use async_std::sync::{Sender, Receiver, channel};
+use async_std::channel::{Sender, Receiver, channel};
 use nphysics2d::object::Body;
 use async_std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
@@ -84,7 +83,7 @@ async fn main() {
     let signals = signal_hook_async_std::Signals::new(&[signal_hook::consts::SIGQUIT, signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT]).expect("Failed to do signals");
 
     struct EventSource {
-        pub inbound: async_std::sync::Receiver<session::ToGameEvent>,
+        pub inbound: async_std::channel::Receiver<session::ToGameEvent>,
         pub ticker: async_std::stream::Interval,
         pub signals: signal_hook_async_std::Signals,
     }

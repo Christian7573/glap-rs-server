@@ -4,7 +4,7 @@ use std::task::{Poll, Context};
 use async_std::prelude::*;
 use futures::select_biased;
 use async_std::net::{TcpStream, TcpListener};
-use async_std::sync::{Sender, Receiver, channel};
+use async_std::channel::{Sender, Receiver, channel};
 use futures::{Sink, SinkExt, Stream, StreamExt, FutureExt};
 use nphysics2d::object::{Body, BodySet, RigidBody};
 use super::world::nphysics_types::{MyHandle, MyUnits};
