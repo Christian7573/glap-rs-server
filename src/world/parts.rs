@@ -1,15 +1,14 @@
-use nphysics2d::object::{RigidBody, Body, RigidBodyDesc, Collider, ColliderDesc, BodyPartHandle, BodyStatus, DefaultColliderHandle};
+use rapier2d::dynamics::{RigidBody, RigidBodyBuilder, RigidBodyHandle, Joint, JointHandle, BodyStatus};
 use nphysics2d::algebra::{Force2, ForceType, Inertia2};
-use nalgebra::{Vector2, Point2};
-use ncollide2d::shape::{Cuboid, ShapeHandle};
-use super::{MyUnits, MyHandle};
+use rapier2d::na::{Vector2, Point2};
+use super::{MyUnits, PartHandle};
 use num_traits::identities::{Zero, One};
 use ncollide2d::pipeline::object::CollisionGroups;
 use nphysics2d::joint::DefaultJointConstraintHandle;
-use super::nphysics_types::*;
+use super::typedef::*;
 use crate::PlayerMeta;
 use crate::codec::ToClientMsg;
-use super::{WorldAddHandle, World, WorldlyObject};
+use super::{WorldAddHandle, World};
 use crate::session::WorldUpdatePartMove;
 use std::sync::atomic::{AtomicU16, Ordering as AtomicOrdering};
 
@@ -40,16 +39,16 @@ pub struct Part {
     part_of_player: Option<u16>,
 }
 pub struct PartAttachment {
-    part: MyHandle,
+    part: PartHandle,
     connections: (DefaultJointConstraintHandle, DefaultJointConstraintHandle),
     //connections: DefaultJointConstraintHandle,
 }
 
 impl RecursivePartDescription {
-    pub fn inflate(&self, bodies: &mut WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry) -> MyHandle {
+    pub fn inflate(&self, bodies: &mut WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry) -> PartHandle {
         self.inflate_component(bodies, colliders, joints, initial_location, AttachedPartFacing::Up, 0, 0, None)        
     }
-    pub fn inflate_component(&self, bodies: &mut WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry, true_facing: AttachedPartFacing, rel_part_x: i32, rel_part_y: i32, id: Option<u16>) -> MyHandle {
+    pub fn inflate_component(&self, bodies: &mut WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry, true_facing: AttachedPartFacing, rel_part_x: i32, rel_part_y: i32, id: Option<u16>) -> PartHandle {
         let (body_desc, collider_desc) = self.kind.physics_components();
         let mut body = body_desc.build();
         body.set_position(initial_location.clone());
@@ -102,10 +101,10 @@ impl Part {
         self.part_of_player = None;
     }
     pub fn part_of_player(&self) -> Option<u16> { self.part_of_player }
-    pub fn mutate(mut self, mutate_into: PartKind, player: &mut Option<&mut PlayerMeta>, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet) -> MyHandle {
+    pub fn mutate(mut self, mutate_into: PartKind, player: &mut Option<&mut PlayerMeta>, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet) -> PartHandle {
         if let Some(player) = player { self.remove_from(player); }
         let mut old_attachments = self.attachments;
-        let mut raw_attachments: [Option<MyHandle>; 4] = [None, None, None, None];
+        let mut raw_attachments: [Option<PartHandle>; 4] = [None, None, None, None];
         for i in 0..4 {
             if let Some(attachment) = std::mem::replace(&mut old_attachments[i], None) {
                 raw_attachments[i] = Some(attachment.deflate(joints));
@@ -133,12 +132,12 @@ impl Part {
         }
     }
 
-    pub fn attach_part_player_agnostic(&mut self, attachment_slot: usize, part_handle: MyHandle, my_handle: MyHandle, joints: &mut MyJointSet) {
+    pub fn attach_part_player_agnostic(&mut self, attachment_slot: usize, part_handle: PartHandle, my_handle: PartHandle, joints: &mut MyJointSet) {
         //if self.kind.attachment_locations()[attachment_slot].is_none() { panic!("Can't attach to that slot") };
         if self.attachments[attachment_slot].is_some() { panic!("Already attached there"); }
         self.attachments[attachment_slot] = Some(PartAttachment::inflate(part_handle, self.kind, my_handle, attachment_slot, joints));
     }
-    pub fn detach_part_player_agnostic(&mut self, attachment_slot: usize, joints: &mut MyJointSet) -> Option<MyHandle> {
+    pub fn detach_part_player_agnostic(&mut self, attachment_slot: usize, joints: &mut MyJointSet) -> Option<PartHandle> {
         if let Some(part_attachment) = std::mem::replace(&mut self.attachments[attachment_slot], None) {
             Some(part_attachment.deflate(joints))
         } else { None }
@@ -177,7 +176,7 @@ impl Part {
         }
     }
 
-    pub fn find_cargo_recursive(&self, bodies: &MyBodySet) -> Option<(Option<MyHandle>, usize)> {
+    pub fn find_cargo_recursive(&self, bodies: &MyBodySet) -> Option<(Option<PartHandle>, usize)> {
         for (i, attachment) in self.attachments.iter().enumerate() {
             if let Some(attachment) = attachment {
                 let part = bodies.get_part(**attachment).expect("find_cargo_recursive: attached to body that didn't exist");
@@ -248,7 +247,7 @@ impl PartAttachment {
         }
     }
 
-    pub fn inflate(part: MyHandle, parent: PartKind, parent_body_handle: MyHandle, attachment_slot: usize, joints: &mut MyJointSet) -> PartAttachment {
+    pub fn inflate(part: PartHandle, parent: PartKind, parent_body_handle: PartHandle, attachment_slot: usize, joints: &mut MyJointSet) -> PartAttachment {
         use nphysics2d::math::Point;
         let attachment = parent.attachment_locations()[attachment_slot].expect("PartAttachment tried to inflate on invalid slot");
         const HALF_CONNECTION_WIDTH: f32 = 0.5;
@@ -282,7 +281,7 @@ impl PartAttachment {
         }
     }
 
-    pub fn deflate(self, joints: &mut MyJointSet) -> MyHandle {
+    pub fn deflate(self, joints: &mut MyJointSet) -> PartHandle {
         joints.remove(self.connections.0);
         joints.remove(self.connections.1);
         self.part
@@ -295,8 +294,8 @@ impl PartAttachment {
 }
 
 impl std::ops::Deref for PartAttachment {
-    type Target = MyHandle;
-    fn deref(&self) -> &MyHandle { &self.part }
+    type Target = PartHandle;
+    fn deref(&self) -> &PartHandle { &self.part }
 }
 
 pub use crate::codec::PartKind;

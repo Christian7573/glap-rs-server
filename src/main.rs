@@ -662,7 +662,7 @@ async fn main() {
 }
 
 
-fn recursive_broken_detach(root: MyHandle, simulation: &mut world::Simulation, free_parts: &mut BTreeMap<u16, FreePart>, player: &mut Option<&mut PlayerMeta>, out: &mut Vec<ToSerializerEvent> ) {
+fn recursive_broken_detach(root: PartHandle, simulation: &mut world::Simulation, free_parts: &mut BTreeMap<u16, FreePart>, player: &mut Option<&mut PlayerMeta>, out: &mut Vec<ToSerializerEvent> ) {
     let mut broken_parts = Vec::new();
     let world = &mut simulation.world;
     let joints = &mut simulation.joints;
@@ -699,9 +699,9 @@ fn recursive_broken_detach(root: MyHandle, simulation: &mut world::Simulation, f
 }
 
 enum FreePart {
-    Decaying(MyHandle, u16),
-    EarthCargo(MyHandle, u16),
-    Grabbed(MyHandle),
+    Decaying(PartHandle, u16),
+    EarthCargo(PartHandle, u16),
+    Grabbed(PartHandle),
     PlaceholderLol,
 }
 
@@ -721,8 +721,8 @@ impl FreePart {
     }
 }
 impl std::ops::Deref for FreePart {
-    type Target = MyHandle;
-    fn deref(&self) -> &MyHandle {
+    type Target = PartHandle;
+    fn deref(&self) -> &PartHandle {
         match self {
             FreePart::Decaying(handle, _) | FreePart::EarthCargo(handle, _) | FreePart::Grabbed(handle) => handle,
             FreePart::PlaceholderLol => panic!("how did we get here")
@@ -740,7 +740,7 @@ pub struct PlayerMeta {
     pub name: String,
     pub beamout_token: Option<String>, 
 
-    pub core: MyHandle,
+    pub core: PartHandle,
     pub thrust_forwards: bool,
     pub thrust_backwards: bool,
     pub thrust_clockwise: bool,
@@ -754,11 +754,11 @@ pub struct PlayerMeta {
 
     pub touching_planet: Option<u16>,
     ticks_til_cargo_transform: u8,
-    parts_touching_planet: BTreeSet<MyHandle>,
+    parts_touching_planet: BTreeSet<PartHandle>,
     can_beamout: bool,
 }
 impl PlayerMeta {
-    fn new(my_id: u16, core_handle: MyHandle, name: String, beamout_token: Option<String>) -> PlayerMeta { PlayerMeta {
+    fn new(my_id: u16, core_handle: PartHandle, name: String, beamout_token: Option<String>) -> PlayerMeta { PlayerMeta {
         id: my_id,
         core: core_handle,
         name,

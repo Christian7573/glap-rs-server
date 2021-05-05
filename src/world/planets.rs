@@ -1,4 +1,4 @@
-use super::{MyUnits, MyHandle};
+use super::{MyUnits, PartHandle};
 use nphysics2d::object::{RigidBody, RigidBodyDesc, BodyStatus, BodyPartHandle};
 use nphysics2d::object::ColliderDesc;
 use ncollide2d::shape::{Ball, ShapeHandle};
@@ -470,7 +470,7 @@ pub struct CelestialObject {
     pub name: String,
     pub display_name: String,
     pub radius: f32,
-    pub body: MyHandle,
+    pub body: PartHandle,
     pub id: u16,
     pub cargo_upgrade: Option<super::parts::PartKind>,
     pub can_beamout: bool,
