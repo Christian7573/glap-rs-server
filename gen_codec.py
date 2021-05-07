@@ -1,3 +1,4 @@
+#!/usr/bin/python
 class BasicType:
     def __init__(self, rust_name, rust_method, typescript_name, typescript_method):
         self._rust_signature = rust_name
@@ -101,7 +102,22 @@ PartKind = Enum("PartKind", [
 ])
 enums.append(PartKind)
 TypePartKind = EnumType("PartKind")
-
+PlanetKind = Enum("PlanetKind", [
+    "Earth",
+    "Venus",
+    "Mars",
+    "Moon",
+    "Sun",
+    "Mercury",
+    "Neptune",
+    "Uranus",
+    "Jupiter",
+    "Saturn",
+    "Pluto",
+    "Trade",
+])
+enums.append(PlanetKind)
+TypePlanetKind = EnumType("PlanetKind")
 
 ToServerMsg = MessageCategory("ToServerMsg")
 categories.append(ToServerMsg)
@@ -158,12 +174,22 @@ HandshakeAccepted.fields.append(Field("can_beamout", TypeBoolean))
 ToClientMsg.messages.append(HandshakeAccepted)
 
 AddCelestialObject = Message("AddCelestialObject")
-AddCelestialObject.fields.append(Field("name", TypeString))
-AddCelestialObject.fields.append(Field("display_name", TypeString))
+AddCelestialObject.fields.append(Field("id", TypeUByte))
+AddCelestialObject.fields.append(Field("kind", TypePlanetKind))
 AddCelestialObject.fields.append(Field("radius", TypeFloat))
-AddCelestialObject.fields.append(Field("id", TypeUShort))
-AddCelestialObject.fields.append(Field("position", TypeFloatPair))
 ToClientMsg.messages.append(AddCelestialObject)
+
+InitCelestialOrbit = Message("InitCelestialOrbit")
+InitCelestialOrbit.fields.append(Field("id", TypeUByte))
+InitCelestialOrbit.fields.append(Field("orbit_around_body", TypeFloat))
+InitCelestialOrbit.fields.append(Field("orbit_radius", TypeFloatPair))
+InitCelestialOrbit.fields.append(Field("orbit_rotation", TypeFloat))
+InitCelestialOrbit.fields.append(Field("orbit_total_ticks", TypeUInt))
+
+UpdateCelestialOrbit = Message("UpdateCelestialOrbit")
+UpdateCelestialOrbit.fields.append(Field("id", TypeUByte))
+UpdateCelestialOrbit.fields.append(Field("orbit_progress", TypeUInt))
+ToClientMsg.messages.append(UpdateCelestialOrbit)
 
 AddPart = Message("AddPart")
 AddPart.fields.append(Field("id", TypeUShort))

@@ -1,131 +1,130 @@
 use super::{MyUnits, PartHandle};
+use std::collections::BTreeMap;
 use rapier2d::dynamics::{RigidBody, RigidBodyBuilder, BodyStatus, RigidBodyHandle, RigidBodySet};
-use rapier2d::geometry::{ColliderBuilder, SharedShape, Collider};
-use nphysics2d::material::{BasicMaterial, MaterialHandle};
+use rapier2d::geometry::{ColliderBuilder, SharedShape, Collider, ColliderSet, ColliderHandle};
 use super::typedef::*;
+use crate::codec::PlanetKind;
 use rand::Rng;
 use super::parts::PartKind;
 
 pub struct Planets {
-    pub earth: CelestialObject,
-    pub moon: CelestialObject,
-    pub planet_material: MaterialHandle<MyUnits>,
-    pub mars: CelestialObject,
-    pub mercury: CelestialObject,
-    pub jupiter: CelestialObject,
-    //pub pluto: CelestialObject,
-    pub saturn: CelestialObject,
-    pub neptune: CelestialObject,
-    pub venus: CelestialObject,
-    pub uranus: CelestialObject,
-    pub sun: CelestialObject,
-    //pub trade: CelestialObject,
+    planets: BTreeMap<u8, CelestialObject>
 }
 impl Planets {
-    pub fn new(colliders: &mut super::MyColliderSet, bodies: &mut super::World) -> Planets {
+    pub fn new(world: &mut super::World, colliders: &mut ColliderSet) -> Planets {
         const EARTH_MASS: f32 = 600.0;
         const EARTH_SIZE: f32 = 25.0;
-        let earth_pos = planet_location(1500.0);
-        let planet_material = MaterialHandle::new(BasicMaterial::new(0.0, 1.0));
-        let earth = {
-            let body = RigidBodyDesc::new()
-            .translation(earth_pos.clone())
+        let bodies = &mut world.bodies;
+
+        let mut planets = BTreeMap::new();
+
+        let sun_id = make_planet_id();
+        let earth_id = make_planet_id();
+        let sun = {
+            let id = sun_id;
+            let mass = EARTH_MASS * 50.0;
+            let body = RigidBodyBuilder::new_static()
                 .gravity_enabled(false)
-                .status(BodyStatus::Static)
-                .mass(EARTH_MASS)
+                .mass(EARTH_MASS * 50.0)
+				.user_data(AmPlanet {id})
                 .build();
-            let position = (body.position().translation.x, body.position().translation.y);
-            let mass = body.augmented_mass().linear;
+            let body_handle = bodies.add_celestial_object(body);
+            const RADIUS: f32 = EARTH_SIZE * 4.7;
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            colliders.insert(collider, body_handle, bodies);
+
+            CelestialObject {
+                kind: PlanetKind::Sun,
+                orbit: None,
+                radius: RADIUS,
+                mass,
+                cargo_upgrade: None,
+                can_beamout: false,
+                body_handle,
+            }
+        };
+
+        let earth = {
+			let id = earth_id;
+            let mass = EARTH_MASS;
+            let body = RigidBodyBuilder::new_kinematic()
+                .gravity_enabled(false)
+                .mass(mass)
+				.user_data(AmPlanet {id})
+                .build();
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE;
-            let shape = ShapeHandle::new(Ball::new(RADIUS));
-			let id = make_planet_id();
-            let collider = ColliderDesc::new(shape)
-                .material(planet_material.clone())
-				.user_data(AmPlanet {id})
-                .build(BodyPartHandle(body_handle, 0));
-            colliders.insert(collider);
-
-            
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            colliders.insert(collider, body_handle, bodies);
             
             CelestialObject {
-                name: String::from("earth"),
-                display_name: String::from("Earth"),
+                kind: PlanetKind::Earth,
+                orbit: Some(Orbit {
+                    orbit_around: sun_id,
+                    radius: (1500.0, 1500.0),
+                    rotation: 0,
+                }),
                 radius: RADIUS,
-                body: body_handle,
-                id,
+                mass,
                 cargo_upgrade: None,
                 can_beamout: true,
-                position: (earth_pos.x, earth_pos.y),
-                mass,
+                body_handle,
             }
         };
 
         let moon = {
-            let body = RigidBodyDesc::new()
-            .translation(planet_location(100.0) + earth_pos.clone())
+            let id = make_planet_id();
+            let mass = EARTH_MASS / 35.0;
+            let body = RigidBodyBuilder::new_dynamic()
                 .gravity_enabled(false)
-                .status(BodyStatus::Static)
-                .mass(EARTH_MASS / 35.0)
+                .mass(mass)
+				.user_data(AmPlanet {id})
                 .build();
-            let position = (body.position().translation.x, body.position().translation.y);
-            let mass = body.augmented_mass().linear;
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE / 4.0;
-            let shape = ShapeHandle::new(Ball::new(RADIUS));
-			let id = make_planet_id();
-            let collider = ColliderDesc::new(shape)
-                .material(planet_material.clone())
-				.user_data(AmPlanet {id})
-                .build(BodyPartHandle(body_handle, 0));
-            colliders.insert(collider);
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS));
+            colliders.insert(collider, body_handle, bodies);
 
-            
-            
             CelestialObject {
-                name: String::from("moon"),
-                display_name: String::from("Moon"),
+                kind: PlanetKind::Moon,
+                orbit: Some(Orbit {
+                    orbit_around: earth_id,
+                    radius: (100.0, 100.0),
+                    rotation: 0.0,
+                }),
                 radius: RADIUS,
-                body: body_handle,
-                id,
+                mass,
                 cargo_upgrade: Some(super::parts::PartKind::LandingThruster),
                 can_beamout: true,
-                position,
-                mass,
+                body_handle,
             }
         };
 
         let mars = {
-            let body = RigidBodyDesc::new()
-                .translation(planet_location(2000.0))
+			let id = make_planet_id();
+            let mass = EARTH_MASS / 4.0;
+            let body = RigidBodyBuilder::new_dynamic()
                 .gravity_enabled(false)
-                .status(BodyStatus::Static)
-                .mass(EARTH_MASS / 4.0)
+                .mass(mass)
+				.user_data(AmPlanet {id})
                 .build();
-            let position = (body.position().translation.x, body.position().translation.y);
-            let mass = body.augmented_mass().linear;
             let body_handle = bodies.add_celestial_object(body);
             const RADIUS: f32 = EARTH_SIZE / 2.0;
-            let shape = ShapeHandle::new(Ball::new(RADIUS));
-			let id = make_planet_id();
-            let collider = ColliderDesc::new(shape)
-                .material(planet_material.clone())
-				.user_data(AmPlanet {id})
-                .build(BodyPartHandle(body_handle, 0));
-            colliders.insert(collider);
-
-            
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            colliders.insert(collider, body_handle, bodies);
             
             CelestialObject {
-                name: String::from("mars"),
-                display_name: String::from("Mars"),
+                kind: PlanetKind::Mars,
+                orbit: Some(Orbit {
+                    orbit_around: sun_id,
+                    radius: (2000.0, 2000.0),
+                    rotation: 0.0,
+                }),
                 radius: RADIUS,
-                body: body_handle,
-                id,
                 cargo_upgrade: Some(super::parts::PartKind::Hub),
                 can_beamout: false,
-                position,
                 mass,
+                body_handle,
             }
         };
 
@@ -197,7 +196,7 @@ impl Planets {
             }
         };
 
-        /*let pluto = {
+        let pluto = {
             let body = RigidBodyDesc::new()
                 .translation(planet_location(6000.0))
                 .gravity_enabled(false)
@@ -229,7 +228,7 @@ impl Planets {
                 position,
                 mass,
             }
-        };*/
+        };
 
         let saturn = {
             let body = RigidBodyDesc::new()
@@ -367,41 +366,8 @@ impl Planets {
             }
         };
 
-        let sun = {
-            let body = RigidBodyDesc::new()
-                .translation(Vector2::new(0.0,0.0))
-                .gravity_enabled(false)
-                .status(BodyStatus::Static)
-                .mass(EARTH_MASS * 50.0)
-                .build();
-            let position = (body.position().translation.x, body.position().translation.y);
-            let mass = body.augmented_mass().linear;
-            let body_handle = bodies.add_celestial_object(body);
-            const RADIUS: f32 = EARTH_SIZE * 4.7;
-            let shape = ShapeHandle::new(Ball::new(RADIUS));
-			let id = make_planet_id();
-            let collider = ColliderDesc::new(shape)
-                .material(planet_material.clone())
-				.user_data(AmPlanet {id})
-                .build(BodyPartHandle(body_handle, 0));
-            colliders.insert(collider);
 
-            
-            
-            CelestialObject {
-                name: String::from("sun"),
-                display_name: String::from("sun"),
-                radius: RADIUS,
-                body: body_handle,
-                id,
-                cargo_upgrade: None,
-                can_beamout: false,
-                position,
-                mass,
-            }
-        };
-
-        /*let trade = {
+        let trade = {
             let body = RigidBodyDesc::new()
                 .translation(Vector2::new(earth_pos.x / earth_pos.magnitude() * -2500.0, earth_pos.y / earth_pos.magnitude() * -2500.0))
                 .gravity_enabled(false)
@@ -433,7 +399,7 @@ impl Planets {
                 position,
                 mass,
             }
-        };*/
+        };
 
         Planets {
             earth, moon, planet_material, mars, mercury, jupiter, /* pluto, */ saturn, neptune, venus, uranus, sun, /* trade, */
@@ -466,22 +432,18 @@ fn make_planet_id() -> u16 {
 }
 
 pub struct CelestialObject {
-    pub name: String,
-    pub display_name: String,
+    pub kind: PlanetKind,
+    pub orbit: Option<Orbit>,
     pub radius: f32,
-    pub body: PartHandle,
-    pub id: u16,
+    pub mass: f32,
     pub cargo_upgrade: Option<super::parts::PartKind>,
     pub can_beamout: bool,
-    pub position: (f32, f32),
-    pub mass: f32,
+    pub body_handle: RigidBodyHandle,
 }
-
-pub fn planet_location(radius: f32) -> nalgebra::Matrix<f32, nalgebra::U2, nalgebra::U1, nalgebra::ArrayStorage<f32, nalgebra::U2, nalgebra::U1>> {
-    let mut rng = rand::thread_rng();
-    let angle: f32 = rng.gen::<f32>() * std::f32::consts::PI * 2.0;
-    let pos = Vector2::new(f32::cos(angle) * radius, f32::sin(angle) * radius);
-    pos
+pub struct Orbit {
+    orbit_around: u8,
+    radius: (f32, f32),
+    rotation: f32,
 }
 
 #[derive(Copy, Clone)]
