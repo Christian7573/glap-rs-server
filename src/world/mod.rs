@@ -64,7 +64,7 @@ impl Simulation {
 
 
     pub fn simulate(&mut self, events: &mut Vec<SimulationEvent>) {
-        self.celestial_gravity();
+        self.world.celestial_gravity();
         self.mechanics.step(&mut self.geometry, &mut self.world, &mut self.colliders, &mut self.joints, &mut self.persistant_forces);
         for contact_event in self.geometry.contact_events() {
             match contact_event {

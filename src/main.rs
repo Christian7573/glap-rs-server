@@ -6,14 +6,12 @@ use std::pin::Pin;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::task::Poll;
 use rand::Rng;
-use world::nphysics_types::*;
+use world::typedef::*;
 use world::parts::{Part, AttachedPartFacing};
-use nalgebra::Vector2; use nalgebra::geometry::{Isometry2, UnitComplex};
-use ncollide2d::pipeline::object::CollisionGroups;
+use nalgebra::geometry::{Isometry2, UnitComplex};
 use std::sync::Arc;
 use std::any::Any;
-use async_std::channel::{Sender, Receiver, channel};
-use nphysics2d::object::Body;
+use async_std::channel::{Sender, Receiver, bounded as channel};
 use async_std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 

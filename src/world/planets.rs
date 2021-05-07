@@ -1,9 +1,8 @@
 use super::{MyUnits, PartHandle};
-use nphysics2d::object::{RigidBody, RigidBodyDesc, BodyStatus, BodyPartHandle};
-use nphysics2d::object::ColliderDesc;
-use ncollide2d::shape::{Ball, ShapeHandle};
-use nalgebra::Vector2;
+use rapier2d::dynamics::{RigidBody, RigidBodyBuilder, BodyStatus, RigidBodyHandle, RigidBodySet};
+use rapier2d::geometry::{ColliderBuilder, SharedShape, Collider};
 use nphysics2d::material::{BasicMaterial, MaterialHandle};
+use super::typedef::*;
 use rand::Rng;
 use super::parts::PartKind;
 
