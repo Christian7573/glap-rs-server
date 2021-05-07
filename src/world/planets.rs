@@ -26,7 +26,7 @@ impl Planets {
     pub fn new(colliders: &mut super::MyColliderSet, bodies: &mut super::World) -> Planets {
         const EARTH_MASS: f32 = 600.0;
         const EARTH_SIZE: f32 = 25.0;
-        let earth_pos = planet_location(1500.0);
+        let earth_pos = planet_location(1496.0);
         let planet_material = MaterialHandle::new(BasicMaterial::new(0.0, 1.0));
         let earth = {
             let body = RigidBodyDesc::new()
@@ -98,7 +98,7 @@ impl Planets {
 
         let mars = {
             let body = RigidBodyDesc::new()
-                .translation(planet_location(2000.0))
+                .translation(planet_location(2279.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 4.0)
@@ -132,7 +132,7 @@ impl Planets {
 
         let mercury = {
             let body = RigidBodyDesc::new()
-                .translation(planet_location(500.0))
+                .translation(planet_location(579))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 15.0)
@@ -166,7 +166,7 @@ impl Planets {
 
         let jupiter = {
             let body = RigidBodyDesc::new()
-                .translation(planet_location(3500.0))
+                .translation(planet_location(7784.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 10.0)
@@ -200,7 +200,7 @@ impl Planets {
 
         /*let pluto = {
             let body = RigidBodyDesc::new()
-                .translation(planet_location(6000.0))
+                .translation(planet_location(59064.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS / 10.0)
@@ -234,7 +234,7 @@ impl Planets {
 
         let saturn = {
             let body = RigidBodyDesc::new()
-                .translation(planet_location(4000.0))
+                .translation(planet_location(14270.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 10.0)
@@ -268,7 +268,7 @@ impl Planets {
 
         let neptune = {
             let body = RigidBodyDesc::new()
-                .translation(planet_location(5500.0))
+                .translation(planet_location(44970.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 4.0)
@@ -302,7 +302,7 @@ impl Planets {
 
         let venus = {
             let body = RigidBodyDesc::new()
-                .translation(planet_location(1000.0))
+                .translation(planet_location(1081.6))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 1.3)
@@ -336,7 +336,7 @@ impl Planets {
 
         let uranus = {
             let body = RigidBodyDesc::new()
-                .translation(planet_location(4800.0))
+                .translation(planet_location(28707.0))
                 .gravity_enabled(false)
                 .status(BodyStatus::Static)
                 .mass(EARTH_MASS * 4.0)
