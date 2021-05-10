@@ -69,7 +69,7 @@ async fn main() {
 
     const TIMESTEP: f32 = 1.0/(TICKS_PER_SECOND as f32);
     let ticker = async_std::stream::interval(std::time::Duration::from_secs_f32(TIMESTEP));
-    let mut simulation = world::Simulation::new(TIMESTEP);
+    let mut simulation = world::Simulation::new(TIMESTEP, 3);
 
     let mut players: BTreeMap<u16, PlayerMeta> = BTreeMap::new();
     let mut free_parts: BTreeMap<u16, FreePart> = BTreeMap::new();
@@ -124,7 +124,7 @@ async fn main() {
                         FreePart::EarthCargo(part, ticks) => {
                             *ticks -= 1;
                             if *ticks < 1 {
-                                let earth_position = simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
+                                let earth_position = simulation.world.bodies_unchecked()[simulation.world.planets.planets[&simulation.world.planets.earth_id].body_handle].position().translation;
                                 let part = simulation.world.get_part_mut(*part).expect("Invalid Earth Cargo");
                                 let body = part.body_mut();
                                 let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
@@ -149,10 +149,10 @@ async fn main() {
                     if ticks_til_earth_cargo_spawn == 0 {
                         ticks_til_earth_cargo_spawn = TICKS_PER_EARTH_CARGO_SPAWN;
                         earth_cargos += 1; 
-                        let earth_position = simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation;
+                        let earth_position = simulation.world.bodies_unchecked()[simulation.world.planets.planets[&simulation.world.planets.earth_id].body_handle].position().translation;
                         let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
-                        let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
-                        let spawn_pos = Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0);
+                        let spawn_radius = simulation.world.planets.planets[&simulation.world.planets.earth_id].radius * 1.25 + 1.0;
+                        let spawn_pos = Isometry::new(Vector::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0);
                         let part_handle = RecursivePartDescription::from(PartKind::Cargo).inflate(&mut (&mut simulation.world).into(), &mut simulation.colliders, &mut simulation.joints, spawn_pos);
                         let part = simulation.world.get_part(part_handle).unwrap();
                         let part_id = part.id();
@@ -193,13 +193,13 @@ async fn main() {
                         player.ticks_til_cargo_transform -= 1;
                         if player.ticks_til_cargo_transform < 1 {
                             player.ticks_til_cargo_transform = TICKS_PER_CARGO_UPGRADE;
-                            if let Some(upgrade_into) = simulation.planets.get_celestial_object(planet_id).unwrap().cargo_upgrade {
+                            if let Some(upgrade_into) = simulation.world.planets.planets[&planet_id].cargo_upgrade {
                                 let core = simulation.world.get_part(player.core).expect("Player iter invalid core part");
                                 if let Some((parent_part_handle, slot)) = core.find_cargo_recursive(&simulation.world) {
                                     let parent_part_handle = parent_part_handle.unwrap_or(player.core);
                                     let parent_part = simulation.world.get_part_mut(parent_part_handle).unwrap();
                                     let old_part_handle = parent_part.detach_part_player_agnostic(slot, &mut simulation.joints).unwrap();
-                                    let old_part = simulation.world.remove_part_unprotected(old_part_handle);
+                                    let old_part = simulation.world.remove_part_unchecked(old_part_handle);
                                     outbound_events.push(ToSerializer::Broadcast(old_part.remove_msg()));
                                     if player.parts_touching_planet.remove(&old_part_handle) {
                                         if player.parts_touching_planet.is_empty() { 
@@ -234,7 +234,7 @@ async fn main() {
                         PlayerTouchPlanet{ player, planet, part } => {
                             let player_id = player;
                             if let Some(player) = players.get_mut(&player) {
-                                if planet == simulation.planets.sun.id {
+                                if planet == simulation.world.planets.sun_id {
                                     //Kill player
                                     outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::IncinerationAnimation{ player_id }));
                                     let my_to_serializer = to_serializer.clone();
@@ -249,13 +249,13 @@ async fn main() {
                                     });
                                 } else {
                                     player.touching_planet = Some(planet);
-                                    player.can_beamout = simulation.planets.get_celestial_object(planet).unwrap().can_beamout;
+                                    player.can_beamout = simulation.world.planets.planets[&planet].can_beamout;
                                     player.ticks_til_cargo_transform = TICKS_PER_SECOND;
                                     player.parts_touching_planet.insert(part);
                                     player.power = player.max_power;
                                     outbound_events.push(ToSerializer::Message(player_id, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
                                 }
-                            } else if planet == simulation.planets.sun.id {
+                            } else if planet == simulation.world.planets.sun_id {
                                 if let Some(part) = simulation.world.get_part(part) {
                                     outbound_events.push(ToSerializer::Broadcast(part.remove_msg()));
                                 }
@@ -293,7 +293,7 @@ async fn main() {
                         out
                     },
                     free_parts.iter().map(|(id, meta)| {
-                        let body = simulation.world.get_rigid(**meta).unwrap();
+                        let body = simulation.world.get_part_rigid(**meta).unwrap();
                         let position = body.position();
                         session::WorldUpdatePartMove {
                             id: *id,
@@ -377,20 +377,20 @@ async fn main() {
             
             Event::InboundEvent(NewPlayer{ id, name, parts, beamout_token }) => { 
                 println!("New Player {} with id {}", name, id);
-                let earth_position = simulation.world.get_rigid(simulation.planets.earth.body).unwrap().position().translation.vector;
-                let earth_radius = simulation.planets.earth.radius;
+                let earth_position = simulation.world.bodies_unchecked()[simulation.world.planets.planets[&simulation.world.planets.earth_id].body_handle].position().translation;
+                let earth_radius = simulation.world.planets.planets[&simulation.world.planets.earth_id].radius;
                 use rand::Rng;
 
                 let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
-                let core_handle = simulation.inflate(&parts, Isometry2::new(Vector2::new(0.0,0.0), spawn_degrees - std::f32::consts::FRAC_PI_2));
+                let core_handle = simulation.inflate(&parts, Isometry::new(Vector::new(0.0,0.0), spawn_degrees - std::f32::consts::FRAC_PI_2));
                 let mut max_extent: i32 = 1;
                 simulation.world.recurse_part(core_handle, Default::default(), &mut |handle: world::PartVisitHandle| max_extent = max_extent.min(handle.details().part_rel_y));
                 let max_extent = max_extent as f32 / 3.0;
                 let spawn_radius: f32 = earth_radius * 1.25 + 1.0 + max_extent.abs();
-                let spawn_center = (Vector2::new(spawn_degrees.cos(), spawn_degrees.sin()) * spawn_radius) + earth_position;
+                let spawn_center = (Vector::new(spawn_degrees.cos(), spawn_degrees.sin()) * spawn_radius) + earth_position;
                 simulation.world.recurse_part_mut(core_handle, Default::default(), &mut |mut handle: world::PartVisitHandleMut| {
                     let part = &mut handle;
-                    let new_pos = Isometry2::new(
+                    let new_pos = Isometry::new(
                         part.body().position().translation.vector.clone() + spawn_center,
                         part.body().position().rotation.angle()
                     );
@@ -418,11 +418,10 @@ async fn main() {
             },
             Event::InboundEvent(SendEntireWorld{ to_player, send_self }) => {
                 //Send over celestial object locations
-                for planet in simulation.planets.celestial_objects().iter() {
-                    let position = simulation.world.get_rigid(planet.body).unwrap().position().translation;
+                for (id, planet) in simulation.world.planets.planets.iter() {
+                    let position = simulation.world.bodies_unchecked()[planet.body_handle].position().translation;
                     outbound_events.push(ToSerializer::Message(to_player, ToClientMsg::AddCelestialObject {
-                        name: planet.name.clone(), display_name: planet.name.clone(),
-                        id: planet.id, radius: planet.radius, position: (position.x, position.y)
+                        id: *id, radius: planet.radius, position: (position.x, position.y)
                     }));
                 }
 
@@ -749,7 +748,7 @@ pub struct PlayerMeta {
 
     pub grabbed_part: Option<(u16, nphysics2d::joint::DefaultJointConstraintHandle, f32, f32)>,
 
-    pub touching_planet: Option<u16>,
+    pub touching_planet: Option<u8>,
     ticks_til_cargo_transform: u8,
     parts_touching_planet: BTreeSet<PartHandle>,
     can_beamout: bool,

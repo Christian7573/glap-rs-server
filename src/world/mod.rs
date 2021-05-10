@@ -37,8 +37,8 @@ pub struct Simulation {
     steps_per_batch: u8,
 }
 pub enum SimulationEvent {
-    PlayerTouchPlanet { player: u16, part: PartHandle, planet: u16, },
-    PlayerUntouchPlanet { player: u16, part: PartHandle, planet: u16 },
+    PlayerTouchPlanet { player: u16, part: PartHandle, planet: u8, },
+    PlayerUntouchPlanet { player: u16, part: PartHandle, planet: u8 },
 }
 
 
@@ -145,7 +145,7 @@ impl Simulation {
 pub struct World {
     parts: Arena<Part>,
     bodies: RigidBodySet,
-    planets: planets::Planets,
+    pub planets: planets::Planets,
     reference_point_body: Index,
 }
 
