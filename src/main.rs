@@ -8,7 +8,6 @@ use std::task::Poll;
 use rand::Rng;
 use world::typedef::*;
 use world::parts::{Part, AttachedPartFacing};
-use nalgebra::geometry::{Isometry2, UnitComplex};
 use std::sync::Arc;
 use std::any::Any;
 use async_std::channel::{Sender, Receiver, bounded as channel};

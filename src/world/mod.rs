@@ -20,6 +20,8 @@ pub mod typedef {
     pub type PartHandle = generational_arena::Index;
     //pub type MyIsometry = nphysics2d::math::Isometry<MyUnits>;
     pub type Vector = rapier2d::na::Matrix2x1<f32>;
+    pub type Isometry = rapier2d::math::Isometry<f32>;
+    pub type UnitComplex = rapier2d::na::UnitComplex<f32>;
 }
 use typedef::*;
 
