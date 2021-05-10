@@ -177,6 +177,7 @@ AddCelestialObject = Message("AddCelestialObject")
 AddCelestialObject.fields.append(Field("id", TypeUByte))
 AddCelestialObject.fields.append(Field("kind", TypePlanetKind))
 AddCelestialObject.fields.append(Field("radius", TypeFloat))
+AddCelestialObject.fields.append(Field("position", TypeFloatPair))
 ToClientMsg.messages.append(AddCelestialObject)
 
 InitCelestialOrbit = Message("InitCelestialOrbit")
@@ -188,7 +189,7 @@ InitCelestialOrbit.fields.append(Field("orbit_total_ticks", TypeUInt))
 
 UpdateCelestialOrbit = Message("UpdateCelestialOrbit")
 UpdateCelestialOrbit.fields.append(Field("id", TypeUByte))
-UpdateCelestialOrbit.fields.append(Field("orbit_progress", TypeUInt))
+UpdateCelestialOrbit.fields.append(Field("orbit_ticks_ellapsed", TypeUInt))
 ToClientMsg.messages.append(UpdateCelestialOrbit)
 
 AddPart = Message("AddPart")

@@ -124,12 +124,14 @@ async fn main() {
                         FreePart::EarthCargo(part, ticks) => {
                             *ticks -= 1;
                             if *ticks < 1 {
+                                let earth = simulation.world.planets.planets[&simulation.world.planets.earth_id];
+                                let spawn_radius = earth.radius * 1.25 + 1.0;
+                                let earth_position = simulation.world.bodies_unchecked()[earth.body_handle].position().translation;
                                 let earth_position = simulation.world.bodies_unchecked()[simulation.world.planets.planets[&simulation.world.planets.earth_id].body_handle].position().translation;
                                 let part = simulation.world.get_part_mut(*part).expect("Invalid Earth Cargo");
                                 let body = part.body_mut();
                                 let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
-                                let spawn_radius = simulation.planets.earth.radius * 1.25 + 1.0;
-                                body.set_position(Isometry2::new(Vector2::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0)); // spawn_degrees));
+                                body.set_position(Isometry::new(Vector::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0)); // spawn_degrees));
                                 //use nphysics2d::object::Body;
                                 //body.apply_force(0, &nphysics2d::math::Force::zero(), nphysics2d::math::ForceType::Force, true);
                                 body.activate();
@@ -149,9 +151,10 @@ async fn main() {
                     if ticks_til_earth_cargo_spawn == 0 {
                         ticks_til_earth_cargo_spawn = TICKS_PER_EARTH_CARGO_SPAWN;
                         earth_cargos += 1; 
-                        let earth_position = simulation.world.bodies_unchecked()[simulation.world.planets.planets[&simulation.world.planets.earth_id].body_handle].position().translation;
+                        let earth = simulation.world.planets.planets[&simulation.world.planets.earth_id];
+                        let spawn_radius = earth.radius * 1.25 + 1.0;
+                        let earth_position = simulation.world.bodies_unchecked()[earth.body_handle].position().translation;
                         let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
-                        let spawn_radius = simulation.world.planets.planets[&simulation.world.planets.earth_id].radius * 1.25 + 1.0;
                         let spawn_pos = Isometry::new(Vector::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0);
                         let part_handle = RecursivePartDescription::from(PartKind::Cargo).inflate(&mut (&mut simulation.world).into(), &mut simulation.colliders, &mut simulation.joints, spawn_pos);
                         let part = simulation.world.get_part(part_handle).unwrap();
@@ -387,7 +390,7 @@ async fn main() {
                 simulation.world.recurse_part(core_handle, Default::default(), &mut |handle: world::PartVisitHandle| max_extent = max_extent.min(handle.details().part_rel_y));
                 let max_extent = max_extent as f32 / 3.0;
                 let spawn_radius: f32 = earth_radius * 1.25 + 1.0 + max_extent.abs();
-                let spawn_center = (Vector::new(spawn_degrees.cos(), spawn_degrees.sin()) * spawn_radius) + earth_position;
+                let spawn_center = (Vector::new(spawn_degrees.cos(), spawn_degrees.sin()) * spawn_radius) + earth_position.vector;
                 simulation.world.recurse_part_mut(core_handle, Default::default(), &mut |mut handle: world::PartVisitHandleMut| {
                     let part = &mut handle;
                     let new_pos = Isometry::new(
@@ -421,7 +424,8 @@ async fn main() {
                 for (id, planet) in simulation.world.planets.planets.iter() {
                     let position = simulation.world.bodies_unchecked()[planet.body_handle].position().translation;
                     outbound_events.push(ToSerializer::Message(to_player, ToClientMsg::AddCelestialObject {
-                        id: *id, radius: planet.radius, position: (position.x, position.y)
+                        id: *id, radius: planet.radius, position: (position.x, position.y),
+                        kind: planet.kind,
                     }));
                 }
 
@@ -474,7 +478,6 @@ async fn main() {
                             let core = simulation.world.get_part(player_meta.core).unwrap();
                             if player_meta.grabbed_part.is_none() {
                                 let core_location = core.body().position().translation;
-                                let point = nphysics2d::math::Point::new(x + core_location.x, y + core_location.y);
                                 if let Some(free_part) = free_parts.get_mut(&grabbed_id) {
                                     if let FreePart::Decaying(part, _) | FreePart::EarthCargo(part, _) = &free_part {
                                         player_meta.grabbed_part = Some((grabbed_id, simulation.equip_mouse_dragging(*part), x, y));
@@ -535,12 +538,12 @@ async fn main() {
                                 simulation.release_constraint(constraint);
                                 player_meta.grabbed_part = None;
                                 let mut attachment_msg: Option<Vec<u8>> = None;
-                                let core_location = simulation.world.get_rigid(player_meta.core).unwrap().position().clone();
+                                let core_location = simulation.world.get_part_rigid(player_meta.core).unwrap().position().clone();
                                 let grabbed_part_handle = **free_parts.get(&part_id).unwrap();
                                 let grabbed_part = simulation.world.get_part_mut(grabbed_part_handle).unwrap();
                                 let inertia = grabbed_part.kind().inertia();
                                 grabbed_part.body_mut().set_local_inertia(inertia);
-                                grabbed_part.body_mut().set_velocity(nphysics2d::algebra::Velocity2::new(Vector2::new(0.0,0.0), 0.0));
+                                grabbed_part.body_mut().set_velocity(Isometry::new(Vector::new(0.0,0.0), 0.0));
         
                                 use world::parts::CompactThrustMode;
                                 let target_x = x + core_location.translation.x;
@@ -573,7 +576,7 @@ async fn main() {
                                     parent.attach_part_player_agnostic(attachment_slot, grabbed_part_handle, parent_handle, &mut simulation.joints);
                                     free_parts.remove(&part_id);
                                     let grabbed_part = simulation.world.get_part_mut(grabbed_part_handle).unwrap();
-                                    grabbed_part.body_mut().set_position(Isometry2::new(Vector2::new(teleport_to.0, teleport_to.1), true_facing.part_rotation() + core_location.rotation.angle()));
+                                    grabbed_part.body_mut().set_position(Isometry::new(Vector::new(teleport_to.0, teleport_to.1), true_facing.part_rotation() + core_location.rotation.angle()));
                                     grabbed_part.join_to(player_meta);
                                     outbound_events.push(ToSerializer::Message(id, player_meta.update_my_meta()));
                                     grabbed_part.thrust_mode = thrust_mode;
@@ -620,12 +623,12 @@ async fn main() {
                     "/teleport" => {
                         if chunks.len() == 3 {
                             if let (Ok(x), Ok(y)) = (chunks[1].parse::<f32>(), chunks[2].parse::<f32>()) {
-                                let teleport_to = Vector2::new(x, y);
+                                let teleport_to = Vector::new(x, y);
                                 if let Some(player_meta) = players.get_mut(&id) {
-                                    let core_pos = simulation.world.get_rigid(player_meta.core).unwrap().position().translation.vector;
+                                    let core_pos = simulation.world.get_part_rigid(player_meta.core).unwrap().position().translation.vector;
                                     println!("Teleporting {} to: {} {}", player_meta.name, x, y);
                                     simulation.world.recurse_part_mut(player_meta.core, Default::default(), &mut |mut handle: world::PartVisitHandleMut| {
-                                        let pos = Isometry2::new(
+                                        let pos = Isometry::new(
                                                 (*handle).body().position().clone().translation.vector - core_pos + teleport_to,
                                                 (*handle).body().position().rotation.angle()
                                         );
@@ -746,7 +749,7 @@ pub struct PlayerMeta {
     pub max_power: u32,
     pub power_regen_per_5_ticks: u32,
 
-    pub grabbed_part: Option<(u16, nphysics2d::joint::DefaultJointConstraintHandle, f32, f32)>,
+    pub grabbed_part: Option<(u16, rapier2d::dynamics::JointHandle, f32, f32)>,
 
     pub touching_planet: Option<u8>,
     ticks_til_cargo_transform: u8,

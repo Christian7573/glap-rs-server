@@ -218,8 +218,8 @@ impl ToServerMsg {
 pub enum ToClientMsg {
 	MessagePack { count: u16, },
 	HandshakeAccepted { id: u16, core_id: u16, can_beamout: bool, },
-	AddCelestialObject { id: u8, kind: PlanetKind, radius: f32, },
-	UpdateCelestialOrbit { id: u8, orbit_progress: f32, },
+	AddCelestialObject { id: u8, kind: PlanetKind, radius: f32, position: (f32,f32), },
+	UpdateCelestialOrbit { id: u8, orbit_ticks_ellapsed: u32, },
 	AddPart { id: u16, kind: PartKind, },
 	MovePart { id: u16, x: f32, y: f32, rotation_n: f32, rotation_i: f32, },
 	UpdatePartMeta { id: u16, owning_player: Option<u16>, thrust_mode: u8, },
@@ -247,16 +247,17 @@ impl ToClientMsg {
 				type_u16_serialize(out, core_id);
 				type_bool_serialize(out, can_beamout);
 			},
-			Self::AddCelestialObject { id, kind, radius} => {
+			Self::AddCelestialObject { id, kind, radius, position} => {
 				out.push(2);
 				type_u8_serialize(out, id);
 				kind.serialize(out);
 				type_float_serialize(out, radius);
+				type_float_pair_serialize(out, position);
 			},
-			Self::UpdateCelestialOrbit { id, orbit_progress} => {
+			Self::UpdateCelestialOrbit { id, orbit_ticks_ellapsed} => {
 				out.push(3);
 				type_u8_serialize(out, id);
-				type_float_serialize(out, orbit_progress);
+				type_u32_serialize(out, orbit_ticks_ellapsed);
 			},
 			Self::AddPart { id, kind} => {
 				out.push(4);
@@ -346,17 +347,18 @@ impl ToClientMsg {
 				Ok(ToClientMsg::HandshakeAccepted { id, core_id, can_beamout})
 			},
 			2 => {
-				let id; let kind; let radius;
+				let id; let kind; let radius; let position;
 				id = type_u8_deserialize(stream).await?;
 				kind = PlanetKind::deserialize(stream).await?;
 				radius = type_float_deserialize(stream).await?;
-				Ok(ToClientMsg::AddCelestialObject { id, kind, radius})
+				position = type_float_pair_deserialize(stream).await?;
+				Ok(ToClientMsg::AddCelestialObject { id, kind, radius, position})
 			},
 			3 => {
-				let id; let orbit_progress;
+				let id; let orbit_ticks_ellapsed;
 				id = type_u8_deserialize(stream).await?;
-				orbit_progress = type_float_deserialize(stream).await?;
-				Ok(ToClientMsg::UpdateCelestialOrbit { id, orbit_progress})
+				orbit_ticks_ellapsed = type_u32_deserialize(stream).await?;
+				Ok(ToClientMsg::UpdateCelestialOrbit { id, orbit_ticks_ellapsed})
 			},
 			4 => {
 				let id; let kind;
