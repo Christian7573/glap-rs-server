@@ -67,7 +67,18 @@ impl Simulation {
 
     pub fn simulate(&mut self, events: &mut Vec<SimulationEvent>) {
         self.world.celestial_gravity();
-        self.mechanics.step(&mut self.geometry, &mut self.world, &mut self.colliders, &mut self.joints, &mut self.persistant_forces);
+        const GRAVITYNT: Vector = Vector::new(0.0, 0.0);
+        self.pipeline.step(
+            &GRAVITYNT,
+            &self.integration_parameters,
+            &mut self.broad_phase,
+            &mut self.narrow_phase,
+            self.world.bodies_mut_unchecked(),
+            &mut self.colliders,
+            &mut self.joints,
+            &mut self.ccd_solver,
+            &(), &()
+        );
         for contact_event in self.geometry.contact_events() {
             match contact_event {
                 ContactEvent::Started(handle1, handle2) => {
