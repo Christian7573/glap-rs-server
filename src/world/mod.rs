@@ -3,7 +3,7 @@ use crate::PartOfPlayer;
 use generational_arena::{Arena, Index};
 use crate::codec::ToClientMsg;
 use std::ops::{Deref, DerefMut};
-use rapier2d::dynamics::{BodyStatus, CCDSolver, JointSet, RigidBody, RigidBodyBuilder, RigidBodyHandle, RigidBodySet, IntegrationParameters, Joint, JointHandle, MassProperties, BallJoint};
+use rapier2d::dynamics::{BodyStatus, CCDSolver, JointSet, RigidBody, RigidBodyBuilder, RigidBodyHandle, RigidBodySet, IntegrationParameters, Joint, JointHandle, MassProperties, BallJoint, JointParams};
 use rapier2d::geometry::{BroadPhase, NarrowPhase, ColliderSet, IntersectionEvent, ContactEvent, ColliderHandle};
 use rapier2d::pipeline::{PhysicsPipeline, ChannelEventCollector};
 use rapier2d::crossbeam::channel::{Sender as CSender, Receiver as CReceiver, unbounded as c_channel};
@@ -121,12 +121,11 @@ impl Simulation {
         }
     }
 
-    pub fn equip_mouse_dragging(&mut self, part: PartHandle) -> (JointHandle, MassProperties) {
+    pub fn equip_mouse_dragging(&mut self, part: PartHandle) -> JointHandle {
         let part_actual = self.world.get_part(part).unwrap();
         let body_handle = part_actual.body_handle;
         let body = self.world.get_part_rigid_mut(part).unwrap();
-        let old_mass = *body.mass_properties();
-        let mass = old_mass;
+        let mass = *body.mass_properties();
         mass.inv_mass = 1.0 / 0.00000001;
         body.set_mass_properties(mass, true);
         let space = body.position().translation;
@@ -134,24 +133,27 @@ impl Simulation {
             Point::new(0.0,0.0),
             Point::new(space.x, space.y),
         );
-        (self.joints.insert(self.world.bodies_mut_unchecked(), self.world.reference_point_body, body_handle, constraint), old_mass)
+        self.joints.insert(self.world.bodies_mut_unchecked(), self.world.reference_point_body, body_handle, constraint)
     }
-    pub fn move_mouse_constraint(&mut self, constraint_id: DefaultJointConstraintHandle, x: f32, y: f32) {
-        if let Some(Some(constraint)) = self.joints.get_mut(constraint_id).map(|c: &mut dyn JointConstraint<MyUnits, PartHandle>| c.downcast_mut::<MouseConstraint<MyUnits, PartHandle>>() ) {
-            constraint.set_anchor_2(Point::new(x, y));
+    pub fn move_mouse_constraint(&mut self, constraint_id: JointHandle, x: f32, y: f32) {
+        if let Some(JointParams::BallJoint(constraint)) = self.joints.get_mut(constraint_id).map(|j: &mut Joint| j.params ) {
+            constraint.local_anchor_2 = Point::new(x, y);
         }
     }
-    pub fn release_constraint(&mut self, constraint_id: DefaultJointConstraintHandle) {
-        self.joints.remove(constraint_id);
+    pub fn release_constraint(&mut self, constraint_id: JointHandle) {
+        self.joints.remove(constraint_id, self.world.bodies_mut_unchecked(), true);
+    }
+    pub fn release_mouse_constraint(&mut self, part_handle: PartHandle, constraint_id: JointHandle) {
+        self.release_constraint(constraint_id);
+        //TODO set mass back to normal
     }
 
-    pub fn is_constraint_broken(&self, handle: DefaultJointConstraintHandle) -> bool {
-        self.joints.get(handle).map(|joint| joint.is_broken()).unwrap_or(true)
+    pub fn is_constraint_broken(&self, handle: JointHandle) -> bool {
+        //self.joints.get(handle).map(|joint| joint.is_broken()).unwrap_or(true)
+        false
     }
 
-    pub fn geometrical_world(&self) -> &MyGeometricalWorld { &self.geometry }
-
-    pub fn inflate(&mut self, parts: &RecursivePartDescription, initial_location: MyIsometry) -> PartHandle {
+    pub fn inflate(&mut self, parts: &RecursivePartDescription, initial_location: Isometry) -> PartHandle {
         parts.inflate(&mut (&mut self.world).into(), &mut self.colliders, &mut self.joints, initial_location)
     }
     pub fn delete_parts_recursive(&mut self, index: PartHandle) -> Vec<ToClientMsg> {
@@ -187,25 +189,19 @@ impl<'a> From<&'a mut World> for WorldAddHandle<'a> {
 
 impl World {
     pub fn get_part_rigid(&self, index: PartHandle) -> Option<&RigidBody> {
-        self.parts.get(index).map(|obj| obj.rigid()).flatten()
+        self.parts.get(index).map(|part| self.bodies.get(part.body_handle)).flatten()
     }
     pub fn get_part(&self, index: PartHandle) -> Option<&Part> {
         self.parts.get(index)
     }
     pub fn get_part_rigid_mut(&mut self, index: PartHandle) -> Option<&mut RigidBody> {
-        self.parts.get(index).map(|obj| self.bodies.get(obj.body_handle)).flatten()
+        self.parts.get(index).map(|part| self.bodies.get_mut(part.body_handle)).flatten()
     }
     pub fn get_part_mut(&mut self, index: PartHandle) -> Option<&mut Part> {
-        self.storage.get_mut(index)
+        self.parts.get_mut(index)
     }
     pub fn delete_parts_recursive(&mut self, index: PartHandle, colliders: &mut ColliderSet, joints: &mut JointSet, removal_msgs: &mut Vec<ToClientMsg>) {
-        match self.parts.remove(index) {
-            Some(part) => {
-                self.removal_events.push_back(index);
-                part.delete_recursive(self, colliders, joints, removal_msgs);
-            },
-            None => (),
-        }
+        self.parts.remove(index).map(|part| part.delete_recursive(self, colliders, joints, removal_msgs));
     }
     pub fn bodies_unchecked(&self) -> &RigidBodySet { &self.bodies }
     pub fn bodies_mut_unchecked(&mut self) -> &mut RigidBodySet { &mut self.bodies }
@@ -329,7 +325,7 @@ impl World {
 
     fn new(colliders: &mut ColliderSet) -> World { 
         let bodies = RigidBodySet::new();
-        let reference_point_body = RigidBodyBuilder::new(BodyStatus::Static).mass(0f32).build();
+        let reference_point_body = RigidBodyBuilder::new(BodyStatus::Static).additional_mass(0f32).build();
         let reference_point_body = bodies.insert(reference_point_body);
         World {
             bodies,
@@ -344,7 +340,7 @@ impl World {
         for (_part_handle, part) in self.parts.iter() {
             let part = &mut self.bodies[part.body_handle];
             const GRAVITATION_CONSTANT: f32 = 1.0; //Lolrandom
-            for body in &self.world.planets.celestial_objects() {
+            for body in self.planets.planets.values() {
                 let distance: (f32, f32) = ((body.position.0 - part.position().translation.x),
                                             (body.position.1 - part.position().translation.y));
                 let magnitude: f32 = part.mass() * body.mass

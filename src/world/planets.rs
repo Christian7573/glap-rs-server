@@ -4,8 +4,11 @@ use rapier2d::dynamics::{RigidBody, RigidBodyBuilder, BodyStatus, RigidBodyHandl
 use rapier2d::geometry::{ColliderBuilder, SharedShape, Collider, ColliderSet, ColliderHandle};
 use super::typedef::*;
 use crate::codec::PlanetKind;
+use crate::storage7573::Storage7573;
 use rand::Rng;
 use super::parts::PartKind;
+
+use Storage7573::Planet;
 
 pub struct Planets {
     pub planets: BTreeMap<u8, CelestialObject>,
@@ -14,10 +17,9 @@ pub struct Planets {
     pub sun_id: u8,
 }
 impl Planets {
-    pub fn new(world: &mut super::World, colliders: &mut ColliderSet) -> Planets {
+    pub fn new(bodies: &mut RigidBodySet, colliders: &mut ColliderSet) -> Planets {
         const EARTH_MASS: f32 = 600.0;
         const EARTH_SIZE: f32 = 25.0;
-        let bodies = &mut world.bodies;
 
         let mut planets = BTreeMap::new();
 
@@ -27,11 +29,10 @@ impl Planets {
             let id = sun_id;
             let mass = EARTH_MASS * 50.0;
             let body = RigidBodyBuilder::new_static()
-                .gravity_enabled(false)
-                .mass(EARTH_MASS * 50.0)
-				.user_data(AmPlanet {id})
+                .additional_mass(EARTH_MASS * 50.0)
+				.user_data(Planet(id).into())
                 .build();
-            let body_handle = bodies.add_celestial_object(body);
+            let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 4.7;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
@@ -44,6 +45,7 @@ impl Planets {
                 cargo_upgrade: None,
                 can_beamout: false,
                 body_handle,
+                position: (0.0, 0.0),
             });
         };
 
@@ -51,11 +53,10 @@ impl Planets {
 			let id = earth_id;
             let mass = EARTH_MASS;
             let body = RigidBodyBuilder::new_kinematic()
-                .gravity_enabled(false)
-                .mass(mass)
-				.user_data(AmPlanet {id})
+                .additional_mass(mass)
+				.user_data(Planet(id).into())
                 .build();
-            let body_handle = bodies.add_celestial_object(body);
+            let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
@@ -65,7 +66,7 @@ impl Planets {
                 orbit: Some(Orbit {
                     orbit_around: sun_id,
                     radius: (1500.0, 1500.0),
-                    rotation: 0,
+                    rotation: 0.0,
                     total_ticks: 3600,
                     ticks_ellapsed: 0
                 }),
@@ -74,6 +75,7 @@ impl Planets {
                 cargo_upgrade: None,
                 can_beamout: true,
                 body_handle,
+                position: (0.0, 0.0),
             });
         };
 
@@ -81,13 +83,12 @@ impl Planets {
             let id = make_planet_id();
             let mass = EARTH_MASS / 35.0;
             let body = RigidBodyBuilder::new_dynamic()
-                .gravity_enabled(false)
-                .mass(mass)
-				.user_data(AmPlanet {id})
+                .additional_mass(mass)
+				.user_data(Planet(id).into())
                 .build();
-            let body_handle = bodies.add_celestial_object(body);
+            let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE / 4.0;
-            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS));
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
 
             planets.insert(id, CelestialObject {
@@ -104,6 +105,7 @@ impl Planets {
                 cargo_upgrade: Some(super::parts::PartKind::LandingThruster),
                 can_beamout: true,
                 body_handle,
+                position: (0.0, 0.0),
             });
         };
 
@@ -111,11 +113,10 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS / 4.0;
             let body = RigidBodyBuilder::new_dynamic()
-                .gravity_enabled(false)
-                .mass(mass)
-				.user_data(AmPlanet {id})
+                .additional_mass(mass)
+				.user_data(Planet(id).into())
                 .build();
-            let body_handle = bodies.add_celestial_object(body);
+            let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE / 2.0;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
@@ -134,6 +135,7 @@ impl Planets {
                 can_beamout: false,
                 mass,
                 body_handle,
+                position: (0.0, 0.0),
             });
         };
 
@@ -141,11 +143,10 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS / 15.0;
             let body = RigidBodyBuilder::new_kinematic()
-                .gravity_enabled(false)
-                .mass(mass)
-				.user_data(AmPlanet {id})
+                .additional_mass(mass)
+				.user_data(Planet(id).into())
                 .build();
-            let body_handle = bodies.add_celestial_object(body);
+            let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 0.38;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
@@ -164,6 +165,7 @@ impl Planets {
                 cargo_upgrade: Some(super::parts::PartKind::SolarPanel),
                 can_beamout: false,
                 body_handle,
+                position: (0.0, 0.0),
             });
         };
 
@@ -171,11 +173,10 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 10.0;
             let body = RigidBodyBuilder::new_kinematic()
-                .gravity_enabled(false)
-                .mass(mass)
-				.user_data(AmPlanet {id})
+                .additional_mass(mass)
+				.user_data(Planet(id).into())
                 .build();
-            let body_handle = bodies.add_celestial_object(body);
+            let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 2.0;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
@@ -194,6 +195,7 @@ impl Planets {
                 cargo_upgrade: Some(super::parts::PartKind::Thruster),
                 can_beamout: false,
                 body_handle,
+                position: (0.0, 0.0),
             });
         };
 
@@ -201,21 +203,20 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS / 10.0;
             let body = RigidBodyBuilder::new_kinematic()
-                .gravity_enabled(false)
-                .mass(mass)
-                .user_data(AmPlanet {id})
+                .additional_mass(mass)
+                .user_data(Planet(id).into())
                 .build();
-            let body_handle = bodies.add_celestial_object(body);
+            let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE / 4.0;
-            let collider = ColliderBuilder::new(SharedShape::new(RADIUS)).build();
-            colliders.insert(collider);
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            colliders.insert(collider, body_handle, bodies);
 
             planets.insert(id, CelestialObject {
                 kind: PlanetKind::Pluto,
                 orbit: Some(Orbit {
                     orbit_around: sun_id,
                     radius: (8000.0, 6000.0),
-                    rotation: std::f32::consts::PI / 5,
+                    rotation: std::f32::consts::PI / 5.0,
                     total_ticks: 3394,
                     ticks_ellapsed: 0,
                 }),
@@ -224,6 +225,7 @@ impl Planets {
                 cargo_upgrade: Some(PartKind::LandingWheel),
                 can_beamout: false,
                 body_handle,
+                position: (0.0, 0.0),
             });
         };
 
@@ -231,13 +233,11 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 10.0;
             let body = RigidBodyBuilder::new_kinematic()
-                .gravity_enabled(false)
-                .mass(mass)
-				.user_data(AmPlanet {id})
+                .additional_mass(mass)
+				.user_data(Planet(id).into())
                 .build();
             let position = (body.position().translation.x, body.position().translation.y);
-            let mass = body.augmented_mass().linear;
-            let body_handle = bodies.add_celestial_object(body);
+            let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 2.0;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
@@ -256,6 +256,7 @@ impl Planets {
                 cargo_upgrade: Some(PartKind::SuperThruster),
                 can_beamout: false,
                 body_handle,
+                position: (0.0, 0.0),
             });
         };
 
@@ -263,11 +264,10 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 4.0;
             let body = RigidBodyBuilder::new_kinematic()
-                .gravity_enabled(false)
-                .mass(mass)
-				.user_data(AmPlanet {id})
+                .additional_mass(mass)
+				.user_data(Planet(id).into())
                 .build();
-            let body_handle = bodies.add_celestial_object(body);
+            let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 1.5;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
@@ -286,6 +286,7 @@ impl Planets {
                 cargo_upgrade: Some(PartKind::HubThruster),
                 can_beamout: false,
                 body_handle,
+                position: (0.0, 0.0),
             });
         };
 
@@ -293,11 +294,10 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 1.3;
             let body = RigidBodyBuilder::new_kinematic()
-                .gravity_enabled(false)
-                .mass(EARTH_MASS * 1.3)
-				.user_data(AmPlanet {id})
+                .additional_mass(EARTH_MASS * 1.3)
+				.user_data(Planet(id).into())
                 .build();
-            let body_handle = bodies.add_celestial_object(body);
+            let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
@@ -316,6 +316,7 @@ impl Planets {
                 cargo_upgrade: Some(PartKind::EcoThruster),
                 can_beamout: false,
                 body_handle,
+                position: (0.0, 0.0),
             });
         };
 
@@ -323,11 +324,10 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 4.0;
             let body = RigidBodyBuilder::new_kinematic()
-                .gravity_enabled(false)
-                .mass(mass)
-				.user_data(AmPlanet {id})
+                .additional_mass(mass)
+				.user_data(Planet(id).into())
                 .build();
-            let body_handle = bodies.add_celestial_object(body);
+            let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 2.0;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
@@ -346,6 +346,7 @@ impl Planets {
                 cargo_upgrade: Some(PartKind::PowerHub),
                 can_beamout: false,
                 body_handle,
+                position: (0.0, 0.0),
             });
         };
 
@@ -355,14 +356,13 @@ impl Planets {
 			let id = trade_id;
             let mass = EARTH_MASS;
             let body = RigidBodyBuilder::new_kinematic()
-                .gravity_enabled(false)
-                .mass(mass)
-				.user_data(AmPlanet {id})
+                .additional_mass(mass)
+				.user_data(Planet(id).into())
                 .build();
-            let body_handle = bodies.add_celestial_object(body);
+            let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 0.75;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
-            colliders.insert(collider);
+            colliders.insert(collider, body_handle, bodies);
 
             planets.insert(id, CelestialObject {
                 kind: PlanetKind::Trade,
@@ -378,6 +378,7 @@ impl Planets {
                 cargo_upgrade: None,
                 can_beamout: true,
                 body_handle,
+                position: (0.0, 0.0),
             });
         };
 
@@ -407,8 +408,8 @@ impl Planets {
     }*/
 }
 
-static mut NEXT_PLANET_ID: u16 = 1;
-fn make_planet_id() -> u16 {
+static mut NEXT_PLANET_ID: u8 = 1;
+fn make_planet_id() -> u8 {
     unsafe { let id = NEXT_PLANET_ID; NEXT_PLANET_ID += 1; id }
 }
 
@@ -420,6 +421,7 @@ pub struct CelestialObject {
     pub cargo_upgrade: Option<super::parts::PartKind>,
     pub can_beamout: bool,
     pub body_handle: RigidBodyHandle,
+    pub position: (f32, f32),
 }
 
 pub struct Orbit {
@@ -430,13 +432,12 @@ pub struct Orbit {
     ticks_ellapsed: u32,
 }
 impl Orbit {
-    pub fn maintain(&self, bodies: &mut RigidBodySet) {
-        let body = bodies[self.body_handle];        
+    pub fn calculate_position(&self) -> (f32, f32) {
     }
-    pub fn advance(&mut self, bodies: &mut RigidBodySet) {
+    pub fn advance(&mut self) -> (f32, f32) {
         self.ticks_ellapsed += 1;
         if self.ticks_ellapsed >= self.total_ticks { self.ticks_ellapsed = 0; }
-        self.maintain(bodies);
+        self.calculate_position()
     }
 }
 
