@@ -18,6 +18,7 @@ pub mod world;
 pub mod codec;
 pub mod session;
 pub mod beamout;
+pub mod storage7573;
 use codec::*;
 use session::ToSerializerEvent;
 

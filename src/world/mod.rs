@@ -1,14 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
-//use num_traits::Pow;
-
 use crate::PartOfPlayer;
 use generational_arena::{Arena, Index};
 use crate::codec::ToClientMsg;
 use std::ops::{Deref, DerefMut};
-
-use rapier2d::dynamics::{BodyStatus, CCDSolver, JointSet, RigidBody, RigidBodyBuilder, RigidBodyHandle, RigidBodySet, IntegrationParameters};
-use rapier2d::geometry::{BroadPhase, NarrowPhase, ColliderSet};
-use rapier2d::pipeline::PhysicsPipeline;
+use rapier2d::dynamics::{BodyStatus, CCDSolver, JointSet, RigidBody, RigidBodyBuilder, RigidBodyHandle, RigidBodySet, IntegrationParameters, Joint, JointHandle, MassProperties, BallJoint};
+use rapier2d::geometry::{BroadPhase, NarrowPhase, ColliderSet, IntersectionEvent, ContactEvent, ColliderHandle};
+use rapier2d::pipeline::{PhysicsPipeline, ChannelEventCollector};
+use rapier2d::crossbeam::channel::{Sender as CSender, Receiver as CReceiver, unbounded as c_channel};
+use crate::storage7573::Storage7573;
 
 pub mod planets;
 pub mod parts;
@@ -22,6 +21,7 @@ pub mod typedef {
     pub type Vector = rapier2d::na::Matrix2x1<f32>;
     pub type Isometry = rapier2d::math::Isometry<f32>;
     pub type UnitComplex = rapier2d::na::UnitComplex<f32>;
+    pub type Point = rapier2d::math::Point<f32>;
 }
 use typedef::*;
 
@@ -35,6 +35,9 @@ pub struct Simulation {
     pub joints: JointSet,
     ccd_solver: CCDSolver,
     steps_per_batch: u8,
+    intersection_events: CReceiver<IntersectionEvent>,
+    contact_events: CReceiver<ContactEvent>,
+    event_collector: ChannelEventCollector,
 }
 pub enum SimulationEvent {
     PlayerTouchPlanet { player: u16, part: PartHandle, planet: u8, },
@@ -49,6 +52,10 @@ impl Simulation {
         let mut colliders = ColliderSet::new();
         let mut world = World::new(&mut colliders);
 
+        let intersection_events = c_channel();
+        let contact_events = c_channel();
+        let event_collector = ChannelEventCollector::new(intersection_events.0, contact_events.0);
+
         let simulation = Simulation {
             pipeline: PhysicsPipeline::new(),
             integration_parameters: IntegrationParameters::default(),
@@ -59,7 +66,10 @@ impl Simulation {
             steps_per_batch,
             world,
             colliders,
-            joints: JointSet::new()
+            joints: JointSet::new(),
+            event_collector,
+            intersection_events: intersection_events.1,
+            contact_events: contact_events.1,
         };
         simulation
     }
@@ -77,56 +87,54 @@ impl Simulation {
             &mut self.colliders,
             &mut self.joints,
             &mut self.ccd_solver,
-            &(), &()
+            &(), &self.event_collector,
         );
-        for contact_event in self.geometry.contact_events() {
+        while let Ok(contact_event) = self.contact_events.try_recv() {
             match contact_event {
                 ContactEvent::Started(handle1, handle2) => {
-                    let planet: u16;
-                    let other: DefaultColliderHandle;
-                    if let Some(am_planet) = self.colliders.get(*handle1).unwrap().user_data().map(|any| any.downcast_ref::<AmPlanet>()).flatten() {
-                        planet = am_planet.id; other = *handle2;
-                    } else if let Some(am_planet) = self.colliders.get(*handle2).unwrap().user_data().map(|any| any.downcast_ref::<AmPlanet>()).flatten() {
-                        planet = am_planet.id; other = *handle1;
+                    let planet: u8;
+                    let other: ColliderHandle;
+                    if let Storage7573::Planet(am_planet) = self.colliders.get(handle1).unwrap().user_data.into() {
+                        planet = am_planet; other = handle2;
+                    } else if let Storage7573::Planet(am_planet) = self.colliders.get(handle2).unwrap().user_data.into() {
+                        planet = am_planet; other = handle1;
                     } else { continue; }
                     let part_coll = self.colliders.get(other).unwrap();
-                    if let Some(part) = self.world.get_part(part_coll.body()) {
-                        if let Some(player_id) = part.part_of_player() {
-                            events.push(SimulationEvent::PlayerTouchPlanet{ player: player_id, part: part_coll.body(), planet });
-                        }
+                    if let Storage7573::PartOfPlayer(player_id) = self.colliders[other].user_data.into() {
+                        events.push(SimulationEvent::PlayerUntouchPlanet{ player: player_id, part: *self.world.parts_reverse_lookup.get(&part_coll.parent().into_raw_parts()).unwrap(), planet });
                     }
                 },
                 ContactEvent::Stopped(handle1, handle2) => {
-                    let planet: u16;
-                    let other: DefaultColliderHandle;
-                    if let Some(am_planet) = self.colliders.get(*handle1).unwrap().user_data().map(|any| any.downcast_ref::<AmPlanet>()).flatten() {
-                        planet = am_planet.id; other = *handle2;
-                    } else if let Some(am_planet) = self.colliders.get(*handle2).unwrap().user_data().map(|any| any.downcast_ref::<AmPlanet>()).flatten() {
-                        planet = am_planet.id; other = *handle1;
+                    let planet: u8;
+                    let other: ColliderHandle;
+                    if let Storage7573::Planet(am_planet) = self.colliders.get(handle1).unwrap().user_data.into() {
+                        planet = am_planet; other = handle2;
+                    } else if let Storage7573::Planet(am_planet) = self.colliders.get(handle2).unwrap().user_data.into() {
+                        planet = am_planet; other = handle1;
                     } else { continue; }
                     let part_coll = self.colliders.get(other).unwrap();
-                    if let Some(part) = self.world.get_part(part_coll.body()) {
-                        if let Some(player_id) = part.part_of_player() {
-                            events.push(SimulationEvent::PlayerUntouchPlanet{ player: player_id, part: part_coll.body(), planet });
-                        }
+                    if let Storage7573::PartOfPlayer(player_id) = self.colliders[other].user_data.into() {
+                        events.push(SimulationEvent::PlayerUntouchPlanet{ player: player_id, part: *self.world.parts_reverse_lookup.get(&part_coll.parent().into_raw_parts()).unwrap(), planet });
                     }
                 }
             }
         }
     }
 
-    pub fn equip_mouse_dragging(&mut self, part: PartHandle) -> DefaultJointConstraintHandle {
-        let body = self.world.get_rigid_mut(part).unwrap();
-        body.set_local_inertia(Inertia2::new(0.00000001, body.augmented_mass().angular));
+    pub fn equip_mouse_dragging(&mut self, part: PartHandle) -> (JointHandle, MassProperties) {
+        let part_actual = self.world.get_part(part).unwrap();
+        let body_handle = part_actual.body_handle;
+        let body = self.world.get_part_rigid_mut(part).unwrap();
+        let old_mass = *body.mass_properties();
+        let mass = old_mass;
+        mass.inv_mass = 1.0 / 0.00000001;
+        body.set_mass_properties(mass, true);
         let space = body.position().translation;
-        let constraint = MouseConstraint::new(
-            BodyPartHandle(part, 0),
-            BodyPartHandle(self.world.reference_point_body, 0),
+        let constraint = BallJoint::new(
             Point::new(0.0,0.0),
             Point::new(space.x, space.y),
-            1000.0
         );
-        self.joints.insert(constraint)
+        (self.joints.insert(self.world.bodies_mut_unchecked(), self.world.reference_point_body, body_handle, constraint), old_mass)
     }
     pub fn move_mouse_constraint(&mut self, constraint_id: DefaultJointConstraintHandle, x: f32, y: f32) {
         if let Some(Some(constraint)) = self.joints.get_mut(constraint_id).map(|c: &mut dyn JointConstraint<MyUnits, PartHandle>| c.downcast_mut::<MouseConstraint<MyUnits, PartHandle>>() ) {
@@ -157,7 +165,8 @@ pub struct World {
     parts: Arena<Part>,
     bodies: RigidBodySet,
     pub planets: planets::Planets,
-    reference_point_body: Index,
+    reference_point_body: RigidBodyHandle,
+    pub(self) parts_reverse_lookup: BTreeMap<(usize, u64), Index>,
 }
 
 /*pub struct WorldAddHandle<'a>(&'a mut World); 
@@ -327,6 +336,7 @@ impl World {
             parts: Arena::new(),
             planets: planets::Planets::new(&mut bodies, colliders),
             reference_point_body,
+            parts_reverse_lookup: BTreeMap::new(),
         }
     }
 
