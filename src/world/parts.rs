@@ -1,24 +1,22 @@
-use rapier2d::dynamics::{RigidBody, RigidBodyBuilder, RigidBodyHandle, Joint, JointHandle, BodyStatus};
-use nphysics2d::algebra::{Force2, ForceType, Inertia2};
-use rapier2d::na::{Vector2, Point2};
-use super::{MyUnits, PartHandle};
-use num_traits::identities::{Zero, One};
-use ncollide2d::pipeline::object::CollisionGroups;
-use nphysics2d::joint::DefaultJointConstraintHandle;
+use rapier2d::dynamics::{RigidBody, RigidBodyBuilder, RigidBodyHandle, Joint, JointHandle, BodyStatus, RigidBodySet, JointSet, MassProperties};
+use rapier2d::geometry::{SharedShape, Collider, ColliderBuilder, ColliderHandle, ColliderSet};
+use rapier2d::na::Unit;
 use super::typedef::*;
+/*use ncollide2d::pipeline::object::CollisionGroups;
+use nphysics2d::joint::DefaultJointConstraintHandle;*/
 use crate::PlayerMeta;
 use crate::codec::ToClientMsg;
-use super::{WorldAddHandle, World};
+use super::{/*WorldAddHandle,*/ World};
 use crate::session::WorldUpdatePartMove;
 use std::sync::atomic::{AtomicU16, Ordering as AtomicOrdering};
 
 
 lazy_static! {
-    static ref UNIT_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(0.5, 0.5)));
-    static ref CARGO_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(0.38, 0.5)));
-    static ref SOLAR_PANEL_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(0.31, 0.5)));
-    static ref ATTACHMENT_COLLIDER_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(1.0, 1.0)));
-    static ref SUPER_THRUSTER_CUBOID: ShapeHandle<MyUnits> = ShapeHandle::new(Cuboid::new(Vector2::new(0.38, 0.44)));
+    static ref UNIT_CUBOID: SharedShape = SharedShape::cuboid(0.5, 0.5);
+    static ref CARGO_CUBOID: SharedShape = SharedShape::cuboid(0.38, 0.5);
+    static ref SOLAR_PANEL_CUBOID: SharedShape = SharedShape::cuboid(0.31, 0.5);
+    static ref ATTACHMENT_COLLIDER_CUBOID: SharedShape = SharedShape::cuboid(1.0, 1.0);
+    static ref SUPER_THRUSTER_CUBOID: SharedShape = SharedShape::cuboid(0.38, 0.44);
 }
 static mut NEXT_PART_ID: AtomicU16 = AtomicU16::new(0);
 
@@ -31,29 +29,28 @@ pub struct RecursivePartDescription {
 }
 pub struct Part {
     id: u16,
-    body: MyRigidBody,
-    collider: DefaultColliderHandle,
     kind: PartKind,
     attachments: [Option<PartAttachment>; 4],
     pub thrust_mode: CompactThrustMode,
     part_of_player: Option<u16>,
+    body_handle: RigidBodyHandle,
+    collider: ColliderHandle,
 }
 pub struct PartAttachment {
     part: PartHandle,
-    connections: (DefaultJointConstraintHandle, DefaultJointConstraintHandle),
-    //connections: DefaultJointConstraintHandle,
+    connections: JointHandle,
 }
 
 impl RecursivePartDescription {
-    pub fn inflate(&self, bodies: &mut WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry) -> PartHandle {
+    pub fn inflate(&self, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, joints: &mut JointSet, initial_location: Isometry) -> PartHandle {
         self.inflate_component(bodies, colliders, joints, initial_location, AttachedPartFacing::Up, 0, 0, None)        
     }
-    pub fn inflate_component(&self, bodies: &mut WorldAddHandle, colliders: &mut MyColliderSet, joints: &mut MyJointSet, initial_location: MyIsometry, true_facing: AttachedPartFacing, rel_part_x: i32, rel_part_y: i32, id: Option<u16>) -> PartHandle {
+    pub fn inflate_component(&self, world: &mut World, colliders: &mut ColliderSet, joints: &mut JointSet, initial_location: Isometry, true_facing: AttachedPartFacing, rel_part_x: i32, rel_part_y: i32, id: Option<u16>) -> PartHandle {
         let (body_desc, collider_desc) = self.kind.physics_components();
         let mut body = body_desc.build();
         body.set_position(initial_location.clone());
-        let body_handle = bodies.add_later();
-        let collider = colliders.insert(collider_desc.build(BodyPartHandle(body_handle, 0)));
+        let body_handle = world.bodies_mut_unchecked().insert(body);
+        let collider = colliders.insert(collider_desc.build(), body_handle, bodies);
         let mut attachments: [Option<PartAttachment>; 4] = [None, None, None, None];
         for i in 0..4 {
             attachments[i] = self.attachments.get(i).map(|o| o.as_ref()).flatten().map(|recursive_part| {
@@ -63,7 +60,7 @@ impl RecursivePartDescription {
                     let (d_part_x, d_part_y) = attachment_true_facing.delta_rel_part();
                     let attachment_part_x = rel_part_x + d_part_x;
                     let attachment_part_y = rel_part_y + d_part_y;
-                    let part = recursive_part.inflate_component(bodies, colliders, joints, attachment_location, attachment_true_facing, attachment_part_x, attachment_part_y, None);
+                    let part = recursive_part.inflate_component(world, colliders, joints, attachment_location, attachment_true_facing, attachment_part_x, attachment_part_y, None);
                     Some(PartAttachment::inflate(part, self.kind, body_handle, i, joints))
                 } else { None }
             }).flatten();
@@ -71,15 +68,14 @@ impl RecursivePartDescription {
         let my_part_id = if let Some(id) = id { id } else { unsafe { NEXT_PART_ID.fetch_add(1, AtomicOrdering::AcqRel) } };
         let part = Part {
             id: my_part_id,
-            body,
-            collider,
             kind: self.kind,
             attachments,
             thrust_mode: CompactThrustMode::calculate(true_facing, rel_part_x, rel_part_y),
             part_of_player: None,
+            collider,
+            body_handle,
         };
-        bodies.add_its_later(body_handle, WorldlyObject::Part(part));
-        body_handle
+        world.parts.insert(part)
     }
 }
 impl From<PartKind> for RecursivePartDescription {
@@ -206,22 +202,24 @@ impl Part {
 
     pub fn id(&self) -> u16 { self.id }
     pub fn kind(&self) -> PartKind { self.kind }
-    pub fn body(&self) -> &MyRigidBody { &self.body }
-    pub fn body_mut(&mut self) -> &mut MyRigidBody { &mut self.body }
+    pub fn body_handle(&self) -> RigidBodyHandle { self.body_handle }
 
-    pub fn inflation_msgs(&self) -> [ToClientMsg; 3] {
-        [ self.add_msg(), self.move_msg(), self.update_meta_msg() ]
+    pub fn inflation_msgs(&self, bodies: &RigidBodySet) -> [ToClientMsg; 3] {
+        [ self.add_msg(), self.move_msg(bodies), self.update_meta_msg() ]
     }
     pub fn add_msg(&self) -> ToClientMsg { ToClientMsg::AddPart { id: self.id, kind: self.kind } }
-    pub fn move_msg(&self) -> ToClientMsg { ToClientMsg::MovePart {
-        id: self.id, x: self.body.position().translation.x, y: self.body.position().translation.y,
-        rotation_n: self.body.position().rotation.re, rotation_i: self.body.position().rotation.im
-    } }
+    pub fn move_msg(&self, bodies: &RigidBodySet) -> ToClientMsg {
+        let body = &bodies[self.body_handle];
+        ToClientMsg::MovePart {
+            id: self.id, x: body.position().translation.x, y: body.position().translation.y,
+            rotation_n: body.position().rotation.re, rotation_i: body.position().rotation.im
+        }
+    }
     pub fn update_meta_msg(&self) -> ToClientMsg { ToClientMsg::UpdatePartMeta { id: self.id, owning_player: self.part_of_player, thrust_mode: self.thrust_mode.into() } }
     pub fn remove_msg(&self) -> ToClientMsg { ToClientMsg::RemovePart { id: self.id } }
 
-    pub fn physics_update_msg(&self, bodies: &MyBodySet, out: &mut Vec<WorldUpdatePartMove>) {
-        let position = self.body.position();
+    pub fn physics_update_msg(&self, world: &World, out: &mut Vec<WorldUpdatePartMove>) {
+        let position = world.bodies_unchecked()[self.body_handle].position();
         out.push(WorldUpdatePartMove {
             id: self.id,
             x: position.translation.x, y: position.translation.y,
@@ -229,7 +227,7 @@ impl Part {
         });
         for attachment in &self.attachments {
             if let Some(attachment) = attachment {
-                bodies.get_part(**attachment).unwrap().physics_update_msg(bodies, out);
+                world.get_part(**attachment).unwrap().physics_update_msg(world, out);
             }
         }
     }
@@ -238,17 +236,16 @@ impl Part {
 }
 
 impl PartAttachment {
-    pub fn calculate_attachment_position(parent: PartKind, parent_location: &MyIsometry, attachment_slot: usize) -> Option<MyIsometry> {
+    pub fn calculate_attachment_position(parent: PartKind, parent_location: &Isometry, attachment_slot: usize) -> Option<Isometry> {
         if let Some(attachment) = parent.attachment_locations()[attachment_slot] {
-            Some(MyIsometry::new(parent_location.transform_point(&Point2::new(attachment.x, attachment.y)).coords, attachment.facing.part_rotation() + parent_location.rotation.angle()))
+            Some(Isometry::new(parent_location.transform_point(&Point::new(attachment.x, attachment.y)).coords, attachment.facing.part_rotation() + parent_location.rotation.angle()))
         } else {
             eprintln!("calculate_attachment_position: PartKind {:?} doesn't have attachment slot {}", parent, attachment_slot);
             None
         }
     }
 
-    pub fn inflate(part: PartHandle, parent: PartKind, parent_body_handle: PartHandle, attachment_slot: usize, joints: &mut MyJointSet) -> PartAttachment {
-        use nphysics2d::math::Point;
+    pub fn inflate(part: PartHandle, parent: PartKind, parent_body_handle: PartHandle, attachment_slot: usize, joints: &mut JointSet) -> PartAttachment {
         let attachment = parent.attachment_locations()[attachment_slot].expect("PartAttachment tried to inflate on invalid slot");
         const HALF_CONNECTION_WIDTH: f32 = 0.5;
         let offset = (attachment.perpendicular.0 * HALF_CONNECTION_WIDTH, attachment.perpendicular.1 * HALF_CONNECTION_WIDTH);
@@ -281,15 +278,16 @@ impl PartAttachment {
         }
     }
 
-    pub fn deflate(self, joints: &mut MyJointSet) -> PartHandle {
+    pub fn deflate(self, joints: &mut JointSet) -> PartHandle {
         joints.remove(self.connections.0);
         joints.remove(self.connections.1);
         self.part
     }
 
-    pub fn is_broken(&self, joints: &MyJointSet) -> bool {
-        joints.get(self.connections.0).map(|joint| joint.is_broken()).unwrap_or(true)
-        || joints.get(self.connections.1).map(|joint| joint.is_broken()).unwrap_or(true)
+    pub fn is_broken(&self, joints: &JointSet) -> bool {
+        false
+        /*joints.get(self.connections.0).map(|joint| joint.is_broken()).unwrap_or(true)
+        || joints.get(self.connections.1).map(|joint| joint.is_broken()).unwrap_or(true)*/
     }
 }
 
@@ -300,23 +298,19 @@ impl std::ops::Deref for PartAttachment {
 
 pub use crate::codec::PartKind;
 impl PartKind {
-    pub fn physics_components(&self) -> (RigidBodyDesc<MyUnits>, ColliderDesc<MyUnits>) {
+    pub fn physics_components(&self) -> (RigidBodyBuilder, ColliderBuilder) {
         match self {
             _ => {
-                (
-                    RigidBodyDesc::new().status(BodyStatus::Dynamic).local_inertia(self.inertia()),
-                    ColliderDesc::new( match self {
-                        PartKind::Core | PartKind::Hub | PartKind::PowerHub | PartKind::HubThruster => UNIT_CUBOID.clone(),
-                        PartKind::Cargo | PartKind::LandingThruster | PartKind::Thruster => CARGO_CUBOID.clone(),
-                        PartKind::SolarPanel | PartKind::EcoThruster | PartKind::LandingWheel => SOLAR_PANEL_CUBOID.clone(), 
-                        PartKind::SuperThruster => SUPER_THRUSTER_CUBOID.clone(),
-                    } )
-                    .translation( match self {
-                        PartKind::Core => Vector2::zero(),
-                        PartKind::Thruster | PartKind::SuperThruster => Vector2::new(0.0, 0.44),
-                        _ => Vector2::new(0.0, 0.5)
-                    } ) 
-                )
+                let body = RigidBodyBuilder::new(BodyStatus::Dynamic).additional_mass_properties(self.mass_properties());
+                let collider_translation = self.collider_translation();
+                let mut collider = ColliderBuilder::new( match self {
+                    PartKind::Core | PartKind::Hub | PartKind::PowerHub | PartKind::HubThruster => UNIT_CUBOID.clone(),
+                    PartKind::Cargo | PartKind::LandingThruster | PartKind::Thruster => CARGO_CUBOID.clone(),
+                    PartKind::SolarPanel | PartKind::EcoThruster | PartKind::LandingWheel => SOLAR_PANEL_CUBOID.clone(), 
+                    PartKind::SuperThruster => SUPER_THRUSTER_CUBOID.clone(),
+                } )
+                .translation(collider_translation.0, collider_translation.1);
+                (body, collider)
             }
         }
     }
@@ -333,7 +327,14 @@ impl PartKind {
             PartKind::PowerHub | PartKind::LandingWheel => None,
         }
     }
-    pub fn inertia(&self) -> Inertia2<MyUnits> {
+    pub fn collider_translation(&self) -> (f32, f32) {
+        match self {
+            PartKind::Thruster | PartKind::SuperThruster => (0.0, 0.44),
+            PartKind::Core => (0.0, 0.0),
+            _ => (0.0, 0.5),
+        }
+    }
+    pub fn mass_properties(&self) -> MassProperties {
         match self {
             PartKind::Core => Inertia2::new(1.0,1.0),
             PartKind::Cargo => Inertia2::new(0.5, 0.5),

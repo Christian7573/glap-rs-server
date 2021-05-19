@@ -388,7 +388,7 @@ impl<'a> PartVisitHandleMut<'a> {
     pub fn get_part(&self, handle: PartHandle) -> Option<&Part> { self.0.get_part(handle) }
     pub fn get_rigid(&self, handle: PartHandle) -> Option<&RigidBody> { self.0.get_part_rigid(handle) }
     pub fn get_part_mut(&mut self, handle: PartHandle) -> Option<&mut Part> { self.0.get_part_mut(handle) }
-    pub fn get_rigid_mut(&mut self, handle: PartHandle) -> Option<&mut RigidBody> { self.0.get_rigid_mut(handle) }
+    pub fn get_rigid_mut(&mut self, handle: PartHandle) -> Option<&mut RigidBody> { self.0.get_part_rigid_mut(handle) }
     pub fn handle(&self) -> PartHandle { self.1 }
     pub fn details(&self) -> &PartVisitDetails { &self.2 }
 }
