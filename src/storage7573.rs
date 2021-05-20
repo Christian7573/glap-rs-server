@@ -14,16 +14,16 @@ impl Storage128 {
         unsafe { std::mem::transmute(&mut self.0) }
     }
     pub fn storage_u8<'a>(&'a self) -> &'a u8 {
-        unsafe { std::mem::transmute(std::mem::transmute::<usize>(&self.0) + 1) }
+        unsafe { std::mem::transmute(std::mem::transmute::<&u128, usize>(&self.0) + 1) }
     }
     pub fn storage_u8_mut<'a>(&'a mut self) -> &'a mut u8 {
-        unsafe { std::mem::transmute(std::mem::transmute::<usize>(&mut self.0) + 1) }
+        unsafe { std::mem::transmute(std::mem::transmute::<&mut u128, usize>(&mut self.0) + 1) }
     }
     pub fn storage_u16<'a>(&'a self) -> &'a u16 {
-        unsafe { std::mem::transmute(std::mem::transmute::<usize>(&self.0) + 1) }
+        unsafe { std::mem::transmute(std::mem::transmute::<&u128, usize>(&self.0) + 1) }
     }
     pub fn storage_u16_mut<'a>(&'a mut self) -> &'a mut u16 {
-        unsafe { std::mem::transmute(std::mem::transmute::<usize>(&mut self.0) + 1) }
+        unsafe { std::mem::transmute(std::mem::transmute::<&mut u128, usize>(&mut self.0) + 1) }
     }
 }
 
@@ -37,7 +37,7 @@ const ID_PART_OF_PLAYER: u8 = 2;
 impl From<u128> for Storage7573 {
     fn from(v: u128) -> Self {
         let storage: Storage128 = v.into();
-        match storage.id_u8() {
+        match *storage.id_u8() {
             ID_PLANET => {
                 Self::Planet(*storage.storage_u8())
             },
