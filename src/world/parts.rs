@@ -52,19 +52,7 @@ impl RecursivePartDescription {
         let body_handle = world.bodies_mut_unchecked().insert(body);
         let collider = colliders.insert(collider_desc.build(), body_handle, world.bodies_mut_unchecked());
         let mut attachments: [Option<PartAttachment>; 4] = [None, None, None, None];
-        for i in 0..4 {
-            attachments[i] = self.attachments.get(i).map(|o| o.as_ref()).flatten().map(|recursive_part| {
-                if let Some(attachment) = self.kind.attachment_locations()[i] {
-                    let attachment_location = PartAttachment::calculate_attachment_position(self.kind, &initial_location, i).unwrap();
-                    let attachment_true_facing = attachment.facing.compute_true_facing(true_facing);
-                    let (d_part_x, d_part_y) = attachment_true_facing.delta_rel_part();
-                    let attachment_part_x = rel_part_x + d_part_x;
-                    let attachment_part_y = rel_part_y + d_part_y;
-                    let part = recursive_part.inflate_component(world, colliders, joints, attachment_location, attachment_true_facing, attachment_part_x, attachment_part_y, None);
-                    Some(PartAttachment::inflate(part, self.kind, body_handle, i, world, joints))
-                } else { None }
-            }).flatten();
-        };
+
         let my_part_id = if let Some(id) = id { id } else { unsafe { NEXT_PART_ID.fetch_add(1, AtomicOrdering::AcqRel) } };
         let part = Part {
             id: my_part_id,
@@ -75,7 +63,23 @@ impl RecursivePartDescription {
             collider,
             body_handle,
         };
-        world.parts.insert(part)
+        let my_part_handle = world.parts.insert(part);
+        let part = &mut world.parts[my_part_handle];
+
+        for i in 0..4 {
+            attachments[i] = self.attachments.get(i).map(|o| o.as_ref()).flatten().map(|recursive_part| {
+                if let Some(attachment) = self.kind.attachment_locations()[i] {
+                    let attachment_location = PartAttachment::calculate_attachment_position(self.kind, &initial_location, i).unwrap();
+                    let attachment_true_facing = attachment.facing.compute_true_facing(true_facing);
+                    let (d_part_x, d_part_y) = attachment_true_facing.delta_rel_part();
+                    let attachment_part_x = rel_part_x + d_part_x;
+                    let attachment_part_y = rel_part_y + d_part_y;
+                    let part = recursive_part.inflate_component(world, colliders, joints, attachment_location, attachment_true_facing, attachment_part_x, attachment_part_y, None);
+                    Some(PartAttachment::inflate(part, self.kind, my_part_handle, i, world, joints))
+                } else { None }
+            }).flatten();
+        };
+        my_part_handle
     }
 }
 impl From<PartKind> for RecursivePartDescription {

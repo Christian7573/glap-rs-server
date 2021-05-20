@@ -137,7 +137,7 @@ impl Simulation {
     }
     pub fn move_mouse_constraint(&mut self, constraint_id: JointHandle, x: f32, y: f32) {
         if let Some(JointParams::BallJoint(constraint)) = self.joints.get_mut(constraint_id).map(|j: &mut Joint| j.params ) {
-            constraint.local_anchor_2 = Point::new(x, y);
+            constraint.local_anchor2 = Point::new(x, y);
         }
     }
     pub fn release_constraint(&mut self, constraint_id: JointHandle) {
@@ -154,7 +154,7 @@ impl Simulation {
     }
 
     pub fn inflate(&mut self, parts: &RecursivePartDescription, initial_location: Isometry) -> PartHandle {
-        parts.inflate(&mut (&mut self.world).into(), &mut self.colliders, &mut self.joints, initial_location)
+        parts.inflate(&mut self.world, &mut self.colliders, &mut self.joints, initial_location)
     }
     pub fn delete_parts_recursive(&mut self, index: PartHandle) -> Vec<ToClientMsg> {
         let mut removal_msgs = Vec::new();
@@ -189,13 +189,13 @@ impl<'a> From<&'a mut World> for WorldAddHandle<'a> {
 
 impl World {
     pub fn get_part_rigid(&self, index: PartHandle) -> Option<&RigidBody> {
-        self.parts.get(index).map(|part| self.bodies.get(part.body_handle)).flatten()
+        self.parts.get(index).map(|part| self.bodies.get(part.body_handle())).flatten()
     }
     pub fn get_part(&self, index: PartHandle) -> Option<&Part> {
         self.parts.get(index)
     }
     pub fn get_part_rigid_mut(&mut self, index: PartHandle) -> Option<&mut RigidBody> {
-        self.parts.get(index).map(|part| self.bodies.get_mut(part.body_handle)).flatten()
+        self.parts.get(index).map(|part| self.bodies.get_mut(part.body_handle())).flatten()
     }
     pub fn get_part_mut(&mut self, index: PartHandle) -> Option<&mut Part> {
         self.parts.get_mut(index)
@@ -297,7 +297,7 @@ impl World {
 
     pub fn recursive_detach_one(&mut self, parent_handle: PartHandle, attachment_slot: usize, player: &mut Option<&mut crate::PlayerMeta>, joints: &mut JointSet, parts_affected: &mut BTreeSet<PartHandle>) {
         if let Some(parent) = self.get_part_mut(parent_handle) {
-            if let Some(attachment_handle) = parent.detach_part_player_agnostic(attachment_slot, joints) {
+            if let Some(attachment_handle) = parent.detach_part_player_agnostic(attachment_slot, &mut self.bodies, joints) {
                 parts_affected.insert(attachment_handle);
                 if let Some(player) = player {
                     if let Some(attached_part) = self.get_part_mut(attachment_handle) {
@@ -320,7 +320,7 @@ impl World {
     }
 
     pub fn iter_parts_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item=(PartHandle, &'a mut Part, &'a mut RigidBody)> + 'a> {
-        Box::new(self.parts.iter_mut().map(|(handle, part)| (handle, part, self.bodies[part.body_handle])))
+
     }
 
     fn new(colliders: &mut ColliderSet) -> World { 
@@ -338,7 +338,7 @@ impl World {
 
     fn celestial_gravity(&mut self) {
         for (_part_handle, part) in self.parts.iter() {
-            let part = &mut self.bodies[part.body_handle];
+            let part = &mut self.bodies[part.body_handle()];
             const GRAVITATION_CONSTANT: f32 = 1.0; //Lolrandom
             for body in self.planets.planets.values() {
                 let distance: (f32, f32) = ((body.position.0 - part.position().translation.x),
@@ -353,6 +353,19 @@ impl World {
                 }
             }
         }
+    }
+}
+
+struct PartsIteratorMut<'a> {
+    parts_iter: generational_arena::IterMut<'a, Part>,
+    bodies: &'a mut RigidBodySet,
+}
+impl<'a> Iterator for PartsIteratorMut<'a> {
+    type Item = (PartHandle, &'a mut Part, &'a mut RigidBody);
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some((part_handle, part)) = self.parts_iter.next() {
+            Some((part_handle, part, &mut self.bodies[part.body_handle()]))
+        } else { None }
     }
 }
 
@@ -375,7 +388,7 @@ impl Default for PartVisitDetails {
 pub struct PartVisitHandle<'a> (&'a World, PartHandle, &'a Part, PartVisitDetails);
 impl<'a> PartVisitHandle<'a> {
     pub fn get_part(&self, handle: PartHandle) -> &'a Part { self.2 }
-    pub fn get_rigid(&mut self, handle: PartHandle) -> &RigidBody { self.0.get_part_rigid(self.2.body_handle).unwrap() }
+    pub fn get_rigid(&mut self, handle: PartHandle) -> &RigidBody { self.0.get_part_rigid(self.1).unwrap() }
     pub fn handle(&self) -> PartHandle { self.1 }
     pub fn details(&self) -> &PartVisitDetails { &self.3 }
 }
