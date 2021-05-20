@@ -123,7 +123,7 @@ impl Simulation {
 
     pub fn equip_mouse_dragging(&mut self, part: PartHandle) -> JointHandle {
         let part_actual = self.world.get_part(part).unwrap();
-        let body_handle = part_actual.body_handle;
+        let body_handle = part_actual.body_handle();
         let body = self.world.get_part_rigid_mut(part).unwrap();
         let mass = *body.mass_properties();
         mass.inv_mass = 1.0 / 0.00000001;

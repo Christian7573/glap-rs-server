@@ -1,4 +1,4 @@
-use rapier2d::dynamics::{RigidBody, RigidBodyBuilder, RigidBodyHandle, Joint, JointHandle, BodyStatus, RigidBodySet, JointSet, MassProperties};
+use rapier2d::dynamics::{RigidBody, RigidBodyBuilder, RigidBodyHandle, Joint, JointHandle, BodyStatus, RigidBodySet, JointSet, MassProperties, FixedJoint};
 use rapier2d::geometry::{SharedShape, Collider, ColliderBuilder, ColliderHandle, ColliderSet};
 use rapier2d::na::Unit;
 use super::typedef::*;
@@ -38,19 +38,19 @@ pub struct Part {
 }
 pub struct PartAttachment {
     part: PartHandle,
-    connections: JointHandle,
+    connection: JointHandle,
 }
 
 impl RecursivePartDescription {
-    pub fn inflate(&self, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, joints: &mut JointSet, initial_location: Isometry) -> PartHandle {
-        self.inflate_component(bodies, colliders, joints, initial_location, AttachedPartFacing::Up, 0, 0, None)        
+    pub fn inflate(&self, world: &mut World, colliders: &mut ColliderSet, joints: &mut JointSet, initial_location: Isometry) -> PartHandle {
+        self.inflate_component(world, colliders, joints, initial_location, AttachedPartFacing::Up, 0, 0, None)        
     }
     pub fn inflate_component(&self, world: &mut World, colliders: &mut ColliderSet, joints: &mut JointSet, initial_location: Isometry, true_facing: AttachedPartFacing, rel_part_x: i32, rel_part_y: i32, id: Option<u16>) -> PartHandle {
         let (body_desc, collider_desc) = self.kind.physics_components();
         let mut body = body_desc.build();
-        body.set_position(initial_location.clone());
+        body.set_position(initial_location.clone(), true);
         let body_handle = world.bodies_mut_unchecked().insert(body);
-        let collider = colliders.insert(collider_desc.build(), body_handle, bodies);
+        let collider = colliders.insert(collider_desc.build(), body_handle, world.bodies_mut_unchecked());
         let mut attachments: [Option<PartAttachment>; 4] = [None, None, None, None];
         for i in 0..4 {
             attachments[i] = self.attachments.get(i).map(|o| o.as_ref()).flatten().map(|recursive_part| {
@@ -61,7 +61,7 @@ impl RecursivePartDescription {
                     let attachment_part_x = rel_part_x + d_part_x;
                     let attachment_part_y = rel_part_y + d_part_y;
                     let part = recursive_part.inflate_component(world, colliders, joints, attachment_location, attachment_true_facing, attachment_part_x, attachment_part_y, None);
-                    Some(PartAttachment::inflate(part, self.kind, body_handle, i, joints))
+                    Some(PartAttachment::inflate(part, self.kind, body_handle, i, world, joints))
                 } else { None }
             }).flatten();
         };
@@ -97,63 +97,67 @@ impl Part {
         self.part_of_player = None;
     }
     pub fn part_of_player(&self) -> Option<u16> { self.part_of_player }
-    pub fn mutate(mut self, mutate_into: PartKind, player: &mut Option<&mut PlayerMeta>, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet) -> PartHandle {
+    pub fn mutate(mut self, mutate_into: PartKind, player: &mut Option<&mut PlayerMeta>, world: &mut World, colliders: &mut ColliderSet, joints: &mut JointSet) -> PartHandle {
         if let Some(player) = player { self.remove_from(player); }
         let mut old_attachments = self.attachments;
         let mut raw_attachments: [Option<PartHandle>; 4] = [None, None, None, None];
         for i in 0..4 {
             if let Some(attachment) = std::mem::replace(&mut old_attachments[i], None) {
-                raw_attachments[i] = Some(attachment.deflate(joints));
+                raw_attachments[i] = Some(attachment.deflate(world.bodies_mut_unchecked(), joints));
             }
         };
-        let position = self.body.position().clone();
-        colliders.remove(self.collider);
-        let mut add_handle = WorldAddHandle::from(bodies);
-        let part_index = RecursivePartDescription::from(mutate_into).inflate_component(&mut add_handle, colliders, joints, position, AttachedPartFacing::Up, 0, 0, Some(self.id));
-        let bodies = add_handle.deconstruct();
-        let part = bodies.get_part_mut(part_index).unwrap();
+        let old_body = world.bodies_unchecked()[self.body_handle];
+        let position = old_body.position().clone();
+        self.remove_physics_components(world.bodies_mut_unchecked(), colliders, joints);
+        let part_index = RecursivePartDescription::from(mutate_into).inflate_component(world, colliders, joints, position, AttachedPartFacing::Up, 0, 0, Some(self.id));
+        let part = world.get_part_mut(part_index).unwrap();
         for i in 0..4 {
             if let Some(attachment) = &raw_attachments[i] {
-                part.attach_part_player_agnostic(i, *attachment, part_index, joints);
+                part.attach_part_player_agnostic(i, *attachment, part_index, world, joints);
             }
         }
         part.thrust_mode = self.thrust_mode;
         if let Some(player) = player { part.join_to(player) };
         part_index
     }
-    pub fn deflate(&self, world: &MyBodySet) -> RecursivePartDescription {
+    pub fn deflate(&self, world: &World) -> RecursivePartDescription {
         RecursivePartDescription {
             kind: self.kind,
             attachments: self.attachments[..].iter().map(|attachment| attachment.as_ref().map(|attachment| world.get_part(**attachment).unwrap().deflate(world))).collect()
         }
     }
 
-    pub fn attach_part_player_agnostic(&mut self, attachment_slot: usize, part_handle: PartHandle, my_handle: PartHandle, joints: &mut MyJointSet) {
+    fn remove_physics_components(mut self, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, joints: &mut JointSet) {
+        colliders.remove(self.collider, bodies, true);
+        bodies.remove(self.body_handle, colliders, joints);
+    }
+
+    pub fn attach_part_player_agnostic(&mut self, attachment_slot: usize, part_handle: PartHandle, my_handle: PartHandle, world: &mut World, joints: &mut JointSet) {
         //if self.kind.attachment_locations()[attachment_slot].is_none() { panic!("Can't attach to that slot") };
         if self.attachments[attachment_slot].is_some() { panic!("Already attached there"); }
-        self.attachments[attachment_slot] = Some(PartAttachment::inflate(part_handle, self.kind, my_handle, attachment_slot, joints));
+        self.attachments[attachment_slot] = Some(PartAttachment::inflate(part_handle, self.kind, my_handle, attachment_slot, world, joints));
     }
-    pub fn detach_part_player_agnostic(&mut self, attachment_slot: usize, joints: &mut MyJointSet) -> Option<PartHandle> {
+    pub fn detach_part_player_agnostic(&mut self, attachment_slot: usize, bodies: &mut RigidBodySet, joints: &mut JointSet) -> Option<PartHandle> {
         if let Some(part_attachment) = std::mem::replace(&mut self.attachments[attachment_slot], None) {
-            Some(part_attachment.deflate(joints))
+            Some(part_attachment.deflate(bodies, joints))
         } else { None }
     }
 
-    pub fn thrust_no_recurse(&mut self, fuel: &mut u32, forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool) {
+    pub fn thrust_no_recurse(&mut self, fuel: &mut u32, forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool, bodies: &mut RigidBodySet) {
+        let body = &mut bodies[self.body_handle];
         match self.kind {
             PartKind::Core => {
                 if *fuel > 0 {
-                    let body = &mut self.body;
                     let mut subtract_fuel = false;
-                    if forward || counter_clockwise { subtract_fuel = true; body.apply_local_force_at_local_point(0, &Vector2::new(0.0,1.0), &Point2::new(-0.5,-0.5), ForceType::Force, true); }
-                    if forward || clockwise { subtract_fuel = true; body.apply_local_force_at_local_point(0, &Vector2::new(0.0,1.0), &Point2::new(0.5,-0.5), ForceType::Force, true); }
-                    if backward || clockwise { subtract_fuel = true; body.apply_local_force_at_local_point(0, &Vector2::new(0.0,-1.0), &Point2::new(-0.5,0.5), ForceType::Force, true); }
-                    if backward || counter_clockwise { subtract_fuel = true; body.apply_local_force_at_local_point(0, &Vector2::new(0.0,-1.0), &Point2::new(0.5,0.5), ForceType::Force, true); }
+                    if forward || counter_clockwise { subtract_fuel = true; body.apply_force_at_point(Vector::new(0.0,1.0), body.position() * Point::new(-0.5,-0.5), true); }
+                    if forward || clockwise { subtract_fuel = true; body.apply_force_at_point(Vector::new(0.0,1.0), body.position() * Point::new(0.5,-0.5), true); }
+                    if backward || clockwise { subtract_fuel = true; body.apply_force_at_point(Vector::new(0.0,-1.0), body.position() * Point::new(-0.5,0.5), true); }
+                    if backward || counter_clockwise { subtract_fuel = true; body.apply_force_at_point(Vector::new(0.0,-1.0), body.position() * Point::new(0.5,0.5), true); }
                     if subtract_fuel { *fuel -= 1; };
                 }
             },
             _ => {
-                if let Some(ThrustDetails{ fuel_cost, force }) = self.kind.thrust() {
+                if let Some(ThrustDetails{ fuel_cost, force, local_point }) = self.kind.thrust() {
                     let should_fire = match self.thrust_mode.get_horizontal() {
                         HorizontalThrustMode::Clockwise => clockwise,
                         HorizontalThrustMode::CounterClockwise => counter_clockwise,
@@ -165,20 +169,20 @@ impl Part {
                     };
                     if *fuel >= fuel_cost && should_fire  {
                         *fuel -= fuel_cost;
-                        self.body.apply_local_force(0, &force, ForceType::Force, true)
+                        body.apply_force_at_point(force, body.position() * local_point, true)
                     }
                 }
             }
         }
     }
 
-    pub fn find_cargo_recursive(&self, bodies: &MyBodySet) -> Option<(Option<PartHandle>, usize)> {
+    pub fn find_cargo_recursive(&self, world: &World) -> Option<(Option<PartHandle>, usize)> {
         for (i, attachment) in self.attachments.iter().enumerate() {
             if let Some(attachment) = attachment {
-                let part = bodies.get_part(**attachment).expect("find_cargo_recursive: attached to body that didn't exist");
+                let part = world.get_part(**attachment).expect("find_cargo_recursive: attached to body that didn't exist");
                 if part.kind == PartKind::Cargo { return Some((None, i)) }
                 else {
-                    match part.find_cargo_recursive(bodies) {
+                    match part.find_cargo_recursive(world) {
                         Some((Some(parent_handle), attachment_slot)) => return Some((Some(parent_handle), attachment_slot)),
                         Some((None, attachment_slot)) => return Some((Some(**attachment), attachment_slot)),
                         None => ()
@@ -189,13 +193,13 @@ impl Part {
         None
     }
 
-    pub fn delete_recursive(mut self, bodies: &mut MyBodySet, colliders: &mut MyColliderSet, joints: &mut MyJointSet, removal_msgs: &mut Vec<ToClientMsg>) {
-        colliders.remove(self.collider);
+    pub fn delete_recursive(mut self, world: &mut World, colliders: &mut ColliderSet, joints: &mut JointSet, removal_msgs: &mut Vec<ToClientMsg>) {
+        self.remove_physics_components(world.bodies_mut_unchecked(), colliders, joints);
         removal_msgs.push(self.remove_msg());
         for attachment in self.attachments.iter_mut() {
             if let Some(attachment) = std::mem::replace(attachment, None) {
-                let attachment = attachment.deflate(joints);
-                bodies.delete_parts_recursive(attachment, colliders, joints, removal_msgs);
+                let attachment = attachment.deflate(world.bodies_mut_unchecked(), joints);
+                world.delete_parts_recursive(attachment, colliders, joints, removal_msgs);
             }
         }
     }
@@ -245,11 +249,15 @@ impl PartAttachment {
         }
     }
 
-    pub fn inflate(part: PartHandle, parent: PartKind, parent_body_handle: PartHandle, attachment_slot: usize, joints: &mut JointSet) -> PartAttachment {
+    pub fn inflate(part: PartHandle, parent: PartKind, parent_body_handle: PartHandle, attachment_slot: usize, world: &mut World, joints: &mut JointSet) -> PartAttachment {
         let attachment = parent.attachment_locations()[attachment_slot].expect("PartAttachment tried to inflate on invalid slot");
         const HALF_CONNECTION_WIDTH: f32 = 0.5;
         let offset = (attachment.perpendicular.0 * HALF_CONNECTION_WIDTH, attachment.perpendicular.1 * HALF_CONNECTION_WIDTH);
-        let mut constraint1 = nphysics2d::joint::FixedConstraint::new(
+        let constraint = FixedJoint::new(
+            Isometry::new(Vector::new(attachment.x, attachment.y), 0f32),
+            Isometry::new(Vector::new(0.0, 0.0), -attachment.facing.part_rotation()),
+        );
+        /*let mut constraint1 = nphysics2d::joint::FixedConstraint::new(
             BodyPartHandle(parent_body_handle.clone(), 0),
             BodyPartHandle(part, 0),
             Point::new(attachment.x + offset.0, attachment.y + offset.1),
@@ -270,17 +278,18 @@ impl PartAttachment {
         constraint1.set_break_torque(MAX_TORQUE);
         constraint1.set_break_force(MAX_FORCE);
         constraint2.set_break_torque(MAX_TORQUE);
-        constraint2.set_break_force(MAX_FORCE);
+        constraint2.set_break_force(MAX_FORCE);*/
+        let connection = joints.insert(world.bodies_mut_unchecked(), world.get_part(parent_body_handle).unwrap().body_handle, world.get_part(part).unwrap().body_handle, constraint);
         PartAttachment {
             part,
-            connections: (joints.insert(constraint1), joints.insert(constraint2))
+            connection,
+            //connections: (joints.insert(constraint1), joints.insert(constraint2))
             //connections: joints.insert(constraint),
         }
     }
 
-    pub fn deflate(self, joints: &mut JointSet) -> PartHandle {
-        joints.remove(self.connections.0);
-        joints.remove(self.connections.1);
+    pub fn deflate(self, bodies: &mut RigidBodySet, joints: &mut JointSet) -> PartHandle {
+        joints.remove(self.connection, bodies, true);
         self.part
     }
 
@@ -318,12 +327,12 @@ impl PartKind {
         match self {
             PartKind::Core => panic!("PartKind thrust called on core"),
             PartKind::Hub => None,
-            PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 2, force: Force2::linear_at_point(Vector2::new(0.0, -5.0), &Point2::new(0.0, 1.0)) }),
+            PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 2, force: Vector::new(0.0, -5.0), local_point: Point::new(0.0, 1.0) }),
             PartKind::Cargo | PartKind::SolarPanel => None,
-            PartKind::Thruster => Some(ThrustDetails{ fuel_cost: 4, force: Force2::linear_at_point(Vector2::new(0.0, -9.0), &Point2::new(0.0, 1.0)) }),
-            PartKind::SuperThruster => Some(ThrustDetails { fuel_cost: 7, force: Force2::linear_at_point(Vector2::new(0.0, -13.5), &Point2::new(0.0, 1.0)) }),
-            PartKind::HubThruster => Some(ThrustDetails { fuel_cost: 4, force: Force2::linear_at_point(Vector2::new(0.0, -6.0), &Point2::new(0.0, 1.0)) }),
-            PartKind::EcoThruster => Some(ThrustDetails { fuel_cost: 1, force: Force2::linear_at_point(Vector2::new(0.0, -5.5), &Point2::new(0.0, 1.0)) }),
+            PartKind::Thruster => Some(ThrustDetails{ fuel_cost: 4, force: Vector::new(0.0, -9.0), local_point: Point::new(0.0, 1.0) }),
+            PartKind::SuperThruster => Some(ThrustDetails { fuel_cost: 7, force: Vector::new(0.0, -13.5), local_point: Point::new(0.0, 1.0) }),
+            PartKind::HubThruster => Some(ThrustDetails { fuel_cost: 4, force: Vector::new(0.0, -6.0), local_point: Point::new(0.0, 1.0) }),
+            PartKind::EcoThruster => Some(ThrustDetails { fuel_cost: 1, force: Vector::new(0.0, -5.5), local_point: Point::new(0.0, 1.0) }),
             PartKind::PowerHub | PartKind::LandingWheel => None,
         }
     }
@@ -335,18 +344,20 @@ impl PartKind {
         }
     }
     pub fn mass_properties(&self) -> MassProperties {
+        let collider_translation = self.collider_translation();
+        let collider_translation = Point::new(collider_translation.0, collider_translation.1);
         match self {
-            PartKind::Core => Inertia2::new(1.0,1.0),
-            PartKind::Cargo => Inertia2::new(0.5, 0.5),
-            PartKind::LandingThruster => Inertia2::new(1.5, 1.5),
-            PartKind::Hub => Inertia2::new(0.75, 0.75),
-            PartKind::SolarPanel => Inertia2::new(0.4, 0.4),
-            PartKind::Thruster => Inertia2::new(1.6, 1.6),
-            PartKind::SuperThruster => Inertia2::new(1.8, 1.8),
-            PartKind::HubThruster => Inertia2::new(1.6, 1.6),
-            PartKind::EcoThruster => Inertia2::new(1.35, 1.35),
-            PartKind::PowerHub => Inertia2::new(1.1, 1.1),
-            PartKind::LandingWheel => Inertia2::new(0.75, 0.75),
+            PartKind::Core => MassProperties::new(collider_translation, 1.0/1.0, 1.0/1.0),
+            PartKind::Cargo => MassProperties::new(collider_translation, 1.0/0.5, 1.0/0.5),
+            PartKind::LandingThruster => MassProperties::new(collider_translation, 1.0/1.5, 1.0/1.5),
+            PartKind::Hub => MassProperties::new(collider_translation, 1.0/0.75, 1.0/0.75),
+            PartKind::SolarPanel => MassProperties::new(collider_translation, 1.0/0.4, 1.0/0.4),
+            PartKind::Thruster => MassProperties::new(collider_translation, 1.0/1.6, 1.0/1.6),
+            PartKind::SuperThruster => MassProperties::new(collider_translation, 1.0/1.8, 1.0/1.8),
+            PartKind::HubThruster => MassProperties::new(collider_translation, 1.0/1.6, 1.0/1.6),
+            PartKind::EcoThruster => MassProperties::new(collider_translation, 1.0/1.35, 1.0/1.35),
+            PartKind::PowerHub => MassProperties::new(collider_translation, 1.0/1.1, 1.0/1.1),
+            PartKind::LandingWheel => MassProperties::new(collider_translation, 1.0/0.75, 1.0/0.75),
         }
     }
     pub fn attachment_locations(&self) -> [Option<AttachmentPointDetails>; 4] {
@@ -530,4 +541,4 @@ impl Default for CompactThrustMode {
     
 // }
 
-struct ThrustDetails { fuel_cost: u32, force: Force2<MyUnits> }
+struct ThrustDetails { fuel_cost: u32, force: Vector, local_point: Point }
