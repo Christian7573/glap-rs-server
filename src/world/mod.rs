@@ -319,10 +319,6 @@ impl World {
         self.parts.remove(part_handle).expect("remove_part_unchecked")
     }
 
-    pub fn iter_parts_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item=(PartHandle, &'a mut Part, &'a mut RigidBody)> + 'a> {
-
-    }
-
     fn new(colliders: &mut ColliderSet) -> World { 
         let bodies = RigidBodySet::new();
         let reference_point_body = RigidBodyBuilder::new(BodyStatus::Static).additional_mass(0f32).build();
@@ -353,19 +349,6 @@ impl World {
                 }
             }
         }
-    }
-}
-
-struct PartsIteratorMut<'a> {
-    parts_iter: generational_arena::IterMut<'a, Part>,
-    bodies: &'a mut RigidBodySet,
-}
-impl<'a> Iterator for PartsIteratorMut<'a> {
-    type Item = (PartHandle, &'a mut Part, &'a mut RigidBody);
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some((part_handle, part)) = self.parts_iter.next() {
-            Some((part_handle, part, &mut self.bodies[part.body_handle()]))
-        } else { None }
     }
 }
 
@@ -402,6 +385,8 @@ impl<'a> PartVisitHandleMut<'a> {
     pub fn get_rigid(&self, handle: PartHandle) -> Option<&RigidBody> { self.0.get_part_rigid(handle) }
     pub fn get_part_mut(&mut self, handle: PartHandle) -> Option<&mut Part> { self.0.get_part_mut(handle) }
     pub fn get_rigid_mut(&mut self, handle: PartHandle) -> Option<&mut RigidBody> { self.0.get_part_rigid_mut(handle) }
+    pub fn self_rigid(&self) -> &RigidBody { self.get_rigid(self.1).unwrap() }
+    pub fn self_rigid_mut(&mut self) -> &mut RigidBody { self.get_rigid_mut(self.1).unwrap() }
     pub fn handle(&self) -> PartHandle { self.1 }
     pub fn details(&self) -> &PartVisitDetails { &self.2 }
 }

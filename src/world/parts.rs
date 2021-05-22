@@ -147,7 +147,7 @@ impl Part {
         } else { None }
     }
 
-    pub fn thrust_no_recurse(&mut self, fuel: &mut u32, forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool, bodies: &mut RigidBodySet) {
+    pub fn thrust_no_recurse(&self, fuel: &mut u32, forward: bool, backward: bool, clockwise: bool, counter_clockwise: bool, bodies: &mut RigidBodySet) {
         let body = &mut bodies[self.body_handle];
         match self.kind {
             PartKind::Core => {

@@ -129,13 +129,11 @@ async fn main() {
                                 let spawn_radius = earth.radius * 1.25 + 1.0;
                                 let earth_position = simulation.world.bodies_unchecked()[earth.body_handle].position().translation;
                                 let earth_position = simulation.world.bodies_unchecked()[simulation.world.planets.planets[&simulation.world.planets.earth_id].body_handle].position().translation;
-                                let part = simulation.world.get_part_mut(*part).expect("Invalid Earth Cargo");
-                                let body = part.body_mut();
+                                let body = simulation.world.get_part_rigid_mut(*part).expect("Invalid Earth Cargo");
                                 let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
-                                body.set_position(Isometry::new(Vector::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0)); // spawn_degrees));
+                                body.set_position(Isometry::new(Vector::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0), true); // spawn_degrees));
                                 //use nphysics2d::object::Body;
                                 //body.apply_force(0, &nphysics2d::math::Force::zero(), nphysics2d::math::ForceType::Force, true);
-                                body.activate();
                                 *ticks = TICKS_PER_SECOND as u16 * 60;
                             }
                         },
@@ -157,12 +155,12 @@ async fn main() {
                         let earth_position = simulation.world.bodies_unchecked()[earth.body_handle].position().translation;
                         let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
                         let spawn_pos = Isometry::new(Vector::new(spawn_degrees.sin() * spawn_radius + earth_position.x, spawn_degrees.cos() * spawn_radius + earth_position.y), 0.0);
-                        let part_handle = RecursivePartDescription::from(PartKind::Cargo).inflate(&mut (&mut simulation.world).into(), &mut simulation.colliders, &mut simulation.joints, spawn_pos);
+                        let part_handle = RecursivePartDescription::from(PartKind::Cargo).inflate(&mut simulation.world, &mut simulation.colliders, &mut simulation.joints, spawn_pos);
                         let part = simulation.world.get_part(part_handle).unwrap();
                         let part_id = part.id();
                         free_parts.insert(part_id, FreePart::EarthCargo(part_handle, TICKS_PER_SECOND as u16 * 60));
                         outbound_events.push(ToSerializer::Broadcast(part.add_msg()));
-                        outbound_events.push(ToSerializer::Broadcast(part.move_msg()));
+                        outbound_events.push(ToSerializer::Broadcast(part.move_msg(simulation.world.bodies_unchecked())));
                         outbound_events.push(ToSerializer::Broadcast(part.update_meta_msg()));
                     }
                 }
@@ -177,7 +175,7 @@ async fn main() {
                     };
                     if player.power > 0 {
                         simulation.world.recurse_part_mut(player.core, Default::default(), &mut |mut handle: world::PartVisitHandleMut| {
-                            (*handle).thrust_no_recurse(&mut player.power, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise);
+                            (*handle).thrust_no_recurse(&mut player.power, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise, simulation.world.bodies_mut_unchecked());
                         });
                         if player.power < 1 {
                             player.thrust_backwards = false; player.thrust_forwards = false; player.thrust_clockwise = false; player.thrust_counterclockwise = false;
@@ -189,8 +187,8 @@ async fn main() {
                         }
                     }
                     if let Some((part_id, constraint, x, y)) = player.grabbed_part {
-                        let core = simulation.world.get_part_mut(player.core).expect("Player iter invalid core part");
-                        let position = core.body().position().translation;
+                        let core = simulation.world.get_part_rigid(player.core).expect("Player iter invalid core part");
+                        let position = core.position().translation;
                         simulation.move_mouse_constraint(constraint, x + position.x, y + position.y);
                     }
                     if let Some(planet_id) = player.touching_planet {
@@ -202,7 +200,7 @@ async fn main() {
                                 if let Some((parent_part_handle, slot)) = core.find_cargo_recursive(&simulation.world) {
                                     let parent_part_handle = parent_part_handle.unwrap_or(player.core);
                                     let parent_part = simulation.world.get_part_mut(parent_part_handle).unwrap();
-                                    let old_part_handle = parent_part.detach_part_player_agnostic(slot, &mut simulation.joints).unwrap();
+                                    let old_part_handle = parent_part.detach_part_player_agnostic(slot, simulation.world.bodies_mut_unchecked(), &mut simulation.joints).unwrap();
                                     let old_part = simulation.world.remove_part_unchecked(old_part_handle);
                                     outbound_events.push(ToSerializer::Broadcast(old_part.remove_msg()));
                                     if player.parts_touching_planet.remove(&old_part_handle) {
@@ -213,11 +211,11 @@ async fn main() {
                                     }
                                     let new_part_handle = old_part.mutate(upgrade_into, &mut Some(player), &mut simulation.world, &mut simulation.colliders, &mut simulation.joints);
                                     let parent_part = simulation.world.get_part_mut(parent_part_handle).unwrap();
-                                    parent_part.attach_part_player_agnostic(slot, new_part_handle, parent_part_handle, &mut simulation.joints);
+                                    parent_part.attach_part_player_agnostic(slot, new_part_handle, parent_part_handle, &mut simulation.world, &mut simulation.joints);
                                     let new_part = simulation.world.get_part(new_part_handle).unwrap();
                                     outbound_events.push(ToSerializer::Message(*id, player.update_my_meta()));
                                     outbound_events.push(ToSerializer::Broadcast(new_part.add_msg()));
-                                    outbound_events.push(ToSerializer::Broadcast(new_part.move_msg()));
+                                    outbound_events.push(ToSerializer::Broadcast(new_part.move_msg(simulation.world.bodies_unchecked())));
                                     outbound_events.push(ToSerializer::Broadcast(new_part.update_meta_msg()));
                                 }   
                             }
@@ -290,9 +288,9 @@ async fn main() {
                         for (id, player) in &players {
                             let mut parts = Vec::new();
                             let part = simulation.world.get_part(player.core).unwrap();
-                            let vel = part.body().velocity();
+                            let vel = simulation.world.get_part_rigid(player.core).unwrap().linvel();
                             part.physics_update_msg(&simulation.world, &mut parts);
-                            out.insert(*id, ((parts[0].x, parts[0].y), (vel.linear.x, vel.linear.y), parts, ToClientMsg::PostSimulationTick{ your_power: player.power }));
+                            out.insert(*id, ((parts[0].x, parts[0].y), (vel.x, vel.y), parts, ToClientMsg::PostSimulationTick{ your_power: player.power }));
                         }
                         out
                     },
@@ -393,12 +391,12 @@ async fn main() {
                 let spawn_radius: f32 = earth_radius * 1.25 + 1.0 + max_extent.abs();
                 let spawn_center = (Vector::new(spawn_degrees.cos(), spawn_degrees.sin()) * spawn_radius) + earth_position.vector;
                 simulation.world.recurse_part_mut(core_handle, Default::default(), &mut |mut handle: world::PartVisitHandleMut| {
-                    let part = &mut handle;
+                    let part = handle.self_rigid_mut();
                     let new_pos = Isometry::new(
-                        part.body().position().translation.vector.clone() + spawn_center,
-                        part.body().position().rotation.angle()
+                        part.position().translation.vector.clone() + spawn_center,
+                        part.position().rotation.angle()
                     );
-                    part.body_mut().set_position(new_pos);
+                    part.set_position(new_pos, true);
                 });
 
                 let core = simulation.world.get_part_mut(core_handle).unwrap();
@@ -411,7 +409,7 @@ async fn main() {
                     let part = &mut handle;
                     part.join_to(&mut player);
                     outbound_events.push(ToSerializer::Broadcast(part.add_msg()));
-                    outbound_events.push(ToSerializer::Broadcast(part.move_msg()));
+                    outbound_events.push(ToSerializer::Broadcast(part.move_msg(simulation.world.bodies_unchecked())));
                     outbound_events.push(ToSerializer::Broadcast(part.update_meta_msg()));
                 });
                 player.power = player.max_power;
@@ -433,7 +431,7 @@ async fn main() {
                 for (_id, part) in &free_parts { simulation.world.recurse_part(**part, Default::default(), &mut |handle: world::PartVisitHandle| {
                     let part = &handle;
                     outbound_events.push(ToSerializer::Message(to_player, part.add_msg()));
-                    outbound_events.push(ToSerializer::Message(to_player, part.move_msg()));
+                    outbound_events.push(ToSerializer::Message(to_player, part.move_msg(simulation.world.bodies_unchecked())));
                     outbound_events.push(ToSerializer::Message(to_player, part.update_meta_msg()));
                 }); }
                 for (other_id, other_player) in &players {
@@ -443,7 +441,7 @@ async fn main() {
                     simulation.world.recurse_part(other_player.core, Default::default(), &mut |handle: world::PartVisitHandle| {
                         let part = &handle;
                         outbound_events.push(ToSerializer::Message(to_player, part.add_msg()));
-                        outbound_events.push(ToSerializer::Message(to_player, part.move_msg()));
+                        outbound_events.push(ToSerializer::Message(to_player, part.move_msg(simulation.world.bodies_unchecked())));
                         outbound_events.push(ToSerializer::Message(to_player, part.update_meta_msg()));
                     });
                 }
@@ -478,7 +476,7 @@ async fn main() {
                         if let Some(player_meta) = players.get_mut(&id) {
                             let core = simulation.world.get_part(player_meta.core).unwrap();
                             if player_meta.grabbed_part.is_none() {
-                                let core_location = core.body().position().translation;
+                                let core_location = simulation.world.get_part_rigid(player_meta.core).unwrap().position().translation;
                                 if let Some(free_part) = free_parts.get_mut(&grabbed_id) {
                                     if let FreePart::Decaying(part, _) | FreePart::EarthCargo(part, _) = &free_part {
                                         player_meta.grabbed_part = Some((grabbed_id, simulation.equip_mouse_dragging(*part), x, y));
@@ -493,7 +491,7 @@ async fn main() {
                                         for (i, attachment) in (*handle).attachments().iter().enumerate() {
                                             if let Some(attachment) = attachment {
                                                 if handle.get_part(**attachment).unwrap().id() == grabbed_id {
-                                                    return Some((*handle).detach_part_player_agnostic(i, joints).unwrap())
+                                                    return Some((*handle).detach_part_player_agnostic(i, simulation.world.bodies_mut_unchecked(), joints).unwrap())
                                                 };
                                             }
                                         };
@@ -542,9 +540,11 @@ async fn main() {
                                 let core_location = simulation.world.get_part_rigid(player_meta.core).unwrap().position().clone();
                                 let grabbed_part_handle = **free_parts.get(&part_id).unwrap();
                                 let grabbed_part = simulation.world.get_part_mut(grabbed_part_handle).unwrap();
-                                let inertia = grabbed_part.kind().inertia();
-                                grabbed_part.body_mut().set_local_inertia(inertia);
-                                grabbed_part.body_mut().set_velocity(Isometry::new(Vector::new(0.0,0.0), 0.0));
+                                let inertia = grabbed_part.kind().mass_properties();
+                                let grabbed_part_body = simulation.world.get_part_rigid_mut(grabbed_part_handle).unwrap();
+                                grabbed_part_body.set_mass_properties(inertia, true);
+                                grabbed_part_body.set_linvel(Vector::new(0.0,0.0), true);
+                                grabbed_part_body.set_angvel(0.0, true);
         
                                 use world::parts::CompactThrustMode;
                                 let target_x = x + core_location.translation.x;
@@ -554,7 +554,7 @@ async fn main() {
                                     &mut |mut handle| {
                                         let parent = &mut handle;
                                         let attachments = parent.kind().attachment_locations();
-                                        let pos = parent.body().position().clone();
+                                        let pos = handle.self_rigid().position().clone();
                                         for (i, attachment) in parent.attachments().iter().enumerate() {
                                             if attachment.is_none() {
                                                 if let Some(details) = &attachments[i] {
@@ -574,10 +574,11 @@ async fn main() {
                                 ) {
                                     let parent = simulation.world.get_part_mut(parent_handle).unwrap();
                                     //TODO: Check if we can use parent.body.position instead of core_location
-                                    parent.attach_part_player_agnostic(attachment_slot, grabbed_part_handle, parent_handle, &mut simulation.joints);
+                                    parent.attach_part_player_agnostic(attachment_slot, grabbed_part_handle, parent_handle, &mut simulation.world, &mut simulation.joints);
                                     free_parts.remove(&part_id);
+                                    let grabbed_part = simulation.world.get_part_rigid_mut(grabbed_part_handle).unwrap();
+                                    grabbed_part.set_position(Isometry::new(Vector::new(teleport_to.0, teleport_to.1), true_facing.part_rotation() + core_location.rotation.angle()), true);
                                     let grabbed_part = simulation.world.get_part_mut(grabbed_part_handle).unwrap();
-                                    grabbed_part.body_mut().set_position(Isometry::new(Vector::new(teleport_to.0, teleport_to.1), true_facing.part_rotation() + core_location.rotation.angle()));
                                     grabbed_part.join_to(player_meta);
                                     outbound_events.push(ToSerializer::Message(id, player_meta.update_my_meta()));
                                     grabbed_part.thrust_mode = thrust_mode;
@@ -629,11 +630,12 @@ async fn main() {
                                     let core_pos = simulation.world.get_part_rigid(player_meta.core).unwrap().position().translation.vector;
                                     println!("Teleporting {} to: {} {}", player_meta.name, x, y);
                                     simulation.world.recurse_part_mut(player_meta.core, Default::default(), &mut |mut handle: world::PartVisitHandleMut| {
+                                        let body = handle.self_rigid_mut();
                                         let pos = Isometry::new(
-                                                (*handle).body().position().clone().translation.vector - core_pos + teleport_to,
-                                                (*handle).body().position().rotation.angle()
+                                                body.position().clone().translation.vector - core_pos + teleport_to,
+                                                body.position().rotation.angle()
                                         );
-                                        (*handle).body_mut().set_position(pos);
+                                        body.set_position(pos, true);
                                     });
                                 }
                             }
