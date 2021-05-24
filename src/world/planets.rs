@@ -430,14 +430,31 @@ pub struct Orbit {
     rotation: f32,
     total_ticks: u32,
     ticks_ellapsed: u32,
+    last_next_position: (f32, f32),
 }
+const TICKS_PER_SECOND: f32 = crate::TICKS_PER_SECOND as f32;
 impl Orbit {
-    pub fn calculate_position(&self) -> (f32, f32) {
+    pub fn calculate_position_vel(&mut self, planets: &Planets) -> ((f32, f32), (f32, f32)) {
+        let ticks_ellapsed = self.ticks_ellapsed as f32;
+        let total_ticks = self.total_ticks as f32;
+        let radians = ticks_ellapsed / total_ticks * 2.0 * std::f32::consts::PI;
+        let pos = (self.radius.0 * radians.cos(), self.radius.1 * radians.sin());
+        let parent_planet = &planets.planets[&self.orbit_around];
+        let pos = (pos.0 + parent_planet.position.0, pos.1 + parent_planet.position.1);
+
+        let ticks_ellapsed = (ticks_ellapsed + 1.0) % total_ticks;
+        let radians = ticks_ellapsed / total_ticks * 2.0 * std::f32::consts::PI;
+        let next_pos = (self.radius.0 * radians.cos(), self.radius.1 * radians.sin());
+        let parent_next_pos = if let Some(orbit) = parent_planet.orbit { orbit.last_next_position } else { parent_planet.position };
+        let next_pos = (next_pos.0 + parent_next_pos.0, next_pos.1 + parent_next_pos.1);
+
+        let vel = ((next_pos.0 - pos.0) * TICKS_PER_SECOND, (next_pos.1 - pos.1) * TICKS_PER_SECOND);
+        (pos, vel)
     }
-    pub fn advance(&mut self) -> (f32, f32) {
+    pub fn advance(&mut self, planets: &Planets) -> ((f32, f32), (f32, f32)) {
         self.ticks_ellapsed += 1;
         if self.ticks_ellapsed >= self.total_ticks { self.ticks_ellapsed = 0; }
-        self.calculate_position()
+        self.calculate_position_vel(planets)
     }
 }
 
