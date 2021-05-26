@@ -125,7 +125,7 @@ async fn main() {
                         FreePart::EarthCargo(part, ticks) => {
                             *ticks -= 1;
                             if *ticks < 1 {
-                                let earth = simulation.world.planets.planets[&simulation.world.planets.earth_id];
+                                let earth = &simulation.world.planets.planets[&simulation.world.planets.earth_id];
                                 let spawn_radius = earth.radius * 1.25 + 1.0;
                                 let earth_position = simulation.world.bodies_unchecked()[earth.body_handle].position().translation;
                                 let earth_position = simulation.world.bodies_unchecked()[simulation.world.planets.planets[&simulation.world.planets.earth_id].body_handle].position().translation;
@@ -150,7 +150,7 @@ async fn main() {
                     if ticks_til_earth_cargo_spawn == 0 {
                         ticks_til_earth_cargo_spawn = TICKS_PER_EARTH_CARGO_SPAWN;
                         earth_cargos += 1; 
-                        let earth = simulation.world.planets.planets[&simulation.world.planets.earth_id];
+                        let earth = &simulation.world.planets.planets[&simulation.world.planets.earth_id];
                         let spawn_radius = earth.radius * 1.25 + 1.0;
                         let earth_position = simulation.world.bodies_unchecked()[earth.body_handle].position().translation;
                         let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;
