@@ -45,7 +45,7 @@ pub fn spawn_beamout_request(beamout_token: String, mut beamout_layout: Recursiv
     })
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct BeaminResponse {
     pub is_admin: bool,
     pub beamout_token: String,
