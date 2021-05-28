@@ -114,12 +114,12 @@ impl Part {
         let position = old_body.position().clone();
         self.remove_physics_components(world.bodies_mut_unchecked(), colliders, joints);
         let part_index = RecursivePartDescription::from(mutate_into).inflate_component(world, colliders, joints, position, AttachedPartFacing::Up, 0, 0, Some(self.id));
-        let part = world.get_part_mut(part_index).unwrap();
         for i in 0..4 {
             if let Some(attachment) = &raw_attachments[i] {
-                part.attach_part_player_agnostic(i, *attachment, part_index, world, joints);
+                Part::attach_part_player_agnostic(part_index, *attachment, i, world, joints);
             }
         }
+        let part = world.get_part_mut(part_index).unwrap();
         part.thrust_mode = self.thrust_mode;
         if let Some(player) = player { part.join_to(player) };
         part_index
@@ -136,14 +136,16 @@ impl Part {
         bodies.remove(self.body_handle, colliders, joints);
     }
 
-    pub fn attach_part_player_agnostic(&mut self, attachment_slot: usize, part_handle: PartHandle, my_handle: PartHandle, world: &mut World, joints: &mut JointSet) {
-        //if self.kind.attachment_locations()[attachment_slot].is_none() { panic!("Can't attach to that slot") };
-        if self.attachments[attachment_slot].is_some() { panic!("Already attached there"); }
-        self.attachments[attachment_slot] = Some(PartAttachment::inflate(part_handle, self.kind, my_handle, attachment_slot, world, joints));
+    pub fn attach_part_player_agnostic(parent_handle: PartHandle, child_handle: PartHandle, attachment_slot: usize, world: &mut World, joints: &mut JointSet) {
+        let parent = world.get_part(parent_handle).unwrap();
+        if parent.attachments[attachment_slot].is_some() { panic!("Already attached there"); }
+        let kind = parent.kind();
+        world.get_part_mut(parent_handle).unwrap().attachments[attachment_slot] = Some(PartAttachment::inflate(child_handle, kind, parent_handle, attachment_slot, world, joints));
     }
-    pub fn detach_part_player_agnostic(&mut self, attachment_slot: usize, bodies: &mut RigidBodySet, joints: &mut JointSet) -> Option<PartHandle> {
-        if let Some(part_attachment) = std::mem::replace(&mut self.attachments[attachment_slot], None) {
-            Some(part_attachment.deflate(bodies, joints))
+    pub fn detach_part_player_agnostic(parent_handle: PartHandle, attachment_slot: usize, world: &mut World, joints: &mut JointSet) -> Option<PartHandle> {
+        let parent = world.get_part_mut(parent_handle).unwrap();
+        if let Some(part_attachment) = std::mem::replace(&mut parent.attachments[attachment_slot], None) {
+            Some(part_attachment.deflate(world.bodies_mut_unchecked(), joints))
         } else { None }
     }
 

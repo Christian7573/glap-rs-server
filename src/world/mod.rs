@@ -389,6 +389,7 @@ impl<'a> PartVisitHandleMut<'a> {
     pub fn self_rigid_mut(&mut self) -> &mut RigidBody { self.get_rigid_mut(self.1).unwrap() }
     pub fn handle(&self) -> PartHandle { self.1 }
     pub fn details(&self) -> &PartVisitDetails { &self.2 }
+    pub fn world_unchecked(&mut self) -> &mut World { self.0 }
 }
 impl<'a> Deref for PartVisitHandleMut<'a> {
     type Target = Part;

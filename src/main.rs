@@ -175,7 +175,7 @@ async fn main() {
                     };
                     if player.power > 0 {
                         simulation.world.recurse_part_mut(player.core, Default::default(), &mut |mut handle: world::PartVisitHandleMut| {
-                            (*handle).thrust_no_recurse(&mut player.power, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise, simulation.world.bodies_mut_unchecked());
+                            (*handle).thrust_no_recurse(&mut player.power, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise, handle.world_unchecked().bodies_mut_unchecked());
                         });
                         if player.power < 1 {
                             player.thrust_backwards = false; player.thrust_forwards = false; player.thrust_clockwise = false; player.thrust_counterclockwise = false;
@@ -199,8 +199,8 @@ async fn main() {
                                 let core = simulation.world.get_part(player.core).expect("Player iter invalid core part");
                                 if let Some((parent_part_handle, slot)) = core.find_cargo_recursive(&simulation.world) {
                                     let parent_part_handle = parent_part_handle.unwrap_or(player.core);
-                                    let parent_part = simulation.world.get_part_mut(parent_part_handle).unwrap();
-                                    let old_part_handle = parent_part.detach_part_player_agnostic(slot, simulation.world.bodies_mut_unchecked(), &mut simulation.joints).unwrap();
+                                    //let parent_part = simulation.world.get_part_mut(parent_part_handle).unwrap();
+                                    let old_part_handle = Part::detach_part_player_agnostic(parent_part_handle, slot, &mut simulation.world, &mut simulation.joints).unwrap();
                                     let old_part = simulation.world.remove_part_unchecked(old_part_handle);
                                     outbound_events.push(ToSerializer::Broadcast(old_part.remove_msg()));
                                     if player.parts_touching_planet.remove(&old_part_handle) {
@@ -210,8 +210,7 @@ async fn main() {
                                         }
                                     }
                                     let new_part_handle = old_part.mutate(upgrade_into, &mut Some(player), &mut simulation.world, &mut simulation.colliders, &mut simulation.joints);
-                                    let parent_part = simulation.world.get_part_mut(parent_part_handle).unwrap();
-                                    parent_part.attach_part_player_agnostic(slot, new_part_handle, parent_part_handle, &mut simulation.world, &mut simulation.joints);
+                                    Part::attach_part_player_agnostic(parent_part_handle, new_part_handle, slot, &mut simulation.world, &mut simulation.joints);
                                     let new_part = simulation.world.get_part(new_part_handle).unwrap();
                                     outbound_events.push(ToSerializer::Message(*id, player.update_my_meta()));
                                     outbound_events.push(ToSerializer::Broadcast(new_part.add_msg()));
@@ -491,7 +490,7 @@ async fn main() {
                                         for (i, attachment) in (*handle).attachments().iter().enumerate() {
                                             if let Some(attachment) = attachment {
                                                 if handle.get_part(**attachment).unwrap().id() == grabbed_id {
-                                                    return Some((*handle).detach_part_player_agnostic(i, simulation.world.bodies_mut_unchecked(), joints).unwrap())
+                                                    return Some(Part::detach_part_player_agnostic(handle.handle(), i, handle.world_unchecked(), joints).unwrap())
                                                 };
                                             }
                                         };
@@ -552,9 +551,9 @@ async fn main() {
                                 if let Some((parent_handle, attachment_slot, attachment_details, teleport_to, thrust_mode, true_facing)) = simulation.world.recurse_part_mut_with_return(
                                     player_meta.core, Default::default(),
                                     &mut |mut handle| {
+                                        let pos = handle.self_rigid().position().clone();
                                         let parent = &mut handle;
                                         let attachments = parent.kind().attachment_locations();
-                                        let pos = handle.self_rigid().position().clone();
                                         for (i, attachment) in parent.attachments().iter().enumerate() {
                                             if attachment.is_none() {
                                                 if let Some(details) = &attachments[i] {
@@ -572,9 +571,8 @@ async fn main() {
                                         None
                                     }
                                 ) {
-                                    let parent = simulation.world.get_part_mut(parent_handle).unwrap();
                                     //TODO: Check if we can use parent.body.position instead of core_location
-                                    parent.attach_part_player_agnostic(attachment_slot, grabbed_part_handle, parent_handle, &mut simulation.world, &mut simulation.joints);
+                                    Part::attach_part_player_agnostic(parent_handle, grabbed_part_handle, attachment_slot, &mut simulation.world, &mut simulation.joints);
                                     free_parts.remove(&part_id);
                                     let grabbed_part = simulation.world.get_part_rigid_mut(grabbed_part_handle).unwrap();
                                     grabbed_part.set_position(Isometry::new(Vector::new(teleport_to.0, teleport_to.1), true_facing.part_rotation() + core_location.rotation.angle()), true);
