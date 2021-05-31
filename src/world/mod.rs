@@ -126,7 +126,7 @@ impl Simulation {
         let part_actual = self.world.get_part(part).unwrap();
         let body_handle = part_actual.body_handle();
         let body = self.world.get_part_rigid_mut(part).unwrap();
-        let mass = *body.mass_properties();
+        let mut mass = *body.mass_properties();
         mass.inv_mass = 1.0 / 0.00000001;
         body.set_mass_properties(mass, true);
         let space = body.position().translation;
@@ -134,10 +134,11 @@ impl Simulation {
             Point::new(0.0,0.0),
             Point::new(space.x, space.y),
         );
-        self.joints.insert(self.world.bodies_mut_unchecked(), self.world.reference_point_body, body_handle, constraint)
+        let reference_point = self.world.reference_point_body();
+        self.joints.insert(self.world.bodies_mut_unchecked(), reference_point, body_handle, constraint)
     }
     pub fn move_mouse_constraint(&mut self, constraint_id: JointHandle, x: f32, y: f32) {
-        if let Some(JointParams::BallJoint(constraint)) = self.joints.get_mut(constraint_id).map(|j: &mut Joint| j.params ) {
+        if let Some(JointParams::BallJoint(mut constraint)) = self.joints.get_mut(constraint_id).map(|j: &mut Joint| j.params ) {
             constraint.local_anchor2 = Point::new(x, y);
         }
     }
@@ -299,9 +300,10 @@ impl World {
     pub fn recursive_thrust_player(&mut self, core_handle: PartHandle, player: &mut PlayerMeta) {
         if let Some(part) = self.parts.get(core_handle) {
             part.thrust_no_recurse(&mut player.power, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise, &mut self.bodies);
+            let attachments = [part.attachments()[0].as_ref().map(|e| **e), part.attachments()[1].as_ref().map(|e| **e), part.attachments()[2].as_ref().map(|e| **e), part.attachments()[3].as_ref().map(|e| **e)];
             for i in 0..4 {
-                if let Some(attachment) = part.attachments()[i] {
-                    self.recursive_thrust_player(*attachment, player);
+                if let Some(attachment) = attachments[i] {
+                    self.recursive_thrust_player(attachment, player);
                 }
             }
         }
@@ -359,6 +361,10 @@ impl World {
                 }
             }
         }
+    }
+
+    fn reference_point_body(&self) -> RigidBodyHandle {
+        self.reference_point_body
     }
 }
 
