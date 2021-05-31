@@ -174,9 +174,7 @@ async fn main() {
                         if player.power > player.max_power { player.power = player.max_power; };
                     };
                     if player.power > 0 {
-                        simulation.world.recurse_part_mut(player.core, Default::default(), &mut |mut handle: world::PartVisitHandleMut| {
-                            (*handle).thrust_no_recurse(&mut player.power, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise, handle.world_unchecked().bodies_mut_unchecked());
-                        });
+                        simulation.world.recursive_thrust_player(player.core, player);
                         if player.power < 1 {
                             player.thrust_backwards = false; player.thrust_forwards = false; player.thrust_clockwise = false; player.thrust_counterclockwise = false;
                             outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::UpdatePlayerMeta {

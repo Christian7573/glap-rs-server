@@ -8,6 +8,7 @@ use rapier2d::geometry::{BroadPhase, NarrowPhase, ColliderSet, IntersectionEvent
 use rapier2d::pipeline::{PhysicsPipeline, ChannelEventCollector};
 use rapier2d::crossbeam::channel::{Sender as CSender, Receiver as CReceiver, unbounded as c_channel};
 use crate::storage7573::Storage7573;
+use crate::PlayerMeta;
 
 pub mod planets;
 pub mod parts;
@@ -293,6 +294,17 @@ impl World {
             }
         }
         return None;
+    }
+
+    pub fn recursive_thrust_player(&mut self, core_handle: PartHandle, player: &mut PlayerMeta) {
+        if let Some(part) = self.parts.get(core_handle) {
+            part.thrust_no_recurse(&mut player.power, player.thrust_forwards, player.thrust_backwards, player.thrust_clockwise, player.thrust_counterclockwise, &mut self.bodies);
+            for i in 0..4 {
+                if let Some(attachment) = part.attachments()[i] {
+                    self.recursive_thrust_player(*attachment, player);
+                }
+            }
+        }
     }
 
     pub fn recursive_detach_one(&mut self, parent_handle: PartHandle, attachment_slot: usize, player: &mut Option<&mut crate::PlayerMeta>, joints: &mut JointSet, parts_affected: &mut BTreeSet<PartHandle>) {
