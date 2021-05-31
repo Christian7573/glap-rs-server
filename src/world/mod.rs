@@ -308,16 +308,14 @@ impl World {
     }
 
     pub fn recursive_detach_one(&mut self, parent_handle: PartHandle, attachment_slot: usize, player: &mut Option<&mut crate::PlayerMeta>, joints: &mut JointSet, parts_affected: &mut BTreeSet<PartHandle>) {
-        if let Some(parent) = self.get_part_mut(parent_handle) {
-            if let Some(attachment_handle) = parent.detach_part_player_agnostic(attachment_slot, &mut self.bodies, joints) {
-                parts_affected.insert(attachment_handle);
-                if let Some(player) = player {
-                    if let Some(attached_part) = self.get_part_mut(attachment_handle) {
-                        attached_part.remove_from(*player);
-                    }
+        if let Some(attachment_handle) = Part::detach_part_player_agnostic(parent_handle, attachment_slot, self, joints) {
+            parts_affected.insert(attachment_handle);
+            if let Some(player) = player {
+                if let Some(attached_part) = self.get_part_mut(attachment_handle) {
+                    attached_part.remove_from(*player);
                 }
-                self.recursive_detach_all(attachment_handle, player, joints, parts_affected);                                
             }
+            self.recursive_detach_all(attachment_handle, player, joints, parts_affected);                                
         }
     }
     pub fn recursive_detach_all(&mut self, parent_handle: PartHandle, player: &mut Option<&mut crate::PlayerMeta>, joints: &mut JointSet, parts_affected: &mut BTreeSet<PartHandle>) {
@@ -401,7 +399,8 @@ impl<'a> PartVisitHandleMut<'a> {
     pub fn self_rigid_mut(&mut self) -> &mut RigidBody { self.get_rigid_mut(self.1).unwrap() }
     pub fn handle(&self) -> PartHandle { self.1 }
     pub fn details(&self) -> &PartVisitDetails { &self.2 }
-    pub fn world_unchecked(&mut self) -> &mut World { self.0 }
+    pub fn world_unchecked(&self) -> &World { &*self.0 }
+    pub fn world_mut_unchecked(&mut self) -> &mut World { self.0 }
 }
 impl<'a> Deref for PartVisitHandleMut<'a> {
     type Target = Part;

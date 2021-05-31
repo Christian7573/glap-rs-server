@@ -143,7 +143,7 @@ impl Part {
         world.get_part_mut(parent_handle).unwrap().attachments[attachment_slot] = Some(PartAttachment::inflate(child_handle, kind, parent_handle, attachment_slot, world, joints));
     }
     pub fn detach_part_player_agnostic(parent_handle: PartHandle, attachment_slot: usize, world: &mut World, joints: &mut JointSet) -> Option<PartHandle> {
-        let parent = world.get_part_mut(parent_handle).unwrap();
+        let parent = world.get_part_mut(parent_handle)?;
         if let Some(part_attachment) = std::mem::replace(&mut parent.attachments[attachment_slot], None) {
             Some(part_attachment.deflate(world.bodies_mut_unchecked(), joints))
         } else { None }

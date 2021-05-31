@@ -405,8 +405,9 @@ async fn main() {
                 simulation.world.recurse_part_mut(core_handle, Default::default(), &mut |mut handle| {
                     let part = &mut handle;
                     part.join_to(&mut player);
+                    let part = &handle;
                     outbound_events.push(ToSerializer::Broadcast(part.add_msg()));
-                    outbound_events.push(ToSerializer::Broadcast(part.move_msg(simulation.world.bodies_unchecked())));
+                    outbound_events.push(ToSerializer::Broadcast(part.move_msg(handle.world_unchecked().bodies_unchecked())));
                     outbound_events.push(ToSerializer::Broadcast(part.update_meta_msg()));
                 });
                 player.power = player.max_power;
@@ -488,7 +489,7 @@ async fn main() {
                                         for (i, attachment) in (*handle).attachments().iter().enumerate() {
                                             if let Some(attachment) = attachment {
                                                 if handle.get_part(**attachment).unwrap().id() == grabbed_id {
-                                                    return Some(Part::detach_part_player_agnostic(handle.handle(), i, handle.world_unchecked(), joints).unwrap())
+                                                    return Some(Part::detach_part_player_agnostic(handle.handle(), i, handle.world_mut_unchecked(), joints).unwrap())
                                                 };
                                             }
                                         };
