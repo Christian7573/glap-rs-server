@@ -197,7 +197,11 @@ impl World {
         self.parts.get(index)
     }
     pub fn get_part_rigid_mut(&mut self, index: PartHandle) -> Option<&mut RigidBody> {
-        self.parts.get(index).map(|part| self.bodies.get_mut(part.body_handle())).flatten()
+        if let Some(part) = self.parts.get(index) {
+            self.bodies.get_mut(part.body_handle())
+        } else {
+            None
+        }
     }
     pub fn get_part_mut(&mut self, index: PartHandle) -> Option<&mut Part> {
         self.parts.get_mut(index)
@@ -332,13 +336,14 @@ impl World {
     }
 
     fn new(colliders: &mut ColliderSet) -> World { 
-        let bodies = RigidBodySet::new();
+        let mut bodies = RigidBodySet::new();
         let reference_point_body = RigidBodyBuilder::new(BodyStatus::Static).additional_mass(0f32).build();
         let reference_point_body = bodies.insert(reference_point_body);
+        let planets = planets::Planets::new(&mut bodies, colliders);
         World {
             bodies,
             parts: Arena::new(),
-            planets: planets::Planets::new(&mut bodies, colliders),
+            planets,
             reference_point_body,
             parts_reverse_lookup: BTreeMap::new(),
         }

@@ -456,7 +456,7 @@ impl Orbit {
         let ticks_ellapsed = (ticks_ellapsed + 1.0) % total_ticks;
         let radians = ticks_ellapsed / total_ticks * 2.0 * std::f32::consts::PI;
         let next_pos = (self.radius.0 * radians.cos(), self.radius.1 * radians.sin());
-        let parent_next_pos = if let Some(orbit) = parent_planet.orbit { orbit.last_next_position } else { parent_planet.position };
+        let parent_next_pos = if let Some(orbit) = &parent_planet.orbit { orbit.last_next_position } else { parent_planet.position };
         let next_pos = (next_pos.0 + parent_next_pos.0, next_pos.1 + parent_next_pos.1);
 
         let vel = ((next_pos.0 - pos.0) * TICKS_PER_SECOND, (next_pos.1 - pos.1) * TICKS_PER_SECOND);

@@ -64,10 +64,9 @@ impl RecursivePartDescription {
             body_handle,
         };
         let my_part_handle = world.parts.insert(part);
-        let part = &mut world.parts[my_part_handle];
 
-        for i in 0..4 {
-            attachments[i] = self.attachments.get(i).map(|o| o.as_ref()).flatten().map(|recursive_part| {
+        for (i, attachment) in self.attachments.iter().enumerate() {
+            if let Some(recursive_part) = attachment {
                 if let Some(attachment) = self.kind.attachment_locations()[i] {
                     let attachment_location = PartAttachment::calculate_attachment_position(self.kind, &initial_location, i).unwrap();
                     let attachment_true_facing = attachment.facing.compute_true_facing(true_facing);
@@ -75,9 +74,9 @@ impl RecursivePartDescription {
                     let attachment_part_x = rel_part_x + d_part_x;
                     let attachment_part_y = rel_part_y + d_part_y;
                     let part = recursive_part.inflate_component(world, colliders, joints, attachment_location, attachment_true_facing, attachment_part_x, attachment_part_y, None);
-                    Some(PartAttachment::inflate(part, self.kind, my_part_handle, i, world, joints))
-                } else { None }
-            }).flatten();
+                    Part::attach_part_player_agnostic(my_part_handle, part, i, world, joints);
+                }
+            }
         };
         my_part_handle
     }
@@ -103,24 +102,26 @@ impl Part {
     pub fn part_of_player(&self) -> Option<u16> { self.part_of_player }
     pub fn mutate(mut self, mutate_into: PartKind, player: &mut Option<&mut PlayerMeta>, world: &mut World, colliders: &mut ColliderSet, joints: &mut JointSet) -> PartHandle {
         if let Some(player) = player { self.remove_from(player); }
-        let mut old_attachments = self.attachments;
+        let old_attachments = &mut self.attachments;
         let mut raw_attachments: [Option<PartHandle>; 4] = [None, None, None, None];
         for i in 0..4 {
             if let Some(attachment) = std::mem::replace(&mut old_attachments[i], None) {
                 raw_attachments[i] = Some(attachment.deflate(world.bodies_mut_unchecked(), joints));
             }
         };
-        let old_body = world.bodies_unchecked()[self.body_handle];
+        let old_body = &world.bodies_unchecked()[self.body_handle];
         let position = old_body.position().clone();
+        let thrust_mode = self.thrust_mode;
+        let part_id = self.id;
         self.remove_physics_components(world.bodies_mut_unchecked(), colliders, joints);
-        let part_index = RecursivePartDescription::from(mutate_into).inflate_component(world, colliders, joints, position, AttachedPartFacing::Up, 0, 0, Some(self.id));
+        let part_index = RecursivePartDescription::from(mutate_into).inflate_component(world, colliders, joints, position, AttachedPartFacing::Up, 0, 0, Some(part_id));
         for i in 0..4 {
             if let Some(attachment) = &raw_attachments[i] {
                 Part::attach_part_player_agnostic(part_index, *attachment, i, world, joints);
             }
         }
         let part = world.get_part_mut(part_index).unwrap();
-        part.thrust_mode = self.thrust_mode;
+        part.thrust_mode = thrust_mode;
         if let Some(player) = player { part.join_to(player) };
         part_index
     }
@@ -200,14 +201,14 @@ impl Part {
     }
 
     pub fn delete_recursive(mut self, world: &mut World, colliders: &mut ColliderSet, joints: &mut JointSet, removal_msgs: &mut Vec<ToClientMsg>) {
-        self.remove_physics_components(world.bodies_mut_unchecked(), colliders, joints);
-        removal_msgs.push(self.remove_msg());
         for attachment in self.attachments.iter_mut() {
             if let Some(attachment) = std::mem::replace(attachment, None) {
                 let attachment = attachment.deflate(world.bodies_mut_unchecked(), joints);
                 world.delete_parts_recursive(attachment, colliders, joints, removal_msgs);
             }
         }
+        removal_msgs.push(self.remove_msg());
+        self.remove_physics_components(world.bodies_mut_unchecked(), colliders, joints);
     }
 
     pub fn id(&self) -> u16 { self.id }
@@ -285,7 +286,9 @@ impl PartAttachment {
         constraint1.set_break_force(MAX_FORCE);
         constraint2.set_break_torque(MAX_TORQUE);
         constraint2.set_break_force(MAX_FORCE);*/
-        let connection = joints.insert(world.bodies_mut_unchecked(), world.get_part(parent_body_handle).unwrap().body_handle, world.get_part(part).unwrap().body_handle, constraint);
+        let parent_body_handle = world.get_part(parent_body_handle).unwrap().body_handle();
+        let child_body_handle = world.get_part(part).unwrap().body_handle();
+        let connection = joints.insert(world.bodies_mut_unchecked(), parent_body_handle, child_body_handle, constraint);
         PartAttachment {
             part,
             connection,
