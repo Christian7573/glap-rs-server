@@ -186,6 +186,7 @@ InitCelestialOrbit.fields.append(Field("orbit_around_body", TypeFloat))
 InitCelestialOrbit.fields.append(Field("orbit_radius", TypeFloatPair))
 InitCelestialOrbit.fields.append(Field("orbit_rotation", TypeFloat))
 InitCelestialOrbit.fields.append(Field("orbit_total_ticks", TypeUInt))
+ToClientMsg.messages.append(InitCelestialOrbit)
 
 UpdateCelestialOrbit = Message("UpdateCelestialOrbit")
 UpdateCelestialOrbit.fields.append(Field("id", TypeUByte))

@@ -449,13 +449,15 @@ impl Orbit {
         let ticks_ellapsed = self.ticks_ellapsed as f32;
         let total_ticks = self.total_ticks as f32;
         let radians = ticks_ellapsed / total_ticks * 2.0 * std::f32::consts::PI;
-        let pos = (self.radius.0 * radians.cos(), self.radius.1 * radians.sin());
+        let mut pos = (self.radius.0 * radians.cos(), self.radius.1 * radians.sin());
+        if self.rotation != 0.0 { Self::my_rotate_point(&mut pos, self.rotation) };
         let parent_planet = &planets.planets[&self.orbit_around];
         let pos = (pos.0 + parent_planet.position.0, pos.1 + parent_planet.position.1);
 
-        let ticks_ellapsed = (ticks_ellapsed + 1.0) % total_ticks;
+        let ticks_ellapsed = (ticks_ellapsed + 1.0); // % total_ticks;
         let radians = ticks_ellapsed / total_ticks * 2.0 * std::f32::consts::PI;
-        let next_pos = (self.radius.0 * radians.cos(), self.radius.1 * radians.sin());
+        let mut next_pos = (self.radius.0 * radians.cos(), self.radius.1 * radians.sin());
+        if self.rotation != 0.0 { Self::my_rotate_point(&mut next_pos, self.rotation) };
         let parent_next_pos = if let Some(orbit) = &parent_planet.orbit { orbit.last_next_position } else { parent_planet.position };
         let next_pos = (next_pos.0 + parent_next_pos.0, next_pos.1 + parent_next_pos.1);
 
@@ -466,6 +468,10 @@ impl Orbit {
         self.ticks_ellapsed += 1;
         if self.ticks_ellapsed >= self.total_ticks { self.ticks_ellapsed = 0; }
         self.calculate_position_vel(planets)
+    }
+
+    fn my_rotate_point(point: &mut (f32, f32), radians: f32) {
+        *point = crate::rotate_vector_with_angle(point.0, point.1, radians)        
     }
 }
 
