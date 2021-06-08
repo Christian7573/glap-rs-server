@@ -219,7 +219,7 @@ pub enum ToClientMsg {
 	MessagePack { count: u16, },
 	HandshakeAccepted { id: u16, core_id: u16, can_beamout: bool, },
 	AddCelestialObject { id: u8, kind: PlanetKind, radius: f32, position: (f32,f32), },
-	InitCelestialOrbit { id: u8, orbit_around_body: f32, orbit_radius: (f32,f32), orbit_rotation: f32, orbit_total_ticks: u32, },
+	InitCelestialOrbit { id: u8, orbit_around_body: u8, orbit_radius: (f32,f32), orbit_rotation: f32, orbit_total_ticks: u32, },
 	UpdateCelestialOrbit { id: u8, orbit_ticks_ellapsed: u32, },
 	AddPart { id: u16, kind: PartKind, },
 	MovePart { id: u16, x: f32, y: f32, rotation_n: f32, rotation_i: f32, },
@@ -258,7 +258,7 @@ impl ToClientMsg {
 			Self::InitCelestialOrbit { id, orbit_around_body, orbit_radius, orbit_rotation, orbit_total_ticks} => {
 				out.push(3);
 				type_u8_serialize(out, id);
-				type_float_serialize(out, orbit_around_body);
+				type_u8_serialize(out, orbit_around_body);
 				type_float_pair_serialize(out, orbit_radius);
 				type_float_serialize(out, orbit_rotation);
 				type_u32_serialize(out, orbit_total_ticks);
@@ -366,7 +366,7 @@ impl ToClientMsg {
 			3 => {
 				let id; let orbit_around_body; let orbit_radius; let orbit_rotation; let orbit_total_ticks;
 				id = type_u8_deserialize(stream).await?;
-				orbit_around_body = type_float_deserialize(stream).await?;
+				orbit_around_body = type_u8_deserialize(stream).await?;
 				orbit_radius = type_float_pair_deserialize(stream).await?;
 				orbit_rotation = type_float_deserialize(stream).await?;
 				orbit_total_ticks = type_u32_deserialize(stream).await?;

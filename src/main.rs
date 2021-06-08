@@ -424,6 +424,11 @@ async fn main() {
                         id: *id, radius: planet.radius, position: (position.x, position.y),
                         kind: planet.kind,
                     }));
+                    if let Some(orbit) = &planet.orbit {
+                        let (init_msg, update_msg) = orbit.init_messages(*id);
+                        outbound_events.push(ToSerializer::Message(to_player, init_msg));
+                        outbound_events.push(ToSerializer::Message(to_player, update_msg));
+                    }
                 }
 
                 for (_id, part) in &free_parts { simulation.world.recurse_part(**part, Default::default(), &mut |handle: world::PartVisitHandle| {

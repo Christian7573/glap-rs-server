@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use rapier2d::dynamics::{RigidBody, RigidBodyBuilder, BodyStatus, RigidBodyHandle, RigidBodySet};
 use rapier2d::geometry::{ColliderBuilder, SharedShape, Collider, ColliderSet, ColliderHandle};
 use super::typedef::*;
-use crate::codec::PlanetKind;
+use crate::codec::{ PlanetKind, ToClientMsg };
 use crate::storage7573::Storage7573;
 use rand::Rng;
 use super::parts::PartKind;
@@ -15,6 +15,7 @@ pub struct Planets {
     pub earth_id: u8,
     pub trade_id: u8,
     pub sun_id: u8,
+    pub planet_ids: Vec<u8>,
 }
 impl Planets {
     pub fn new(bodies: &mut RigidBodySet, colliders: &mut ColliderSet) -> Planets {
@@ -396,27 +397,25 @@ impl Planets {
         /*Planets {
             earth, moon, planet_material, mars, mercury, jupiter, /* pluto, */ saturn, neptune, venus, uranus, sun, /* trade, */
         }*/
-        Planets { planets, earth_id, trade_id, sun_id }
+        let planet_ids = planets.keys().cloned().collect();
+        Planets { planets, earth_id, trade_id, sun_id, planet_ids }
     }
 
-    /*pub fn celestial_objects<'a>(&'a self) -> [&'a CelestialObject; 10] {
-        [&self.earth, &self.moon, &self.mars, &self.mercury, &self.jupiter, /* &self.pluto, */ &self.saturn, &self.neptune, &self.venus, &self.uranus, &self.sun, /* &self.trade */]
+    pub fn advance_orbits(&mut self, bodies: &mut RigidBodySet) {
+        for id in &self.planet_ids {
+            if let Some(orbit) = &self.planets[&id].orbit {
+                let parent_planet = &self.planets[&orbit.orbit_around];
+                let parent_pos = parent_planet.position;
+                let parent_next_pos = if let Some(orbit) = &parent_planet.orbit { orbit.last_next_position } else { parent_pos };
+                let planet = self.planets.get_mut(id).unwrap();
+                let (pos, vel) = planet.orbit.as_mut().unwrap().advance(parent_pos, parent_next_pos);
+                planet.position = pos;
+                let body = &mut bodies[planet.body_handle];
+                body.set_position(Isometry::new(Vector::new(pos.0, pos.1), 0.0), true);
+                body.set_linvel(Vector::new(vel.0, vel.1), true);
+            }
+        }
     }
-    pub fn get_celestial_object<'a>(&'a self, id: u16) -> Result<&'a CelestialObject, ()> {
-        if id == self.earth.id { Ok(&self.earth) }
-        else if id == self.moon.id { Ok(&self.moon) }
-        else if id == self.mars.id { Ok(&self.mars) }
-        else if id == self.mercury.id { Ok(&self.mercury) }
-        else if id == self.jupiter.id { Ok(&self.jupiter) }
-        //else if id == self.pluto.id { Ok(&self.pluto) }
-        else if id == self.saturn.id { Ok(&self.saturn) }
-        else if id == self.neptune.id { Ok(&self.neptune) }
-        else if id == self.venus.id { Ok(&self.venus) }
-        else if id == self.uranus.id { Ok(&self.uranus) }
-        else if id == self.sun.id { Ok(&self.sun) }
-        //else if id == self.trade.id { Ok(&self.trade) }
-        else { Err(()) }
-    }*/
 }
 
 static mut NEXT_PLANET_ID: u8 = 1;
@@ -445,33 +444,48 @@ pub struct Orbit {
 }
 const TICKS_PER_SECOND: f32 = crate::TICKS_PER_SECOND as f32;
 impl Orbit {
-    pub fn calculate_position_vel(&mut self, planets: &Planets) -> ((f32, f32), (f32, f32)) {
+    pub fn calculate_position_vel(&mut self, parent_pos: (f32, f32), parent_next_pos: (f32, f32)) -> ((f32, f32), (f32, f32)) {
         let ticks_ellapsed = self.ticks_ellapsed as f32;
         let total_ticks = self.total_ticks as f32;
         let radians = ticks_ellapsed / total_ticks * 2.0 * std::f32::consts::PI;
         let mut pos = (self.radius.0 * radians.cos(), self.radius.1 * radians.sin());
         if self.rotation != 0.0 { Self::my_rotate_point(&mut pos, self.rotation) };
-        let parent_planet = &planets.planets[&self.orbit_around];
-        let pos = (pos.0 + parent_planet.position.0, pos.1 + parent_planet.position.1);
+        let pos = (pos.0 + parent_pos.0, pos.1 + parent_pos.1);
 
         let ticks_ellapsed = (ticks_ellapsed + 1.0); // % total_ticks;
         let radians = ticks_ellapsed / total_ticks * 2.0 * std::f32::consts::PI;
         let mut next_pos = (self.radius.0 * radians.cos(), self.radius.1 * radians.sin());
         if self.rotation != 0.0 { Self::my_rotate_point(&mut next_pos, self.rotation) };
-        let parent_next_pos = if let Some(orbit) = &parent_planet.orbit { orbit.last_next_position } else { parent_planet.position };
         let next_pos = (next_pos.0 + parent_next_pos.0, next_pos.1 + parent_next_pos.1);
 
         let vel = ((next_pos.0 - pos.0) * TICKS_PER_SECOND, (next_pos.1 - pos.1) * TICKS_PER_SECOND);
         (pos, vel)
     }
-    pub fn advance(&mut self, planets: &Planets) -> ((f32, f32), (f32, f32)) {
+
+    pub fn advance(&mut self, parent_pos: (f32, f32), parent_next_pos: (f32, f32)) -> ((f32, f32), (f32, f32)) {
         self.ticks_ellapsed += 1;
         if self.ticks_ellapsed >= self.total_ticks { self.ticks_ellapsed = 0; }
-        self.calculate_position_vel(planets)
+        self.calculate_position_vel(parent_pos, parent_next_pos)
     }
 
     fn my_rotate_point(point: &mut (f32, f32), radians: f32) {
         *point = crate::rotate_vector_with_angle(point.0, point.1, radians)        
+    }
+
+    pub fn init_messages(&self, my_id: u8) -> (ToClientMsg, ToClientMsg) {
+        (
+            ToClientMsg::InitCelestialOrbit {
+                id: my_id,
+                orbit_around_body: self.orbit_around,
+                orbit_radius: self.radius,
+                orbit_rotation: self.rotation,
+                orbit_total_ticks: self.total_ticks,
+            },
+            ToClientMsg::UpdateCelestialOrbit {
+                id: my_id,
+                orbit_ticks_ellapsed: self.ticks_ellapsed,
+            }
+        )
     }
 }
 

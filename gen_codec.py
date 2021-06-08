@@ -182,7 +182,7 @@ ToClientMsg.messages.append(AddCelestialObject)
 
 InitCelestialOrbit = Message("InitCelestialOrbit")
 InitCelestialOrbit.fields.append(Field("id", TypeUByte))
-InitCelestialOrbit.fields.append(Field("orbit_around_body", TypeFloat))
+InitCelestialOrbit.fields.append(Field("orbit_around_body", TypeUByte))
 InitCelestialOrbit.fields.append(Field("orbit_radius", TypeFloatPair))
 InitCelestialOrbit.fields.append(Field("orbit_rotation", TypeFloat))
 InitCelestialOrbit.fields.append(Field("orbit_total_ticks", TypeUInt))

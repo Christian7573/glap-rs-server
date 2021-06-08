@@ -77,6 +77,8 @@ impl Simulation {
 
 
     pub fn simulate(&mut self, events: &mut Vec<SimulationEvent>) {
+        self.world.advance_orbits();
+        println!("{:?}", self.world.planets.planets[&self.world.planets.earth_id].position);
         self.world.celestial_gravity();
         const GRAVITYNT: Vector = Vector::new(0.0, 0.0);
         self.pipeline.step(
@@ -347,6 +349,10 @@ impl World {
             reference_point_body,
             parts_reverse_lookup: BTreeMap::new(),
         }
+    }
+
+    fn advance_orbits(&mut self) {
+        self.planets.advance_orbits(&mut self.bodies);
     }
 
     fn celestial_gravity(&mut self) {
