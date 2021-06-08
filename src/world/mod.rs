@@ -78,7 +78,6 @@ impl Simulation {
 
     pub fn simulate(&mut self, events: &mut Vec<SimulationEvent>) {
         self.world.advance_orbits();
-        println!("{:?}", self.world.planets.planets[&self.world.planets.earth_id].position);
         self.world.celestial_gravity();
         const GRAVITYNT: Vector = Vector::new(0.0, 0.0);
         self.pipeline.step(
