@@ -21,6 +21,7 @@ impl Planets {
     pub fn new(bodies: &mut RigidBodySet, colliders: &mut ColliderSet) -> Planets {
         const EARTH_MASS: f32 = 600.0;
         const EARTH_SIZE: f32 = 25.0;
+        let mut rand = rand::thread_rng();
 
         let mut planets = BTreeMap::new();
 
@@ -50,6 +51,8 @@ impl Planets {
             });
         };
 
+        let earth_orbit_duration = 3600 * 20 * 3;
+        let earth_ticks_ellapsed = rand.gen_range(0..earth_orbit_duration);
         let earth = {
 			let id = earth_id;
             let mass = EARTH_MASS;
@@ -68,8 +71,8 @@ impl Planets {
                     orbit_around: sun_id,
                     radius: (1500.0, 1500.0),
                     rotation: 0.0,
-                    total_ticks: 3600 * 20 * 3,
-                    ticks_ellapsed: 0,
+                    total_ticks: earth_orbit_duration,
+                    ticks_ellapsed: earth_ticks_ellapsed,
                     last_next_position: (0.0, 0.0),
                 }),
                 radius: RADIUS,
@@ -93,14 +96,15 @@ impl Planets {
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
 
+            let total_ticks = 600 * 20 * 3;
             planets.insert(id, CelestialObject {
                 kind: PlanetKind::Moon,
                 orbit: Some(Orbit {
                     orbit_around: earth_id,
                     radius: (100.0, 100.0),
                     rotation: 0.0,
-                    total_ticks: 600 * 20 * 3,
-                    ticks_ellapsed: 0,
+                    total_ticks,
+                    ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
                 }),
                 radius: RADIUS,
@@ -124,14 +128,15 @@ impl Planets {
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
             
+            let total_ticks = 4800 * 20 * 3;
             planets.insert(id, CelestialObject {
                 kind: PlanetKind::Mars,
                 orbit: Some(Orbit {
                     orbit_around: sun_id,
                     radius: (2000.0, 2000.0),
                     rotation: 0.0,
-                    total_ticks: 4800 * 20 * 3,
-                    ticks_ellapsed: 0,
+                    total_ticks,
+                    ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
                 }),
                 radius: RADIUS,
@@ -155,14 +160,15 @@ impl Planets {
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
             
+            let total_ticks = 1200 * 20 * 3;
             planets.insert(id, CelestialObject {
                 kind: PlanetKind::Mercury,
                 orbit: Some(Orbit {
                     orbit_around: sun_id,
                     radius: (500.0, 500.0),
                     rotation: 0.0,
-                    total_ticks: 1200 * 20 * 3,
-                    ticks_ellapsed: 0,
+                    total_ticks,
+                    ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
                 }),
                 radius: RADIUS,
@@ -186,14 +192,15 @@ impl Planets {
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
 
+            let total_ticks = 8400 * 20 * 3;
             planets.insert(id, CelestialObject {
                 kind: PlanetKind::Jupiter,
                 orbit: Some(Orbit {
                     orbit_around: sun_id,
                     radius: (3500.0, 3500.0),
                     rotation: 0.0,
-                    total_ticks: 8400 * 20 * 3,
-                    ticks_ellapsed: 0,
+                    total_ticks,
+                    ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
                 }),
                 radius: RADIUS,
@@ -217,14 +224,15 @@ impl Planets {
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
 
+            let total_ticks = 3394 * 20 * 3;
             planets.insert(id, CelestialObject {
                 kind: PlanetKind::Pluto,
                 orbit: Some(Orbit {
                     orbit_around: sun_id,
                     radius: (8000.0, 6000.0),
                     rotation: std::f32::consts::PI / 5.0,
-                    total_ticks: 3394 * 20 * 3,
-                    ticks_ellapsed: 0,
+                    total_ticks,
+                    ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
                 }),
                 radius: RADIUS,
@@ -249,14 +257,15 @@ impl Planets {
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
 
+            let total_ticks = 9600 * 20 * 3;
             planets.insert(id, CelestialObject {
                 kind: PlanetKind::Saturn,
                 orbit: Some(Orbit {
                     orbit_around: sun_id,
                     radius: (4000.0, 4000.0),
                     rotation: 0.0,
-                    total_ticks: 9600 * 20 * 3,
-                    ticks_ellapsed: 0,
+                    total_ticks,
+                    ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
                 }),
                 radius: RADIUS,
@@ -280,14 +289,15 @@ impl Planets {
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
 
+            let total_ticks = 13200 * 20 * 3;
             planets.insert(id, CelestialObject {
                 kind: PlanetKind::Neptune,
                 orbit: Some(Orbit {
                     orbit_around: sun_id,
                     radius: (5500.0, 5500.0),
                     rotation: 0.0,
-                    total_ticks: 13200 * 20 * 3,
-                    ticks_ellapsed: 0,
+                    total_ticks,
+                    ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
                 }),
                 radius: RADIUS,
@@ -311,14 +321,15 @@ impl Planets {
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
 
+            let total_ticks = 2400 * 20 * 3;
             planets.insert(id, CelestialObject {
                 kind: PlanetKind::Venus,
                 orbit: Some(Orbit {
                     orbit_around: sun_id,
                     radius: (1000.0, 1000.0),
                     rotation: 0.0,
-                    total_ticks: 2400 * 20 * 3,
-                    ticks_ellapsed: 0,
+                    total_ticks,
+                    ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
                 }),
                 radius: RADIUS,
@@ -342,14 +353,15 @@ impl Planets {
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
             colliders.insert(collider, body_handle, bodies);
 
+            let total_ticks = 11520 * 20 * 3;
             planets.insert(id, CelestialObject {
                 kind: PlanetKind::Uranus,
                 orbit: Some(Orbit {
                     orbit_around: sun_id,
                     radius: (4800.0, 4800.0),
                     rotation: 0.0,
-                    total_ticks: 11520 * 20 * 3,
-                    ticks_ellapsed: 0,
+                    total_ticks,
+                    ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
                 }),
                 radius: RADIUS,
@@ -381,8 +393,8 @@ impl Planets {
                     orbit_around: sun_id,
                     radius: (1500.0, 1500.0),
                     rotation: 0.0,
-                    total_ticks: 3600 * 20 * 3,
-                    ticks_ellapsed: 1800,
+                    total_ticks: earth_orbit_duration,
+                    ticks_ellapsed: (earth_ticks_ellapsed + (earth_orbit_duration / 2)) % earth_orbit_duration,
                     last_next_position: (0.0, 0.0),
                 }),
                 radius: RADIUS,
