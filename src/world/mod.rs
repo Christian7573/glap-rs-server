@@ -46,6 +46,13 @@ pub enum SimulationEvent {
 }
 
 
+pub fn make_local_point(reference: &Isometry, local: Point) -> Point {
+    Point { coords: reference.transform_vector(&local.coords) } + &reference.translation.vector
+}
+pub fn apply_force_locally(body: &mut RigidBody, force: Vector, local: Point, wake_up: bool) {
+    body.apply_force_at_point(body.position() * force, make_local_point(body.position(), local), wake_up);
+}
+
 impl Simulation {
     pub fn new(step_time: f32, steps_per_batch: u8) -> Simulation {
         /*mechanics.set_timestep(step_time);
@@ -56,10 +63,12 @@ impl Simulation {
         let intersection_events = c_channel();
         let contact_events = c_channel();
         let event_collector = ChannelEventCollector::new(intersection_events.0, contact_events.0);
+        let mut integration_parameters = IntegrationParameters::default();
+        integration_parameters.dt = step_time / steps_per_batch as f32;
 
         let simulation = Simulation {
             pipeline: PhysicsPipeline::new(),
-            integration_parameters: IntegrationParameters::default(),
+            integration_parameters,
             broad_phase: BroadPhase::new(),
             narrow_phase: NarrowPhase::new(),
             ccd_solver: CCDSolver::new(),
@@ -80,17 +89,19 @@ impl Simulation {
         self.world.advance_orbits();
         self.world.celestial_gravity();
         const GRAVITYNT: Vector = Vector::new(0.0, 0.0);
-        self.pipeline.step(
-            &GRAVITYNT,
-            &self.integration_parameters,
-            &mut self.broad_phase,
-            &mut self.narrow_phase,
-            self.world.bodies_mut_unchecked(),
-            &mut self.colliders,
-            &mut self.joints,
-            &mut self.ccd_solver,
-            &(), &self.event_collector,
-        );
+        for _ in 0..self.steps_per_batch {
+            self.pipeline.step(
+                &GRAVITYNT,
+                &self.integration_parameters,
+                &mut self.broad_phase,
+                &mut self.narrow_phase,
+                self.world.bodies_mut_unchecked(),
+                &mut self.colliders,
+                &mut self.joints,
+                &mut self.ccd_solver,
+                &(), &self.event_collector,
+            );
+        }
         while let Ok(contact_event) = self.contact_events.try_recv() {
             match contact_event {
                 ContactEvent::Started(handle1, handle2) => {

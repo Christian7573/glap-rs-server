@@ -6,7 +6,7 @@ use super::typedef::*;
 use nphysics2d::joint::DefaultJointConstraintHandle;*/
 use crate::PlayerMeta;
 use crate::codec::ToClientMsg;
-use super::{/*WorldAddHandle,*/ World};
+use super::{/*WorldAddHandle,*/ World, make_local_point, apply_force_locally};
 use crate::session::WorldUpdatePartMove;
 use std::sync::atomic::{AtomicU16, Ordering as AtomicOrdering};
 
@@ -156,10 +156,10 @@ impl Part {
             PartKind::Core => {
                 if *fuel > 0 {
                     let mut subtract_fuel = false;
-                    if forward || counter_clockwise { subtract_fuel = true; body.apply_force_at_point(Vector::new(0.0,1.0), body.position() * Point::new(-0.5,-0.5), true); }
-                    if forward || clockwise { subtract_fuel = true; body.apply_force_at_point(Vector::new(0.0,1.0), body.position() * Point::new(0.5,-0.5), true); }
-                    if backward || clockwise { subtract_fuel = true; body.apply_force_at_point(Vector::new(0.0,-1.0), body.position() * Point::new(-0.5,0.5), true); }
-                    if backward || counter_clockwise { subtract_fuel = true; body.apply_force_at_point(Vector::new(0.0,-1.0), body.position() * Point::new(0.5,0.5), true); }
+                    if forward || counter_clockwise { subtract_fuel = true; apply_force_locally(body, Vector::new(0.0,1.0), Point::new(-0.5,-0.5), true); }
+                    if forward || clockwise { subtract_fuel = true; apply_force_locally(body, Vector::new(0.0,1.0), Point::new(0.5,-0.5), true); }
+                    if backward || clockwise { subtract_fuel = true; apply_force_locally(body, Vector::new(0.0,-1.0), Point::new(-0.5,0.5), true); }
+                    if backward || counter_clockwise { subtract_fuel = true; apply_force_locally(body, Vector::new(0.0,-1.0), Point::new(0.5,0.5), true); }
                     if subtract_fuel { *fuel -= 1; };
                 }
             },
@@ -176,7 +176,7 @@ impl Part {
                     };
                     if *fuel >= fuel_cost && should_fire  {
                         *fuel -= fuel_cost;
-                        body.apply_force_at_point(force, body.position() * local_point, true)
+                        apply_force_locally(body, force, local_point, true)
                     }
                 }
             }
