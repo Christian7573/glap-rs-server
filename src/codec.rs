@@ -229,6 +229,7 @@ pub enum ToClientMsg {
 	UpdatePlayerMeta { id: u16, thrust_forward: bool, thrust_backward: bool, thrust_clockwise: bool, thrust_counter_clockwise: bool, grabed_part: Option<u16>, },
 	UpdatePlayerVelocity { id: u16, vel_x: f32, vel_y: f32, },
 	RemovePlayer { id: u16, },
+	OrbitAdvanceTick,
 	PostSimulationTick { your_power: u32, },
 	UpdateMyMeta { max_power: u32, can_beamout: bool, },
 	BeamOutAnimation { player_id: u16, },
@@ -316,25 +317,28 @@ impl ToClientMsg {
 				out.push(12);
 				type_u16_serialize(out, id);
 			},
-			Self::PostSimulationTick { your_power} => {
+			Self::OrbitAdvanceTick { } => {
 				out.push(13);
+			},
+			Self::PostSimulationTick { your_power} => {
+				out.push(14);
 				type_u32_serialize(out, your_power);
 			},
 			Self::UpdateMyMeta { max_power, can_beamout} => {
-				out.push(14);
+				out.push(15);
 				type_u32_serialize(out, max_power);
 				type_bool_serialize(out, can_beamout);
 			},
 			Self::BeamOutAnimation { player_id} => {
-				out.push(15);
-				type_u16_serialize(out, player_id);
-			},
-			Self::IncinerationAnimation { player_id} => {
 				out.push(16);
 				type_u16_serialize(out, player_id);
 			},
-			Self::ChatMessage { username, msg, color} => {
+			Self::IncinerationAnimation { player_id} => {
 				out.push(17);
+				type_u16_serialize(out, player_id);
+			},
+			Self::ChatMessage { username, msg, color} => {
+				out.push(18);
 				type_string_serialize(out, username);
 				type_string_serialize(out, msg);
 				type_string_serialize(out, color);
@@ -435,27 +439,31 @@ impl ToClientMsg {
 				Ok(ToClientMsg::RemovePlayer { id})
 			},
 			13 => {
+				
+				Ok(ToClientMsg::OrbitAdvanceTick { })
+			},
+			14 => {
 				let your_power;
 				your_power = type_u32_deserialize(stream).await?;
 				Ok(ToClientMsg::PostSimulationTick { your_power})
 			},
-			14 => {
+			15 => {
 				let max_power; let can_beamout;
 				max_power = type_u32_deserialize(stream).await?;
 				can_beamout = type_bool_deserialize(stream).await?;
 				Ok(ToClientMsg::UpdateMyMeta { max_power, can_beamout})
 			},
-			15 => {
+			16 => {
 				let player_id;
 				player_id = type_u16_deserialize(stream).await?;
 				Ok(ToClientMsg::BeamOutAnimation { player_id})
 			},
-			16 => {
+			17 => {
 				let player_id;
 				player_id = type_u16_deserialize(stream).await?;
 				Ok(ToClientMsg::IncinerationAnimation { player_id})
 			},
-			17 => {
+			18 => {
 				let username; let msg; let color;
 				username = type_string_deserialize(stream).await?;
 				msg = type_string_deserialize(stream).await?;

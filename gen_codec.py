@@ -242,6 +242,9 @@ RemovePlayer = Message("RemovePlayer")
 RemovePlayer.fields.append(Field("id", TypeUShort))
 ToClientMsg.messages.append(RemovePlayer)
 
+OrbitAdvanceTick = Message("OrbitAdvanceTick")
+ToClientMsg.messages.append(OrbitAdvanceTick)
+
 PostSimulationTick = Message("PostSimulationTick")
 PostSimulationTick.fields.append(Field("your_power", TypeUInt))
 ToClientMsg.messages.append(PostSimulationTick)

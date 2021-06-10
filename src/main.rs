@@ -301,6 +301,8 @@ async fn main() {
                         }
                     }).collect::<Vec<_>>()
                 ));
+
+                outbound_events.push(ToSerializer::Broadcast(ToClientMsg::OrbitAdvanceTick));
             },
 
 

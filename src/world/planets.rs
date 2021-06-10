@@ -420,11 +420,13 @@ impl Planets {
                 let parent_pos = parent_planet.position;
                 let parent_next_pos = if let Some(orbit) = &parent_planet.orbit { orbit.last_next_position } else { parent_pos };
                 let planet = self.planets.get_mut(id).unwrap();
-                let (pos, vel) = planet.orbit.as_mut().unwrap().advance(parent_pos, parent_next_pos);
+                //let (pos, vel) = planet.orbit.as_mut().unwrap().advance(parent_pos, parent_next_pos);
+                let pos = planet.orbit.as_mut().unwrap().advance(parent_pos);
                 planet.position = pos;
                 let body = &mut bodies[planet.body_handle];
-                body.set_position(Isometry::new(Vector::new(pos.0, pos.1), 0.0), true);
-                body.set_linvel(Vector::new(vel.0, vel.1), true);
+                //body.set_position(Isometry::new(Vector::new(pos.0, pos.1), 0.0), true);
+                //body.set_linvel(Vector::new(vel.0, vel.1), true);
+                body.set_next_kinematic_position(Isometry::new(Vector::new(pos.0, pos.1), 0.0));
             }
         }
     }
@@ -456,28 +458,31 @@ pub struct Orbit {
 }
 const TICKS_PER_SECOND: f32 = crate::TICKS_PER_SECOND as f32;
 impl Orbit {
-    pub fn calculate_position_vel(&mut self, parent_pos: (f32, f32), parent_next_pos: (f32, f32)) -> ((f32, f32), (f32, f32)) {
+    //pub fn calculate_position_vel(&mut self, parent_pos: (f32, f32), parent_next_pos: (f32, f32)) -> ((f32, f32), (f32, f32)) {
+    pub fn calculate_position_vel(&mut self, parent_pos: (f32, f32)) -> (f32, f32) {
         let ticks_ellapsed = self.ticks_ellapsed as f32;
         let total_ticks = self.total_ticks as f32;
         let radians = ticks_ellapsed / total_ticks * 2.0 * std::f32::consts::PI;
         let mut pos = (self.radius.0 * radians.cos(), self.radius.1 * radians.sin());
         if self.rotation != 0.0 { Self::my_rotate_point(&mut pos, self.rotation) };
         let pos = (pos.0 + parent_pos.0, pos.1 + parent_pos.1);
+        pos
 
-        let ticks_ellapsed = (ticks_ellapsed + 1.0); // % total_ticks;
+        /*let ticks_ellapsed = (ticks_ellapsed + 1.0); // % total_ticks;
         let radians = ticks_ellapsed / total_ticks * 2.0 * std::f32::consts::PI;
         let mut next_pos = (self.radius.0 * radians.cos(), self.radius.1 * radians.sin());
         if self.rotation != 0.0 { Self::my_rotate_point(&mut next_pos, self.rotation) };
-        let next_pos = (next_pos.0 + parent_next_pos.0, next_pos.1 + parent_next_pos.1);
+        let next_pos = (next_pos.0 + parent_next_pos.0, next_pos.1 + parent_next_pos.1);*/
 
-        let vel = ((next_pos.0 - pos.0) * TICKS_PER_SECOND, (next_pos.1 - pos.1) * TICKS_PER_SECOND);
-        (pos, vel)
+        /*let vel = ((next_pos.0 - pos.0) * TICKS_PER_SECOND, (next_pos.1 - pos.1) * TICKS_PER_SECOND);
+        (pos, vel)*/
     }
 
-    pub fn advance(&mut self, parent_pos: (f32, f32), parent_next_pos: (f32, f32)) -> ((f32, f32), (f32, f32)) {
+    //pub fn advance(&mut self, parent_pos: (f32, f32), parent_next_pos: (f32, f32)) -> ((f32, f32), (f32, f32)) {
+    pub fn advance(&mut self, parent_pos: (f32, f32)) -> (f32, f32) {
         self.ticks_ellapsed += 1;
         if self.ticks_ellapsed >= self.total_ticks { self.ticks_ellapsed = 0; }
-        self.calculate_position_vel(parent_pos, parent_next_pos)
+        self.calculate_position_vel(parent_pos)
     }
 
     fn my_rotate_point(point: &mut (f32, f32), radians: f32) {

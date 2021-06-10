@@ -156,10 +156,10 @@ impl Part {
             PartKind::Core => {
                 if *fuel > 0 {
                     let mut subtract_fuel = false;
-                    if forward || counter_clockwise { subtract_fuel = true; apply_force_locally(body, Vector::new(0.0,1.0), Point::new(-0.5,-0.5), true); }
-                    if forward || clockwise { subtract_fuel = true; apply_force_locally(body, Vector::new(0.0,1.0), Point::new(0.5,-0.5), true); }
-                    if backward || clockwise { subtract_fuel = true; apply_force_locally(body, Vector::new(0.0,-1.0), Point::new(-0.5,0.5), true); }
-                    if backward || counter_clockwise { subtract_fuel = true; apply_force_locally(body, Vector::new(0.0,-1.0), Point::new(0.5,0.5), true); }
+                    if forward || counter_clockwise { subtract_fuel = true; apply_force_locally(body, Vector::new(0.0,1.5), Point::new(-0.5,-0.5), true); }
+                    if forward || clockwise { subtract_fuel = true; apply_force_locally(body, Vector::new(0.0,1.5), Point::new(0.5,-0.5), true); }
+                    if backward || clockwise { subtract_fuel = true; apply_force_locally(body, Vector::new(0.0,-1.5), Point::new(-0.5,0.5), true); }
+                    if backward || counter_clockwise { subtract_fuel = true; apply_force_locally(body, Vector::new(0.0,-1.5), Point::new(0.5,0.5), true); }
                     if subtract_fuel { *fuel -= 1; };
                 }
             },
