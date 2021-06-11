@@ -647,6 +647,22 @@ async fn main() {
                         }
                     },
 
+                    "/novel" => {
+                        if let Some(player_meta) = players.get(&id) {
+                            simulation.world.recurse_part_mut(player_meta.core, Default::default(), &mut |mut handle: world::PartVisitHandleMut| {
+                                let body = handle.self_rigid_mut();
+                                body.set_linvel(Vector::new(0.0, 0.0), true);
+                                body.set_angvel(0.0, true);
+                            });
+                        }
+                    },
+                    "/vel" => {
+                        if let Some(player_meta) = players.get(&id) {
+                            let body = simulation.world.get_part_rigid(player_meta.core).unwrap();
+                            outbound_events.push(ToSerializer::Message(id, ToClientMsg::ChatMessage { username: "Server".to_owned(), color: "skyblue".to_owned(), msg: format!("X: {}; Y: {}; Rot: {}", body.linvel().x, body.linvel().y, body.angvel()) }));
+                        }
+                    },
+
                     "/stop" => {
                         println!("{:?} called an emergency stop", players.get(&id).map(|player| &player.name));
                         emergency_stop(&players, &simulation.world, &api).await;
