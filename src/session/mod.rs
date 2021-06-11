@@ -130,7 +130,7 @@ async fn socket_reader(suggested_id: u16, socket: TcpStream, addr: async_std::ne
     if is_emergency_stop() { futures::future::pending().await };
 
     let id;
-    let is_admin: bool;
+    let mut is_admin: bool;
     if let Some(new_id) = new_id {
         id = new_id;
         is_admin = false; //TODO: Fix
@@ -166,6 +166,8 @@ async fn socket_reader(suggested_id: u16, socket: TcpStream, addr: async_std::ne
         .name(format!("outbound_${}", id))
         .spawn(socket_writer(id, socket_out, from_serializer)).expect("Failed to launch outbound");
     to_serializer.send(vec! [ToSerializerEvent::NewWriter(id, to_writer)]).await;
+
+    is_admin = is_admin || std::env::var("ALL_ADMIN").is_ok();
 
     loop {
         match read_ws_message(&mut socket_in).await {
