@@ -3,7 +3,7 @@ use crate::PartOfPlayer;
 use generational_arena::{Arena, Index};
 use crate::codec::ToClientMsg;
 use std::ops::{Deref, DerefMut};
-use rapier2d::dynamics::{BodyStatus, CCDSolver, JointSet, RigidBody, RigidBodyBuilder, RigidBodyHandle, RigidBodySet, IntegrationParameters, Joint, JointHandle, MassProperties, BallJoint, JointParams};
+use rapier2d::dynamics::{BodyStatus, CCDSolver, JointSet, RigidBody, RigidBodyBuilder, RigidBodyHandle, RigidBodySet, IntegrationParameters, Joint, JointHandle, MassProperties, BallJoint, JointParams, IslandManager};
 use rapier2d::geometry::{BroadPhase, NarrowPhase, ColliderSet, IntersectionEvent, ContactEvent, ColliderHandle};
 use rapier2d::pipeline::{PhysicsPipeline, ChannelEventCollector};
 use rapier2d::crossbeam::channel::{Sender as CSender, Receiver as CReceiver, unbounded as c_channel};
@@ -28,6 +28,7 @@ use typedef::*;
 
 pub struct Simulation {
     pub world: World,
+    pub islands: IslandManager,
     pipeline: PhysicsPipeline,
     integration_parameters: IntegrationParameters,
     broad_phase: BroadPhase,
@@ -75,6 +76,7 @@ impl Simulation {
 
             steps_per_batch,
             world,
+            islands: IslandManager::new(),
             colliders,
             joints: JointSet::new(),
             event_collector,
@@ -93,6 +95,7 @@ impl Simulation {
             self.pipeline.step(
                 &GRAVITYNT,
                 &self.integration_parameters,
+                &mut self.islands,
                 &mut self.broad_phase,
                 &mut self.narrow_phase,
                 self.world.bodies_mut_unchecked(),
@@ -114,7 +117,7 @@ impl Simulation {
                     } else { continue; }
                     let part_coll = self.colliders.get(other).unwrap();
                     if let Storage7573::PartOfPlayer(player_id) = self.colliders[other].user_data.into() {
-                        events.push(SimulationEvent::PlayerUntouchPlanet{ player: player_id, part: *self.world.parts_reverse_lookup.get(&part_coll.parent().into_raw_parts()).unwrap(), planet });
+                        events.push(SimulationEvent::PlayerUntouchPlanet{ player: player_id, part: *self.world.parts_reverse_lookup.get(&part_coll.parent().unwrap().into_raw_parts()).unwrap(), planet });
                     }
                 },
                 ContactEvent::Stopped(handle1, handle2) => {
@@ -127,7 +130,7 @@ impl Simulation {
                     } else { continue; }
                     let part_coll = self.colliders.get(other).unwrap();
                     if let Storage7573::PartOfPlayer(player_id) = self.colliders[other].user_data.into() {
-                        events.push(SimulationEvent::PlayerUntouchPlanet{ player: player_id, part: *self.world.parts_reverse_lookup.get(&part_coll.parent().into_raw_parts()).unwrap(), planet });
+                        events.push(SimulationEvent::PlayerUntouchPlanet{ player: player_id, part: *self.world.parts_reverse_lookup.get(&part_coll.parent().unwrap().into_raw_parts()).unwrap(), planet });
                     }
                 }
             }
@@ -155,7 +158,7 @@ impl Simulation {
         }
     }
     pub fn release_constraint(&mut self, constraint_id: JointHandle) {
-        self.joints.remove(constraint_id, self.world.bodies_mut_unchecked(), true);
+        self.joints.remove(constraint_id, &mut self.islands, self.world.bodies_mut_unchecked(), true);
     }
     pub fn release_mouse_constraint(&mut self, part_handle: PartHandle, constraint_id: JointHandle) {
         self.release_constraint(constraint_id);
@@ -172,7 +175,7 @@ impl Simulation {
     }
     pub fn delete_parts_recursive(&mut self, index: PartHandle) -> Vec<ToClientMsg> {
         let mut removal_msgs = Vec::new();
-        self.world.delete_parts_recursive(index, &mut self.colliders, &mut self.joints, &mut removal_msgs);
+        self.world.delete_parts_recursive(index, &mut self.islands, &mut self.colliders, &mut self.joints, &mut removal_msgs);
         removal_msgs
     }
 }
@@ -182,7 +185,7 @@ pub struct World {
     bodies: RigidBodySet,
     pub planets: planets::Planets,
     reference_point_body: RigidBodyHandle,
-    pub(self) parts_reverse_lookup: BTreeMap<(usize, u64), Index>,
+    pub(self) parts_reverse_lookup: BTreeMap<(u32, u32), Index>,
 }
 
 /*pub struct WorldAddHandle<'a>(&'a mut World); 
@@ -218,8 +221,8 @@ impl World {
     pub fn get_part_mut(&mut self, index: PartHandle) -> Option<&mut Part> {
         self.parts.get_mut(index)
     }
-    pub fn delete_parts_recursive(&mut self, index: PartHandle, colliders: &mut ColliderSet, joints: &mut JointSet, removal_msgs: &mut Vec<ToClientMsg>) {
-        self.parts.remove(index).map(|part| part.delete_recursive(self, colliders, joints, removal_msgs));
+    pub fn delete_parts_recursive(&mut self, index: PartHandle, islands: &mut IslandManager, colliders: &mut ColliderSet, joints: &mut JointSet, removal_msgs: &mut Vec<ToClientMsg>) {
+        self.parts.remove(index).map(|part| part.delete_recursive(self, islands, colliders, joints, removal_msgs));
     }
     pub fn bodies_unchecked(&self) -> &RigidBodySet { &self.bodies }
     pub fn bodies_mut_unchecked(&mut self) -> &mut RigidBodySet { &mut self.bodies }
@@ -325,21 +328,21 @@ impl World {
         }
     }
 
-    pub fn recursive_detach_one(&mut self, parent_handle: PartHandle, attachment_slot: usize, player: &mut Option<&mut crate::PlayerMeta>, joints: &mut JointSet, parts_affected: &mut BTreeSet<PartHandle>) {
-        if let Some(attachment_handle) = Part::detach_part_player_agnostic(parent_handle, attachment_slot, self, joints) {
+    pub fn recursive_detach_one(&mut self, parent_handle: PartHandle, attachment_slot: usize, player: &mut Option<&mut crate::PlayerMeta>, islands: &mut IslandManager, joints: &mut JointSet, parts_affected: &mut BTreeSet<PartHandle>) {
+        if let Some(attachment_handle) = Part::detach_part_player_agnostic(parent_handle, attachment_slot, self, islands, joints) {
             parts_affected.insert(attachment_handle);
             if let Some(player) = player {
                 if let Some(attached_part) = self.get_part_mut(attachment_handle) {
                     attached_part.remove_from(*player);
                 }
             }
-            self.recursive_detach_all(attachment_handle, player, joints, parts_affected);                                
+            self.recursive_detach_all(attachment_handle, player, islands, joints, parts_affected);                                
         }
     }
-    pub fn recursive_detach_all(&mut self, parent_handle: PartHandle, player: &mut Option<&mut crate::PlayerMeta>, joints: &mut JointSet, parts_affected: &mut BTreeSet<PartHandle>) {
+    pub fn recursive_detach_all(&mut self, parent_handle: PartHandle, player: &mut Option<&mut crate::PlayerMeta>, islands: &mut IslandManager, joints: &mut JointSet, parts_affected: &mut BTreeSet<PartHandle>) {
         if let Some(part) = self.get_part_mut(parent_handle) {
             for i in 0..part.attachments().len() {
-                self.recursive_detach_one(parent_handle, i, player, joints, parts_affected);
+                self.recursive_detach_one(parent_handle, i, player, islands, joints, parts_affected);
             }
         }
     }

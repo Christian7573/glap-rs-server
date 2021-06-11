@@ -37,7 +37,7 @@ impl Planets {
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 4.7;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
-            colliders.insert(collider, body_handle, bodies);
+            colliders.insert_with_parent(collider, body_handle, bodies);
 
             planets.insert(id, CelestialObject {
                 kind: PlanetKind::Sun,
@@ -56,14 +56,14 @@ impl Planets {
         let earth = {
 			let id = earth_id;
             let mass = EARTH_MASS;
-            let body = RigidBodyBuilder::new_kinematic()
+            let body = RigidBodyBuilder::new_kinematic_velocity_based()
                 .additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
-            colliders.insert(collider, body_handle, bodies);
+            colliders.insert_with_parent(collider, body_handle, bodies);
             
             planets.insert(id, CelestialObject {
                 kind: PlanetKind::Earth,
@@ -87,14 +87,14 @@ impl Planets {
         let moon = {
             let id = make_planet_id();
             let mass = EARTH_MASS / 35.0;
-            let body = RigidBodyBuilder::new_dynamic()
+            let body = RigidBodyBuilder::new_kinematic_velocity_based()
                 .additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE / 4.0;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
-            colliders.insert(collider, body_handle, bodies);
+            colliders.insert_with_parent(collider, body_handle, bodies);
 
             let total_ticks = 600 * 20 * 3;
             planets.insert(id, CelestialObject {
@@ -119,14 +119,14 @@ impl Planets {
         let mars = {
 			let id = make_planet_id();
             let mass = EARTH_MASS / 4.0;
-            let body = RigidBodyBuilder::new_dynamic()
+            let body = RigidBodyBuilder::new_kinematic_velocity_based()
                 .additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE / 2.0;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
-            colliders.insert(collider, body_handle, bodies);
+            colliders.insert_with_parent(collider, body_handle, bodies);
             
             let total_ticks = 4800 * 20 * 3;
             planets.insert(id, CelestialObject {
@@ -151,14 +151,14 @@ impl Planets {
         let mercury = {
 			let id = make_planet_id();
             let mass = EARTH_MASS / 15.0;
-            let body = RigidBodyBuilder::new_kinematic()
+            let body = RigidBodyBuilder::new_kinematic_velocity_based()
                 .additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 0.38;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
-            colliders.insert(collider, body_handle, bodies);
+            colliders.insert_with_parent(collider, body_handle, bodies);
             
             let total_ticks = 1200 * 20 * 3;
             planets.insert(id, CelestialObject {
@@ -183,14 +183,14 @@ impl Planets {
         let jupiter = {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 10.0;
-            let body = RigidBodyBuilder::new_kinematic()
+            let body = RigidBodyBuilder::new_kinematic_velocity_based()
                 .additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 2.0;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
-            colliders.insert(collider, body_handle, bodies);
+            colliders.insert_with_parent(collider, body_handle, bodies);
 
             let total_ticks = 8400 * 20 * 3;
             planets.insert(id, CelestialObject {
@@ -215,14 +215,14 @@ impl Planets {
         let pluto = {
 			let id = make_planet_id();
             let mass = EARTH_MASS / 10.0;
-            let body = RigidBodyBuilder::new_kinematic()
+            let body = RigidBodyBuilder::new_kinematic_velocity_based()
                 .additional_mass(mass)
                 .user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE / 4.0;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
-            colliders.insert(collider, body_handle, bodies);
+            colliders.insert_with_parent(collider, body_handle, bodies);
 
             let total_ticks = 3394 * 20 * 3;
             planets.insert(id, CelestialObject {
@@ -247,7 +247,7 @@ impl Planets {
         let saturn = {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 10.0;
-            let body = RigidBodyBuilder::new_kinematic()
+            let body = RigidBodyBuilder::new_kinematic_velocity_based()
                 .additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
@@ -255,7 +255,7 @@ impl Planets {
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 2.0;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
-            colliders.insert(collider, body_handle, bodies);
+            colliders.insert_with_parent(collider, body_handle, bodies);
 
             let total_ticks = 9600 * 20 * 3;
             planets.insert(id, CelestialObject {
@@ -280,14 +280,14 @@ impl Planets {
         let neptune = {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 4.0;
-            let body = RigidBodyBuilder::new_kinematic()
+            let body = RigidBodyBuilder::new_kinematic_velocity_based()
                 .additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 1.5;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
-            colliders.insert(collider, body_handle, bodies);
+            colliders.insert_with_parent(collider, body_handle, bodies);
 
             let total_ticks = 13200 * 20 * 3;
             planets.insert(id, CelestialObject {
@@ -312,14 +312,14 @@ impl Planets {
         let venus = {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 1.3;
-            let body = RigidBodyBuilder::new_kinematic()
+            let body = RigidBodyBuilder::new_kinematic_velocity_based()
                 .additional_mass(EARTH_MASS * 1.3)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
-            colliders.insert(collider, body_handle, bodies);
+            colliders.insert_with_parent(collider, body_handle, bodies);
 
             let total_ticks = 2400 * 20 * 3;
             planets.insert(id, CelestialObject {
@@ -344,14 +344,14 @@ impl Planets {
         let uranus = {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 4.0;
-            let body = RigidBodyBuilder::new_kinematic()
+            let body = RigidBodyBuilder::new_kinematic_velocity_based()
                 .additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 2.0;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
-            colliders.insert(collider, body_handle, bodies);
+            colliders.insert_with_parent(collider, body_handle, bodies);
 
             let total_ticks = 11520 * 20 * 3;
             planets.insert(id, CelestialObject {
@@ -378,14 +378,14 @@ impl Planets {
         let trade = {
 			let id = trade_id;
             let mass = EARTH_MASS;
-            let body = RigidBodyBuilder::new_kinematic()
+            let body = RigidBodyBuilder::new_kinematic_velocity_based()
                 .additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 0.75;
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
-            colliders.insert(collider, body_handle, bodies);
+            colliders.insert_with_parent(collider, body_handle, bodies);
 
             planets.insert(id, CelestialObject {
                 kind: PlanetKind::Trade,

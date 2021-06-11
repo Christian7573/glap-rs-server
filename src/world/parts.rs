@@ -1,4 +1,4 @@
-use rapier2d::dynamics::{RigidBody, RigidBodyBuilder, RigidBodyHandle, Joint, JointHandle, BodyStatus, RigidBodySet, JointSet, MassProperties, FixedJoint};
+use rapier2d::dynamics::{RigidBody, RigidBodyBuilder, RigidBodyHandle, Joint, JointHandle, BodyStatus, RigidBodySet, JointSet, MassProperties, FixedJoint, IslandManager};
 use rapier2d::geometry::{SharedShape, Collider, ColliderBuilder, ColliderHandle, ColliderSet};
 use rapier2d::na::Unit;
 use super::typedef::*;
@@ -50,7 +50,7 @@ impl RecursivePartDescription {
         let mut body = body_desc.build();
         body.set_position(initial_location.clone(), true);
         let body_handle = world.bodies_mut_unchecked().insert(body);
-        let collider = colliders.insert(collider_desc.build(), body_handle, world.bodies_mut_unchecked());
+        let collider = colliders.insert_with_parent(collider_desc.build(), body_handle, world.bodies_mut_unchecked());
         let mut attachments: [Option<PartAttachment>; 4] = [None, None, None, None];
 
         let my_part_id = if let Some(id) = id { id } else { unsafe { NEXT_PART_ID.fetch_add(1, AtomicOrdering::AcqRel) } };
@@ -100,20 +100,20 @@ impl Part {
         self.part_of_player = None;
     }
     pub fn part_of_player(&self) -> Option<u16> { self.part_of_player }
-    pub fn mutate(mut self, mutate_into: PartKind, player: &mut Option<&mut PlayerMeta>, world: &mut World, colliders: &mut ColliderSet, joints: &mut JointSet) -> PartHandle {
+    pub fn mutate(mut self, mutate_into: PartKind, player: &mut Option<&mut PlayerMeta>, world: &mut World, islands: &mut IslandManager, colliders: &mut ColliderSet, joints: &mut JointSet) -> PartHandle {
         if let Some(player) = player { self.remove_from(player); }
         let old_attachments = &mut self.attachments;
         let mut raw_attachments: [Option<PartHandle>; 4] = [None, None, None, None];
         for i in 0..4 {
             if let Some(attachment) = std::mem::replace(&mut old_attachments[i], None) {
-                raw_attachments[i] = Some(attachment.deflate(world.bodies_mut_unchecked(), joints));
+                raw_attachments[i] = Some(attachment.deflate(islands, world.bodies_mut_unchecked(), joints));
             }
         };
         let old_body = &world.bodies_unchecked()[self.body_handle];
         let position = old_body.position().clone();
         let thrust_mode = self.thrust_mode;
         let part_id = self.id;
-        self.remove_physics_components(world.bodies_mut_unchecked(), colliders, joints);
+        self.remove_physics_components(islands, world.bodies_mut_unchecked(), colliders, joints);
         let part_index = RecursivePartDescription::from(mutate_into).inflate_component(world, colliders, joints, position, AttachedPartFacing::Up, 0, 0, Some(part_id));
         for i in 0..4 {
             if let Some(attachment) = &raw_attachments[i] {
@@ -132,9 +132,9 @@ impl Part {
         }
     }
 
-    fn remove_physics_components(mut self, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, joints: &mut JointSet) {
-        colliders.remove(self.collider, bodies, true);
-        bodies.remove(self.body_handle, colliders, joints);
+    fn remove_physics_components(mut self, islands: &mut IslandManager, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, joints: &mut JointSet) {
+        colliders.remove(self.collider, islands, bodies, true);
+        bodies.remove(self.body_handle, islands, colliders, joints);
     }
 
     pub fn attach_part_player_agnostic(parent_handle: PartHandle, child_handle: PartHandle, attachment_slot: usize, world: &mut World, joints: &mut JointSet) {
@@ -143,10 +143,10 @@ impl Part {
         let kind = parent.kind();
         world.get_part_mut(parent_handle).unwrap().attachments[attachment_slot] = Some(PartAttachment::inflate(child_handle, kind, parent_handle, attachment_slot, world, joints));
     }
-    pub fn detach_part_player_agnostic(parent_handle: PartHandle, attachment_slot: usize, world: &mut World, joints: &mut JointSet) -> Option<PartHandle> {
+    pub fn detach_part_player_agnostic(parent_handle: PartHandle, attachment_slot: usize, world: &mut World, islands: &mut IslandManager, joints: &mut JointSet) -> Option<PartHandle> {
         let parent = world.get_part_mut(parent_handle)?;
         if let Some(part_attachment) = std::mem::replace(&mut parent.attachments[attachment_slot], None) {
-            Some(part_attachment.deflate(world.bodies_mut_unchecked(), joints))
+            Some(part_attachment.deflate(islands, world.bodies_mut_unchecked(), joints))
         } else { None }
     }
 
@@ -200,15 +200,15 @@ impl Part {
         None
     }
 
-    pub fn delete_recursive(mut self, world: &mut World, colliders: &mut ColliderSet, joints: &mut JointSet, removal_msgs: &mut Vec<ToClientMsg>) {
+    pub fn delete_recursive(mut self, world: &mut World, islands: &mut IslandManager, colliders: &mut ColliderSet, joints: &mut JointSet, removal_msgs: &mut Vec<ToClientMsg>) {
         for attachment in self.attachments.iter_mut() {
             if let Some(attachment) = std::mem::replace(attachment, None) {
-                let attachment = attachment.deflate(world.bodies_mut_unchecked(), joints);
-                world.delete_parts_recursive(attachment, colliders, joints, removal_msgs);
+                let attachment = attachment.deflate(islands, world.bodies_mut_unchecked(), joints);
+                world.delete_parts_recursive(attachment, islands, colliders, joints, removal_msgs);
             }
         }
         removal_msgs.push(self.remove_msg());
-        self.remove_physics_components(world.bodies_mut_unchecked(), colliders, joints);
+        self.remove_physics_components(islands, world.bodies_mut_unchecked(), colliders, joints);
     }
 
     pub fn id(&self) -> u16 { self.id }
@@ -297,8 +297,8 @@ impl PartAttachment {
         }
     }
 
-    pub fn deflate(self, bodies: &mut RigidBodySet, joints: &mut JointSet) -> PartHandle {
-        joints.remove(self.connection, bodies, true);
+    pub fn deflate(self, islands: &mut IslandManager, bodies: &mut RigidBodySet, joints: &mut JointSet) -> PartHandle {
+        joints.remove(self.connection, islands, bodies, true);
         self.part
     }
 
@@ -327,7 +327,7 @@ impl PartKind {
                     PartKind::SolarPanel | PartKind::EcoThruster | PartKind::LandingWheel => SOLAR_PANEL_CUBOID.clone(), 
                     PartKind::SuperThruster => SUPER_THRUSTER_CUBOID.clone(),
                 } )
-                .translation(collider_translation.0, collider_translation.1);
+                .translation(Vector::new(collider_translation.0, collider_translation.1));
                 (body, collider)
             }
         }
