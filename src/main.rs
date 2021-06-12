@@ -663,6 +663,12 @@ async fn main() {
                         }
                     },
 
+                    "/refuel" => {
+                        if let Some(player_meta) = players.get_mut(&id) {
+                            (player_meta.power) = player_meta.max_power;
+                        }
+                    }
+
                     "/stop" => {
                         println!("{:?} called an emergency stop", players.get(&id).map(|player| &player.name));
                         emergency_stop(&players, &simulation.world, &api).await;
