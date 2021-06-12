@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use crate::PartOfPlayer;
 use generational_arena::{Arena, Index};
-use crate::codec::ToClientMsg;
+use crate::codec::{ ToClientMsg, PartKind };
 use std::ops::{Deref, DerefMut};
 use rapier2d::dynamics::{BodyStatus, CCDSolver, JointSet, RigidBody, RigidBodyBuilder, RigidBodyHandle, RigidBodySet, IntegrationParameters, Joint, JointHandle, MassProperties, BallJoint, JointParams, IslandManager};
 use rapier2d::geometry::{BroadPhase, NarrowPhase, ColliderSet, IntersectionEvent, ContactEvent, ColliderHandle};

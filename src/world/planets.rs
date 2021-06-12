@@ -31,7 +31,7 @@ impl Planets {
             let id = sun_id;
             let mass = EARTH_MASS * 50.0;
             let body = RigidBodyBuilder::new_static()
-                .additional_mass(EARTH_MASS * 50.0)
+                .additional_mass(1.0) //.additional_mass(EARTH_MASS * 50.0)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -57,7 +57,7 @@ impl Planets {
 			let id = earth_id;
             let mass = EARTH_MASS;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(mass)
+                .additional_mass(1.0) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -88,7 +88,7 @@ impl Planets {
             let id = make_planet_id();
             let mass = EARTH_MASS / 35.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(mass)
+                .additional_mass(1.0) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -120,7 +120,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS / 4.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(mass)
+                .additional_mass(1.0) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -152,7 +152,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS / 15.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(mass)
+                .additional_mass(1.0) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -184,7 +184,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 10.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(mass)
+                .additional_mass(1.0) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -216,7 +216,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS / 10.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(mass)
+                .additional_mass(1.0) //.additional_mass(mass)
                 .user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -248,7 +248,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 10.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(mass)
+                .additional_mass(1.0) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let position = (body.position().translation.x, body.position().translation.y);
@@ -281,7 +281,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 4.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(mass)
+                .additional_mass(1.0) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -313,7 +313,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 1.3;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(EARTH_MASS * 1.3)
+                .additional_mass(1.0) //.additional_mass(EARTH_MASS * 1.3)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -345,7 +345,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 4.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(mass)
+                .additional_mass(1.0) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -379,7 +379,7 @@ impl Planets {
 			let id = trade_id;
             let mass = EARTH_MASS;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(mass)
+                .additional_mass(1.0) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
