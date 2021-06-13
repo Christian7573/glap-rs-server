@@ -27,6 +27,7 @@ impl Storage128 {
     }
 }
 
+#[derive(Debug)]
 pub enum Storage7573 {
     Planet(u8),
     PartOfPlayer(u16),

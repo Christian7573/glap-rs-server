@@ -311,7 +311,7 @@ async fn main() {
                 if let Some(mut player) = players.remove(&id) {
                     println!("Player {} disconnected with id {}", player.name, id);
                     let mut affected_parts = BTreeSet::new(); //Why is this a b tree set
-                    simulation.world.recursive_detach_all(player.core, &mut Some(&mut player), &mut simulation.islands, &mut simulation.joints, &mut affected_parts);
+                    simulation.world.recursive_detach_all(player.core, &mut Some(&mut player), &mut simulation.islands, &mut simulation.colliders, &mut simulation.joints, &mut affected_parts);
                     for handle in affected_parts {
                         let part = simulation.world.get_part(handle).unwrap();
                         outbound_events.push(ToSerializer::Broadcast(part.update_meta_msg()));
@@ -404,9 +404,10 @@ async fn main() {
                 outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::AddPlayer { id, name: name.clone(), core_id: core.id() }));
                 
                 let mut player = PlayerMeta::new(id, core_handle, name.clone(), beamout_token);
-                simulation.world.recurse_part_mut(core_handle, Default::default(), &mut |mut handle| {
+                let (world, colliders) = (&mut simulation.world, &mut simulation.colliders);
+                world.recurse_part_mut(core_handle, Default::default(), &mut |mut handle| {
                     let part = &mut handle;
-                    part.join_to(&mut player);
+                    part.join_to(&mut player, colliders);
                     let part = &handle;
                     outbound_events.push(ToSerializer::Broadcast(part.add_msg()));
                     outbound_events.push(ToSerializer::Broadcast(part.move_msg(handle.world_unchecked().bodies_unchecked())));
@@ -503,11 +504,11 @@ async fn main() {
                                         };
                                         None
                                     }) {
-                                        simulation.world.get_part_mut(part_handle).unwrap().remove_from(player_meta);
+                                        simulation.world.get_part_mut(part_handle).unwrap().remove_from(player_meta, &mut simulation.colliders);
                                         //what was I thinking here simulation.world.recurse_part_mut(part_handle, 0, 0, AttachedPartFacing::Up, AttachedPartFacing::Up, &mut |_handle, part: &mut world::parts::Part, _, _, _, _| part.join_to(player_meta));
                                         let mut parts_affected = BTreeSet::new();
                                         parts_affected.insert(part_handle);
-                                        simulation.world.recursive_detach_all(part_handle, &mut Some(player_meta), &mut simulation.islands, &mut simulation.joints, &mut parts_affected);
+                                        simulation.world.recursive_detach_all(part_handle, &mut Some(player_meta), &mut simulation.islands, &mut simulation.colliders, &mut simulation.joints, &mut parts_affected);
                                         player_meta.grabbed_part = Some((grabbed_id, simulation.equip_mouse_dragging(part_handle), x, y));
                                         if player_meta.parts_touching_planet.remove(&part_handle) {
                                             if player_meta.parts_touching_planet.is_empty() { 
@@ -584,7 +585,7 @@ async fn main() {
                                     let grabbed_part = simulation.world.get_part_rigid_mut(grabbed_part_handle).unwrap();
                                     grabbed_part.set_position(Isometry::new(Vector::new(teleport_to.0, teleport_to.1), true_facing.part_rotation() + core_location.rotation.angle()), true);
                                     let grabbed_part = simulation.world.get_part_mut(grabbed_part_handle).unwrap();
-                                    grabbed_part.join_to(player_meta);
+                                    grabbed_part.join_to(player_meta, &mut simulation.colliders);
                                     outbound_events.push(ToSerializer::Message(id, player_meta.update_my_meta()));
                                     grabbed_part.thrust_mode = thrust_mode;
                                     outbound_events.push(ToSerializer::Broadcast(grabbed_part.update_meta_msg()));
@@ -704,7 +705,7 @@ fn recursive_broken_detach(root: PartHandle, simulation: &mut world::Simulation,
     });
     let mut affected_parts = BTreeSet::new();
     for (parent, attachment_slot) in broken_parts {
-        simulation.world.recursive_detach_one(parent, attachment_slot, player, &mut simulation.islands, &mut simulation.joints, &mut affected_parts);
+        simulation.world.recursive_detach_one(parent, attachment_slot, player, &mut simulation.islands, &mut simulation.colliders, &mut simulation.joints, &mut affected_parts);
     }
     if !affected_parts.is_empty() {
         for part_handle in affected_parts {

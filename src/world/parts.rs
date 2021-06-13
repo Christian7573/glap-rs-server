@@ -6,7 +6,8 @@ use super::typedef::*;
 use nphysics2d::joint::DefaultJointConstraintHandle;*/
 use crate::PlayerMeta;
 use crate::codec::ToClientMsg;
-use super::{/*WorldAddHandle,*/ World, make_local_point, apply_force_locally};
+use crate::storage7573::Storage7573;
+use super::{/*WorldAddHandle,*/ World, make_local_point, apply_force_locally, PartsReverseLookup};
 use crate::session::WorldUpdatePartMove;
 use std::sync::atomic::{AtomicU16, Ordering as AtomicOrdering};
 
@@ -64,6 +65,7 @@ impl RecursivePartDescription {
             body_handle,
         };
         let my_part_handle = world.parts.insert(part);
+        world.parts_reverse_lookup.insert(body_handle.into_raw_parts(), my_part_handle);
 
         for (i, attachment) in self.attachments.iter().enumerate() {
             if let Some(recursive_part) = attachment {
@@ -88,20 +90,22 @@ impl From<PartKind> for RecursivePartDescription {
 }
 
 impl Part {
-    pub fn join_to(&mut self, player: &mut PlayerMeta) {
+    pub fn join_to(&mut self, player: &mut PlayerMeta, colliders: &mut ColliderSet) {
         player.max_power += self.kind.power_storage();
         player.power_regen_per_5_ticks += self.kind.power_regen_per_5_ticks();
         self.part_of_player = Some(player.id);
+        colliders[self.collider].user_data = Storage7573::PartOfPlayer(player.id).into();
     }
-    pub fn remove_from(&mut self, player: &mut PlayerMeta) {
+    pub fn remove_from(&mut self, player: &mut PlayerMeta, colliders: &mut ColliderSet) {
         player.max_power -= self.kind.power_storage();
         player.power_regen_per_5_ticks -= self.kind.power_regen_per_5_ticks();
         player.power = player.power.min(player.max_power);
         self.part_of_player = None;
+        colliders[self.collider].user_data = 0;
     }
     pub fn part_of_player(&self) -> Option<u16> { self.part_of_player }
     pub fn mutate(mut self, mutate_into: PartKind, player: &mut Option<&mut PlayerMeta>, world: &mut World, islands: &mut IslandManager, colliders: &mut ColliderSet, joints: &mut JointSet) -> PartHandle {
-        if let Some(player) = player { self.remove_from(player); }
+        if let Some(player) = player { self.remove_from(player, colliders); }
         let old_attachments = &mut self.attachments;
         let mut raw_attachments: [Option<PartHandle>; 4] = [None, None, None, None];
         for i in 0..4 {
@@ -113,7 +117,8 @@ impl Part {
         let position = old_body.position().clone();
         let thrust_mode = self.thrust_mode;
         let part_id = self.id;
-        self.remove_physics_components(islands, world.bodies_mut_unchecked(), colliders, joints);
+        let (bodies, reverse) = world.removal_equipment_unchecked();
+        self.remove_physics_components(islands, bodies, colliders, joints, reverse);
         let part_index = RecursivePartDescription::from(mutate_into).inflate_component(world, colliders, joints, position, AttachedPartFacing::Up, 0, 0, Some(part_id));
         for i in 0..4 {
             if let Some(attachment) = &raw_attachments[i] {
@@ -122,7 +127,7 @@ impl Part {
         }
         let part = world.get_part_mut(part_index).unwrap();
         part.thrust_mode = thrust_mode;
-        if let Some(player) = player { part.join_to(player) };
+        if let Some(player) = player { part.join_to(player, colliders) };
         part_index
     }
     pub fn deflate(&self, world: &World) -> RecursivePartDescription {
@@ -132,9 +137,10 @@ impl Part {
         }
     }
 
-    fn remove_physics_components(mut self, islands: &mut IslandManager, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, joints: &mut JointSet) {
+    fn remove_physics_components(mut self, islands: &mut IslandManager, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, joints: &mut JointSet, parts_reverse_lookup: &mut PartsReverseLookup) {
         colliders.remove(self.collider, islands, bodies, true);
         bodies.remove(self.body_handle, islands, colliders, joints);
+        parts_reverse_lookup.remove(&self.body_handle.into_raw_parts());
     }
 
     pub fn attach_part_player_agnostic(parent_handle: PartHandle, child_handle: PartHandle, attachment_slot: usize, world: &mut World, joints: &mut JointSet) {
@@ -209,7 +215,8 @@ impl Part {
             }
         }
         removal_msgs.push(self.remove_msg());
-        self.remove_physics_components(islands, world.bodies_mut_unchecked(), colliders, joints);
+        let (bodies, reverse) = world.removal_equipment_unchecked();
+        self.remove_physics_components(islands, bodies, colliders, joints, reverse);
     }
 
     pub fn id(&self) -> u16 { self.id }

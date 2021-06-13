@@ -2,6 +2,7 @@ use super::{MyUnits, PartHandle};
 use std::collections::BTreeMap;
 use rapier2d::dynamics::{RigidBody, RigidBodyBuilder, BodyStatus, RigidBodyHandle, RigidBodySet};
 use rapier2d::geometry::{ColliderBuilder, SharedShape, Collider, ColliderSet, ColliderHandle};
+use rapier2d::pipeline::ActiveEvents;
 use super::typedef::*;
 use crate::codec::{ PlanetKind, ToClientMsg };
 use crate::storage7573::Storage7573;
@@ -36,7 +37,10 @@ impl Planets {
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 4.7;
-            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS))
+				.user_data(Storage7573::Planet(id).into())
+				.active_events(ActiveEvents::CONTACT_EVENTS)
+				.build();
             colliders.insert_with_parent(collider, body_handle, bodies);
 
             planets.insert(id, CelestialObject {
@@ -62,7 +66,10 @@ impl Planets {
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE;
-            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS))
+				.user_data(Storage7573::Planet(id).into())
+				.active_events(ActiveEvents::CONTACT_EVENTS)
+				.build();
             colliders.insert_with_parent(collider, body_handle, bodies);
             
             planets.insert(id, CelestialObject {
@@ -93,7 +100,10 @@ impl Planets {
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE / 4.0;
-            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS))
+				.user_data(Storage7573::Planet(id).into())
+				.active_events(ActiveEvents::CONTACT_EVENTS)
+				.build();
             colliders.insert_with_parent(collider, body_handle, bodies);
 
             let total_ticks = 600 * 20 * 3;
@@ -125,7 +135,10 @@ impl Planets {
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE / 2.0;
-            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS))
+				.user_data(Storage7573::Planet(id).into())
+				.active_events(ActiveEvents::CONTACT_EVENTS)
+				.build();
             colliders.insert_with_parent(collider, body_handle, bodies);
             
             let total_ticks = 4800 * 20 * 3;
@@ -157,7 +170,10 @@ impl Planets {
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 0.38;
-            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS))
+				.user_data(Storage7573::Planet(id).into())
+				.active_events(ActiveEvents::CONTACT_EVENTS)
+				.build();
             colliders.insert_with_parent(collider, body_handle, bodies);
             
             let total_ticks = 1200 * 20 * 3;
@@ -189,7 +205,10 @@ impl Planets {
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 2.0;
-            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS))
+				.user_data(Storage7573::Planet(id).into())
+				.active_events(ActiveEvents::CONTACT_EVENTS)
+				.build();
             colliders.insert_with_parent(collider, body_handle, bodies);
 
             let total_ticks = 8400 * 20 * 3;
@@ -221,7 +240,10 @@ impl Planets {
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE / 4.0;
-            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS))
+				.user_data(Storage7573::Planet(id).into())
+				.active_events(ActiveEvents::CONTACT_EVENTS)
+				.build();
             colliders.insert_with_parent(collider, body_handle, bodies);
 
             let total_ticks = 3394 * 20 * 3;
@@ -254,7 +276,10 @@ impl Planets {
             let position = (body.position().translation.x, body.position().translation.y);
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 2.0;
-            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS))
+				.user_data(Storage7573::Planet(id).into())
+				.active_events(ActiveEvents::CONTACT_EVENTS)
+				.build();
             colliders.insert_with_parent(collider, body_handle, bodies);
 
             let total_ticks = 9600 * 20 * 3;
@@ -286,7 +311,10 @@ impl Planets {
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 1.5;
-            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS))
+				.user_data(Storage7573::Planet(id).into())
+				.active_events(ActiveEvents::CONTACT_EVENTS)
+				.build();
             colliders.insert_with_parent(collider, body_handle, bodies);
 
             let total_ticks = 13200 * 20 * 3;
@@ -318,7 +346,10 @@ impl Planets {
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE;
-            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS))
+				.user_data(Storage7573::Planet(id).into())
+				.active_events(ActiveEvents::CONTACT_EVENTS)
+				.build();
             colliders.insert_with_parent(collider, body_handle, bodies);
 
             let total_ticks = 2400 * 20 * 3;
@@ -350,7 +381,10 @@ impl Planets {
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 2.0;
-            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS))
+				.user_data(Storage7573::Planet(id).into())
+				.active_events(ActiveEvents::CONTACT_EVENTS)
+				.build();
             colliders.insert_with_parent(collider, body_handle, bodies);
 
             let total_ticks = 11520 * 20 * 3;
@@ -384,7 +418,10 @@ impl Planets {
                 .build();
             let body_handle = bodies.insert(body);
             const RADIUS: f32 = EARTH_SIZE * 0.75;
-            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS)).build();
+            let collider = ColliderBuilder::new(SharedShape::ball(RADIUS))
+				.user_data(Storage7573::Planet(id).into())
+				.active_events(ActiveEvents::CONTACT_EVENTS)
+				.build();
             colliders.insert_with_parent(collider, body_handle, bodies);
 
             planets.insert(id, CelestialObject {
