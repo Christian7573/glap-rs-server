@@ -503,6 +503,7 @@ impl Orbit {
         let mut pos = (self.radius.0 * radians.cos(), self.radius.1 * radians.sin());
         if self.rotation != 0.0 { Self::my_rotate_point(&mut pos, self.rotation) };
         let pos = (pos.0 + parent_pos.0, pos.1 + parent_pos.1);
+        self.last_next_position = pos;
         //pos
 
         let ticks_ellapsed = (ticks_ellapsed + 1.0); // % total_ticks;
