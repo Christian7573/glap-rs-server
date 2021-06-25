@@ -180,14 +180,14 @@ async fn main() {
                             outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::UpdatePlayerMeta {
                                 id:  *id,
                                 thrust_forward: player.thrust_forwards, thrust_backward: player.thrust_backwards, thrust_clockwise: player.thrust_clockwise, thrust_counter_clockwise: player.thrust_counterclockwise,
-                                grabed_part: player.grabbed_part.map(|(id,_,_,_)| id)
+                                grabed_part: player.grabbed_part.as_ref().map(|(id,_,_,_)| *id)
                             }));
                         }
                     }
-                    if let Some((part_id, constraint, x, y)) = player.grabbed_part {
+                    if let Some((part_id, constraint, x, y)) = &mut player.grabbed_part {
                         let core = simulation.world.get_part_rigid(player.core).expect("Player iter invalid core part");
                         let position = core.position().translation;
-                        simulation.move_mouse_constraint(constraint, x + position.x, y + position.y);
+                        simulation.move_mouse_constraint(constraint, *x + position.x, *y + position.y);
                     }
                     if let Some(planet_id) = player.touching_planet {
                         player.ticks_til_cargo_transform -= 1;
@@ -321,7 +321,7 @@ async fn main() {
                     if let Some((part_id, constraint_id, _, _)) = player.grabbed_part {
                         if let Some(part) = free_parts.get_mut(&part_id) {
                             part.become_decaying();
-                            simulation.release_constraint(constraint_id);
+                            simulation.release_mouse_constraint(constraint_id);
                         }
                     }
                     outbound_events.push(ToSerializer::Broadcast(ToClientMsg::ChatMessage{ username: String::from("Server"), msg: player.name.clone() + " left the game", color: String::from("#e270ff") }));
@@ -336,7 +336,7 @@ async fn main() {
                     player.thrust_counterclockwise = false;
                     player.thrust_clockwise = false;
                     if let Some((id, constraint, _, _)) = std::mem::replace(&mut player.grabbed_part, None) {
-                        simulation.release_constraint(constraint);
+                        simulation.release_mouse_constraint(constraint);
                         free_parts.get_mut(&id).unwrap().become_decaying();
                     }
                     outbound_events.push(ToSerializer::Broadcast(player.update_meta_msg()));
@@ -472,7 +472,7 @@ async fn main() {
                                 outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::UpdatePlayerMeta {
                                     id,
                                     thrust_forward: forward, thrust_backward: backward, thrust_clockwise: clockwise, thrust_counter_clockwise: counter_clockwise,
-                                    grabed_part: player.grabbed_part.map(|(id, _, _, _)| id)
+                                    grabed_part: player.grabbed_part.as_ref().map(|(id, _, _, _)| *id)
                                 }));
                             };
                         }
@@ -480,9 +480,7 @@ async fn main() {
 
                     ToServerMsg::CommitGrab{ grabbed_id, x, y } => {
                         if let Some(player_meta) = players.get_mut(&id) {
-                            let core = simulation.world.get_part(player_meta.core).unwrap();
                             if player_meta.grabbed_part.is_none() {
-                                let core_location = simulation.world.get_part_rigid(player_meta.core).unwrap().position().translation;
                                 if let Some(free_part) = free_parts.get_mut(&grabbed_id) {
                                     if let FreePart::Decaying(part, _) | FreePart::EarthCargo(part, _) = &free_part {
                                         player_meta.grabbed_part = Some((grabbed_id, simulation.equip_mouse_dragging(*part), x, y));
@@ -491,7 +489,6 @@ async fn main() {
                                         free_part.become_grabbed(&mut earth_cargos);
                                     }
                                 } else {
-                                    let world = &mut simulation.world;
                                     let joints = &mut simulation.joints;
                                     let islands = &mut simulation.islands;
                                     if let Some(part_handle) = simulation.world.recurse_part_mut_with_return(player_meta.core, Default::default(), &mut |mut handle| {
@@ -532,17 +529,22 @@ async fn main() {
                     },
                     ToServerMsg::MoveGrab{ x, y } => {
                         if let Some(player_meta) = players.get_mut(&id) {
-                            if let Some((part_id, constraint, _, _)) = player_meta.grabbed_part {
-                                //simulation.move_mouse_constraint(constraint, x, y);
-                                player_meta.grabbed_part = Some((part_id, constraint, x, y));
+                            if let Some((part_id, constraint, last_x, last_y)) = &mut player_meta.grabbed_part {
+                                simulation.move_mouse_constraint(constraint, x, y);
+                                let grabbed_part_handle = **free_parts.get(&part_id).expect("Mousen't3");
+                                let body = simulation.world.get_part_rigid_mut(grabbed_part_handle).expect("Mousen't2");
+                                body.wake_up(false);
+                                *last_x = x;
+                                *last_y = y;
                             }
                         }
                     },
                     ToServerMsg::ReleaseGrab => {
                         if let Some(player_meta) = players.get_mut(&id) {
-                            if let Some((part_id, constraint, x, y)) = player_meta.grabbed_part {
-                                simulation.release_constraint(constraint);
-                                player_meta.grabbed_part = None;
+                            if player_meta.grabbed_part.is_some() {
+                                let (part_id, constraint, x, y) = std::mem::replace(&mut player_meta.grabbed_part, None).unwrap();
+                                simulation.release_mouse_constraint(constraint);
+
                                 let mut attachment_msg: Option<Vec<u8>> = None;
                                 let core_location = simulation.world.get_part_rigid(player_meta.core).unwrap().position().clone();
                                 let grabbed_part_handle = **free_parts.get(&part_id).unwrap();
@@ -780,7 +782,7 @@ pub struct PlayerMeta {
     pub max_power: u32,
     pub power_regen_per_5_ticks: u32,
 
-    pub grabbed_part: Option<(u16, rapier2d::dynamics::JointHandle, f32, f32)>,
+    pub grabbed_part: Option<(u16, world::MouseDraggingStuff, f32, f32)>,
 
     pub touching_planet: Option<u8>,
     ticks_til_cargo_transform: u8,

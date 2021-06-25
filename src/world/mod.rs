@@ -137,31 +137,44 @@ impl Simulation {
         }
     }
 
-    pub fn equip_mouse_dragging(&mut self, part: PartHandle) -> JointHandle {
+    pub fn equip_mouse_dragging(&mut self, part: PartHandle) -> MouseDraggingStuff {
+        let mut jank_rigid_body = RigidBodyBuilder::new_dynamic()
+            .additional_mass(100.0)
+            .build();
+        
         let part_actual = self.world.get_part(part).unwrap();
         let body_handle = part_actual.body_handle();
         let body = self.world.get_part_rigid_mut(part).unwrap();
         let mut mass = *body.mass_properties();
-        mass.inv_mass = 1.0 / 0.00000001;
+        mass.set_mass(0.000001, false);
         body.set_mass_properties(mass, true);
         let space = body.position().translation;
+        jank_rigid_body.set_translation(space.vector, true);
         let constraint = BallJoint::new(
-            Point::new(0.0,0.0),
-            Point::new(space.x, space.y),
+            //Point::new(space.x, space.y),
+            Point::new(0.0, 0.0),
+            Point::new(0.0, 0.0),
         );
-        let reference_point = self.world.reference_point_body();
-        self.joints.insert(self.world.bodies_mut_unchecked(), reference_point, body_handle, constraint)
+        let movable_handle = self.world.bodies.insert(jank_rigid_body);
+        let joint_handle = self.joints.insert(self.world.bodies_mut_unchecked(), movable_handle, body_handle, constraint);
+        MouseDraggingStuff { body: movable_handle, joint: joint_handle }
     }
-    pub fn move_mouse_constraint(&mut self, constraint_id: JointHandle, x: f32, y: f32) {
-        if let Some(JointParams::BallJoint(mut constraint)) = self.joints.get_mut(constraint_id).map(|j: &mut Joint| j.params ) {
-            constraint.local_anchor2 = Point::new(x, y);
+    pub fn move_mouse_constraint(&mut self, drag_stuff: &mut MouseDraggingStuff, x: f32, y: f32) {
+        if let Some(body) = self.world.bodies.get_mut(drag_stuff.body) {
+            body.set_translation(Vector::new(x, y), true);
+        /*if let Some(JointParams::BallJoint(mut constraint)) = self.joints.get_mut(constraint_id).map(|j: &mut Joint| j.params ) {
+            constraint.local_anchor1 = Point::new(x, y);*/
+        } else {
+            panic!("Mousen't");
         }
     }
     pub fn release_constraint(&mut self, constraint_id: JointHandle) {
         self.joints.remove(constraint_id, &mut self.islands, self.world.bodies_mut_unchecked(), true);
     }
-    pub fn release_mouse_constraint(&mut self, part_handle: PartHandle, constraint_id: JointHandle) {
-        self.release_constraint(constraint_id);
+    pub fn release_mouse_constraint(&mut self, drag_stuff: MouseDraggingStuff) {
+        self.joints.remove(drag_stuff.joint, &mut self.islands, self.world.bodies_mut_unchecked(), true);
+        self.world.bodies.remove(drag_stuff.body, &mut self.islands, &mut self.colliders, &mut self.joints);
+        //self.release_constraint(constraint_id);
         //TODO set mass back to normal
     }
 
@@ -178,6 +191,11 @@ impl Simulation {
         self.world.delete_parts_recursive(index, &mut self.islands, &mut self.colliders, &mut self.joints, &mut removal_msgs);
         removal_msgs
     }
+}
+
+pub struct MouseDraggingStuff {
+    body: RigidBodyHandle,
+    joint: JointHandle,
 }
 
 type PartsReverseLookup = BTreeMap<(u32, u32), Index>;
