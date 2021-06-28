@@ -697,19 +697,23 @@ fn broken_part_detach_finish(affected_parts: BTreeSet<PartHandle>, simulation: &
     let mut players_affected = Vec::new();
     for part_handle in affected_parts {
         if let Some(part) = simulation.world.get_part_mut(part_handle) {
-            out.push(ToSerializerEvent::Broadcast(part.update_meta_msg()));
             free_parts.insert(part.id(), FreePart::Decaying(part_handle, DEFAULT_PART_DECAY_TICKS));
             if let Some(player_id) = part.part_of_player() {
                 let player = players.get_mut(&player_id).unwrap();
                 players_affected.push(player_id);
                 part.remove_from(player, &mut simulation.colliders);
+                out.push(ToSerializerEvent::Broadcast(part.update_meta_msg()));
                 if player.parts_touching_planet.remove(&part_handle) {
                     if player.parts_touching_planet.is_empty() {
                         player.can_beamout = false;
                         player.touching_planet = None;
                     }
                 }
+            } else {
+                panic!("Detachn't Playern't");
             }
+        } else {
+            panic!("Detachn't Partn't");
         }
     }
     for player_id in players_affected {
