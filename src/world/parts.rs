@@ -38,8 +38,8 @@ pub struct Part {
     collider: ColliderHandle,
 }
 pub struct PartAttachment {
-    part: PartHandle,
-    connection: JointHandle,
+    pub part: PartHandle,
+    pub connection: JointHandle,
 }
 
 impl RecursivePartDescription {
@@ -153,6 +153,11 @@ impl Part {
         let parent = world.get_part_mut(parent_handle)?;
         if let Some(part_attachment) = std::mem::replace(&mut parent.attachments[attachment_slot], None) {
             Some(part_attachment.deflate(islands, world.bodies_mut_unchecked(), joints))
+        } else { None }
+    }
+    pub fn detach_part_player_agnostic_bad(parent: &mut Part, attachment_slot: usize, bodies: &mut RigidBodySet, islands: &mut IslandManager, joints: &mut JointSet) -> Option<PartHandle> {
+        if let Some(part_attachment) = std::mem::replace(&mut parent.attachments[attachment_slot], None) {
+            Some(part_attachment.deflate(islands, bodies, joints))
         } else { None }
     }
 

@@ -26,6 +26,10 @@ pub mod typedef {
 }
 use typedef::*;
 
+//const PART_JOINT_MAX_TORQUE: f32 = 200.0;
+const PART_JOINT_MAX_TORQUE: f32 = 15.0;
+const PART_JOINT_MAX_FORCE: f32 = PART_JOINT_MAX_TORQUE * 3.5;
+
 pub struct Simulation {
     pub world: World,
     pub islands: IslandManager,
@@ -44,6 +48,7 @@ pub struct Simulation {
 pub enum SimulationEvent {
     PlayerTouchPlanet { player: u16, part: PartHandle, planet: u8, },
     PlayerUntouchPlanet { player: u16, part: PartHandle, planet: u8 },
+    PartsDetached( BTreeSet<PartHandle> ),
 }
 
 
@@ -104,33 +109,63 @@ impl Simulation {
                 &mut self.ccd_solver,
                 &(), &self.event_collector,
             );
-        }
-        while let Ok(contact_event) = self.contact_events.try_recv() {
-            match contact_event {
-                ContactEvent::Started(handle1, handle2) => {
-                    let planet: u8;
-                    let other: ColliderHandle;
-                    if let Storage7573::Planet(am_planet) = self.colliders.get(handle1).unwrap().user_data.into() {
-                        planet = am_planet; other = handle2;
-                    } else if let Storage7573::Planet(am_planet) = self.colliders.get(handle2).unwrap().user_data.into() {
-                        planet = am_planet; other = handle1;
-                    } else { continue; }
-                    let part_coll = self.colliders.get(other).unwrap();
-                    if let Storage7573::PartOfPlayer(player_id) = self.colliders[other].user_data.into() {
-                        events.push(SimulationEvent::PlayerTouchPlanet{ player: player_id, part: *self.world.parts_reverse_lookup.get(&part_coll.parent().unwrap().into_raw_parts()).unwrap(), planet });
+
+            let mut to_detach = Vec::new();
+            //let mut max_impulse_lin: f32 = 0.0;
+            //let mut max_impulse_ang: f32 = 0.0;
+            for (handle, part) in &mut self.world.parts {
+                for i in 0..4 {
+                    if let Some(attachment) = &part.attachments()[i] {
+                        let joint = self.joints.get(attachment.connection).unwrap();
+                        if let JointParams::FixedJoint(joint_params) = joint.params {
+                            //max_impulse_ang = max_impulse_ang.max(joint_params.impulse.z.abs());
+                            //max_impulse_lin = max_impulse_lin.max(joint_params.impulse.xy().magnitude().abs());
+                            if joint_params.impulse.xy().magnitude().abs() >= PART_JOINT_MAX_FORCE || joint_params.impulse.z.abs() >= PART_JOINT_MAX_TORQUE {
+                                to_detach.push((handle, i));
+                                //events.push(SimulationEvent::PartDetached { detached_part: **attachment });
+                                //Part::detach_part_player_agnostic_bad(part, i, &mut self.world.bodies, &mut self.islands, &mut self.joints);
+                            }
+                        } else {
+                            panic!("Fixed Jointn't");
+                        }
                     }
-                },
-                ContactEvent::Stopped(handle1, handle2) => {
-                    let planet: u8;
-                    let other: ColliderHandle;
-                    if let Storage7573::Planet(am_planet) = self.colliders.get(handle1).unwrap().user_data.into() {
-                        planet = am_planet; other = handle2;
-                    } else if let Storage7573::Planet(am_planet) = self.colliders.get(handle2).unwrap().user_data.into() {
-                        planet = am_planet; other = handle1;
-                    } else { continue; }
-                    let part_coll = self.colliders.get(other).unwrap();
-                    if let Storage7573::PartOfPlayer(player_id) = self.colliders[other].user_data.into() {
-                        events.push(SimulationEvent::PlayerUntouchPlanet{ player: player_id, part: *self.world.parts_reverse_lookup.get(&part_coll.parent().unwrap().into_raw_parts()).unwrap(), planet });
+                }
+            }
+            let mut parts_affected = BTreeSet::new();
+            for (parent, i) in to_detach {
+                self.world.recursive_detach_one(parent, i, &mut None, &mut self.islands, &mut self.colliders, &mut self.joints, &mut parts_affected);
+            }
+            if !parts_affected.is_empty() { events.push(SimulationEvent::PartsDetached(parts_affected)) };
+            //println!("{} {}", max_impulse_lin, max_impulse_ang);
+
+
+            while let Ok(contact_event) = self.contact_events.try_recv() {
+                match contact_event {
+                    ContactEvent::Started(handle1, handle2) => {
+                        let planet: u8;
+                        let other: ColliderHandle;
+                        if let Storage7573::Planet(am_planet) = self.colliders.get(handle1).unwrap().user_data.into() {
+                            planet = am_planet; other = handle2;
+                        } else if let Storage7573::Planet(am_planet) = self.colliders.get(handle2).unwrap().user_data.into() {
+                            planet = am_planet; other = handle1;
+                        } else { continue; }
+                        let part_coll = self.colliders.get(other).unwrap();
+                        if let Storage7573::PartOfPlayer(player_id) = self.colliders[other].user_data.into() {
+                            events.push(SimulationEvent::PlayerTouchPlanet{ player: player_id, part: *self.world.parts_reverse_lookup.get(&part_coll.parent().unwrap().into_raw_parts()).unwrap(), planet });
+                        }
+                    },
+                    ContactEvent::Stopped(handle1, handle2) => {
+                        let planet: u8;
+                        let other: ColliderHandle;
+                        if let Storage7573::Planet(am_planet) = self.colliders.get(handle1).unwrap().user_data.into() {
+                            planet = am_planet; other = handle2;
+                        } else if let Storage7573::Planet(am_planet) = self.colliders.get(handle2).unwrap().user_data.into() {
+                            planet = am_planet; other = handle1;
+                        } else { continue; }
+                        let part_coll = self.colliders.get(other).unwrap();
+                        if let Storage7573::PartOfPlayer(player_id) = self.colliders[other].user_data.into() {
+                            events.push(SimulationEvent::PlayerUntouchPlanet{ player: player_id, part: *self.world.parts_reverse_lookup.get(&part_coll.parent().unwrap().into_raw_parts()).unwrap(), planet });
+                        }
                     }
                 }
             }

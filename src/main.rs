@@ -272,11 +272,10 @@ async fn main() {
                                 }
                             }
                         },
+                        PartsDetached(affected_parts) => {
+                            broken_part_detach_finish(affected_parts, &mut simulation, &mut free_parts, &mut players, &mut outbound_events);
+                        },
                     }
-                }
-
-                for player in players.values_mut() { 
-                    recursive_broken_detach(player.core, &mut simulation, &mut free_parts, &mut Some(player), &mut outbound_events);
                 }
 
                 outbound_events.push(ToSerializer::WorldUpdate(
@@ -694,28 +693,16 @@ async fn main() {
 }
 
 
-fn recursive_broken_detach(root: PartHandle, simulation: &mut world::Simulation, free_parts: &mut BTreeMap<u16, FreePart>, player: &mut Option<&mut PlayerMeta>, out: &mut Vec<ToSerializerEvent> ) {
-    let mut broken_parts = Vec::new();
-    let world = &mut simulation.world;
-    let joints = &mut simulation.joints;
-    world.recurse_part(root, Default::default(), &mut |handle| {
-        for (i, attachment) in (*handle).attachments().iter().enumerate() {
-            if let Some(attachment) = attachment {
-                if attachment.is_broken(joints) { broken_parts.push((handle.handle(), i)) };
-            }
-        }
-    });
-    let mut affected_parts = BTreeSet::new();
-    for (parent, attachment_slot) in broken_parts {
-        simulation.world.recursive_detach_one(parent, attachment_slot, player, &mut simulation.islands, &mut simulation.colliders, &mut simulation.joints, &mut affected_parts);
-    }
-    if !affected_parts.is_empty() {
-        for part_handle in affected_parts {
-            if let Some(part) = simulation.world.get_part(part_handle) {
-                out.push(ToSerializerEvent::Broadcast(part.update_meta_msg()));
-                free_parts.insert(part.id(), FreePart::Decaying(part_handle, DEFAULT_PART_DECAY_TICKS));
-            }
-            if let Some(player) = player {
+fn broken_part_detach_finish(affected_parts: BTreeSet<PartHandle>, simulation: &mut world::Simulation, free_parts: &mut BTreeMap<u16, FreePart>, players: &mut BTreeMap<u16, PlayerMeta>, out: &mut Vec<ToSerializerEvent> ) {
+    let mut players_affected = Vec::new();
+    for part_handle in affected_parts {
+        if let Some(part) = simulation.world.get_part_mut(part_handle) {
+            out.push(ToSerializerEvent::Broadcast(part.update_meta_msg()));
+            free_parts.insert(part.id(), FreePart::Decaying(part_handle, DEFAULT_PART_DECAY_TICKS));
+            if let Some(player_id) = part.part_of_player() {
+                let player = players.get_mut(&player_id).unwrap();
+                players_affected.push(player_id);
+                part.remove_from(player, &mut simulation.colliders);
                 if player.parts_touching_planet.remove(&part_handle) {
                     if player.parts_touching_planet.is_empty() {
                         player.can_beamout = false;
@@ -724,9 +711,10 @@ fn recursive_broken_detach(root: PartHandle, simulation: &mut world::Simulation,
                 }
             }
         }
-        if let Some(player) = player {
-            out.push(ToSerializerEvent::Message(player.id, player.update_my_meta()));
-        }
+    }
+    for player_id in players_affected {
+        let player = players.get_mut(&player_id).unwrap();
+        out.push(ToSerializerEvent::Message(player.id, player.update_my_meta()));
     }
 }
 
