@@ -232,7 +232,7 @@ impl Planets {
             });
         };
 
-        let pluto = {
+        /*let pluto = {
 			let id = make_planet_id();
             let mass = EARTH_MASS / 10.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
@@ -265,7 +265,7 @@ impl Planets {
                 body_handle,
                 position: (0.0, 0.0),
             });
-        };
+        };*/
 
         let saturn = {
 			let id = make_planet_id();
@@ -410,7 +410,7 @@ impl Planets {
 
 
         let trade_id = make_planet_id();
-        let trade = {
+        /*let trade = {
 			let id = trade_id;
             let mass = EARTH_MASS;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
@@ -442,7 +442,7 @@ impl Planets {
                 body_handle,
                 position: (0.0, 0.0),
             });
-        };
+        };*/
 
         /*Planets {
             earth, moon, planet_material, mars, mercury, jupiter, /* pluto, */ saturn, neptune, venus, uranus, sun, /* trade, */
