@@ -167,7 +167,7 @@ impl Part {
             PartKind::Core => {
                 if *fuel > 0 {
                     let mut subtract_fuel = false;
-                    const CORE_THRUST: f32 = 3.0;
+                    const CORE_THRUST: f32 = 8.0;
                     if forward || counter_clockwise { subtract_fuel = true; apply_force_locally(body, Vector::new(0.0,CORE_THRUST), Point::new(-0.5,-0.5), true); }
                     if forward || clockwise { subtract_fuel = true; apply_force_locally(body, Vector::new(0.0,CORE_THRUST), Point::new(0.5,-0.5), true); }
                     if backward || clockwise { subtract_fuel = true; apply_force_locally(body, Vector::new(0.0,-CORE_THRUST), Point::new(-0.5,0.5), true); }
@@ -349,12 +349,12 @@ impl PartKind {
         match self {
             PartKind::Core => panic!("PartKind thrust called on core"),
             PartKind::Hub => None,
-            PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 2, force: Vector::new(0.0, -10.0), local_point: Point::new(0.0, 1.0) }),
+            PartKind::LandingThruster => Some(ThrustDetails{ fuel_cost: 2, force: Vector::new(0.0, -20.0), local_point: Point::new(0.0, 1.0) }),
             PartKind::Cargo | PartKind::SolarPanel => None,
-            PartKind::Thruster => Some(ThrustDetails{ fuel_cost: 4, force: Vector::new(0.0, -25.0), local_point: Point::new(0.0, 1.0) }),
-            PartKind::SuperThruster => Some(ThrustDetails { fuel_cost: 7, force: Vector::new(0.0, -50.0), local_point: Point::new(0.0, 1.0) }),
-            PartKind::HubThruster => Some(ThrustDetails { fuel_cost: 4, force: Vector::new(0.0, -20.0), local_point: Point::new(0.0, 1.0) }),
-            PartKind::EcoThruster => Some(ThrustDetails { fuel_cost: 1, force: Vector::new(0.0, -20.0), local_point: Point::new(0.0, 1.0) }),
+            PartKind::Thruster => Some(ThrustDetails{ fuel_cost: 4, force: Vector::new(0.0, -50.0), local_point: Point::new(0.0, 1.0) }),
+            PartKind::SuperThruster => Some(ThrustDetails { fuel_cost: 7, force: Vector::new(0.0, -100.0), local_point: Point::new(0.0, 1.0) }),
+            PartKind::HubThruster => Some(ThrustDetails { fuel_cost: 4, force: Vector::new(0.0, -40.0), local_point: Point::new(0.0, 1.0) }),
+            PartKind::EcoThruster => Some(ThrustDetails { fuel_cost: 1, force: Vector::new(0.0, -40.0), local_point: Point::new(0.0, 1.0) }),
             PartKind::PowerHub | PartKind::LandingWheel => None,
         }
     }
