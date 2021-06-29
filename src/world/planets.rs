@@ -93,7 +93,7 @@ impl Planets {
 
         let moon = {
             let id = make_planet_id();
-            let mass = EARTH_MASS / 35.0;
+            let mass = EARTH_MASS / 35.0 * 4.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
                 .additional_mass(1.0) //.additional_mass(mass)
 				.user_data(Planet(id).into())
@@ -103,6 +103,7 @@ impl Planets {
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS))
 				.user_data(Storage7573::Planet(id).into())
 				.active_events(ActiveEvents::CONTACT_EVENTS)
+                .restitution(0.25)
 				.build();
             colliders.insert_with_parent(collider, body_handle, bodies);
 
