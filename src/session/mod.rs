@@ -25,7 +25,7 @@ pub mod websocket;
 use websocket::*;
 
 pub enum ToGameEvent {
-    NewPlayer { id: u16, name: String, parts: RecursivePartDescription, beamout_token: Option<String> },
+    NewPlayer { id: u16, name: String, parts: RecursivePartDescription, beamout_token: Option<String>, beamin_to_planet: Option<u8> },
     SendEntireWorld { to_player: u16, send_self: bool },
     PlayerMessage { id: u16, msg: ToServerMsg },
     PlayerQuit { id: u16 },
@@ -147,18 +147,21 @@ async fn socket_reader(suggested_id: u16, socket: TcpStream, addr: async_std::ne
         } else { None };
         let layout: Option<RecursivePartDescription>;
         let beamout_token: Option<String>;
+        let beamin_to_planet: Option<u8>;
         if let Some(beamin_data) = beamin_data {
             layout = beamin_data.layout;
             is_admin = beamin_data.is_admin;
             beamout_token = Some(beamin_data.beamout_token);
+            beamin_to_planet = beamin_data.beamout_from;
         } else {
             layout = None;
             is_admin = false;
             beamout_token = None;
+            beamin_to_planet = None;
         }
 
         let layout = layout.unwrap_or( RecursivePartDescription { kind: PartKind::Core, attachments: Vec::new() } );                                   
-        to_game.send(ToGameEvent::NewPlayer { id, name: name.clone(), parts: layout, beamout_token }).await;
+        to_game.send(ToGameEvent::NewPlayer { id, name: name.clone(), parts: layout, beamout_token, beamin_to_planet }).await;
         to_game.send(ToGameEvent::SendEntireWorld { to_player: id, send_self: false }).await;
     }
     let (to_writer, from_serializer) = channel::<Vec<OutboundWsMessage>>(50);

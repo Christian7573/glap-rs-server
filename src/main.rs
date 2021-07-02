@@ -375,10 +375,11 @@ async fn main() {
                 }
             },
             
-            Event::InboundEvent(NewPlayer{ id, name, parts, beamout_token }) => { 
+            Event::InboundEvent(NewPlayer{ id, name, parts, beamout_token, beamin_to_planet }) => { 
                 println!("New Player {} with id {}", name, id);
-                let earth_position = simulation.world.bodies_unchecked()[simulation.world.planets.planets[&simulation.world.planets.earth_id].body_handle].position().translation;
-                let earth_radius = simulation.world.planets.planets[&simulation.world.planets.earth_id].radius;
+                let earth_id = beamin_to_planet.unwrap_or(simulation.world.planets.earth_id);
+                let earth_position = simulation.world.bodies_unchecked()[simulation.world.planets.planets[&earth_id].body_handle].position().translation;
+                let earth_radius = simulation.world.planets.planets[&earth_id].radius;
                 use rand::Rng;
 
                 let spawn_degrees: f32 = rand.gen::<f32>() * std::f32::consts::PI * 2.0;

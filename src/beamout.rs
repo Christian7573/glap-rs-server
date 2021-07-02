@@ -66,7 +66,9 @@ pub fn spawn_beamout_request(beamout_token: String, beamout_kind: BeamoutKind, b
 pub struct BeaminResponse {
     pub is_admin: bool,
     pub beamout_token: String,
-    pub layout: Option<RecursivePartDescription>
+    pub layout: Option<RecursivePartDescription>,
+    pub beamout_kind: String,
+    pub beamout_from: Option<u8>,
 }
 
 pub async fn beamin_request(session: String, api: Arc<ApiDat>) -> Result<BeaminResponse, Box<dyn std::error::Error>> {
