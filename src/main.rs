@@ -457,6 +457,7 @@ async fn main() {
                     }
                 }
 
+                outbound_events.push(ToSerializer::Message(to_player, ToClientMsg::ChatMessage{ color: "#e270ff".to_owned(), username: "Server".to_owned(), msg: "Type \"/disconnect\" into chat to respawn at Earth".to_owned() }));
                 outbound_events.push(ToSerializer::Message(to_player, codec::ToClientMsg::ChatMessage{ color: "#e270ff".to_owned(), username: "Server".to_owned(), msg: format!("There are {} players online", players.len()) }));
             },
 
