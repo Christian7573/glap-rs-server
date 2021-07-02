@@ -204,7 +204,7 @@ async fn main() {
                                     if player.parts_touching_planet.remove(&old_part_handle) {
                                         if player.parts_touching_planet.is_empty() { 
                                             player.touching_planet = None;
-                                            player.can_beamout = false;
+                                            player.beamout_status = BeamoutKind::None;
                                         }
                                     }
                                     let new_part_handle = old_part.mutate(upgrade_into, &mut Some(player), &mut simulation.world, &mut simulation.islands, &mut simulation.colliders, &mut simulation.joints);
@@ -248,11 +248,11 @@ async fn main() {
                                     });
                                 } else {
                                     player.touching_planet = Some(planet);
-                                    player.can_beamout = simulation.world.planets.planets[&planet].can_beamout;
+                                    player.beamout_status = simulation.world.planets.planets[&planet].beamout;
                                     player.ticks_til_cargo_transform = TICKS_PER_SECOND;
                                     player.parts_touching_planet.insert(part);
                                     player.power = player.max_power;
-                                    outbound_events.push(ToSerializer::Message(player_id, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
+                                    outbound_events.push(ToSerializer::Message(player_id, player.update_my_meta()));
                                 }
                             } else if planet == simulation.world.planets.sun_id {
                                 if let Some(part) = simulation.world.get_part(part) {
@@ -266,8 +266,8 @@ async fn main() {
                                 if player.parts_touching_planet.remove(&part) {
                                     if player.parts_touching_planet.is_empty() { 
                                         player.touching_planet = None;
-                                        player.can_beamout = false;
-                                        outbound_events.push(ToSerializer::Message(player_id, codec::ToClientMsg::UpdateMyMeta{ max_power: player.max_power, can_beamout: player.can_beamout }));
+                                        player.beamout_status = BeamoutKind::None;
+                                        outbound_events.push(ToSerializer::Message(player_id, player.update_my_meta()));
                                     }
                                 }
                             }
@@ -509,10 +509,9 @@ async fn main() {
                                         if player_meta.parts_touching_planet.remove(&part_handle) {
                                             if player_meta.parts_touching_planet.is_empty() { 
                                                 player_meta.touching_planet = None;
-                                                player_meta.can_beamout = false;
+                                                player_meta.beamout_status = BeamoutKind::None;
                                             }
                                         }
-                                        //outbound_events.push(ToSerializer::Message(id, codec::ToClientMsg::UpdateMyMeta{ max_power: player_meta.max_power, can_beamout: player_meta.can_beamout }));
 
                                         for part_affected in parts_affected {
                                             let part = simulation.world.get_part(part_affected).unwrap();
@@ -521,6 +520,7 @@ async fn main() {
                                         }
                                         free_parts.insert(grabbed_id, FreePart::Grabbed(part_handle));
                                         outbound_events.push(ToSerializer::Broadcast(player_meta.update_meta_msg()));
+                                        outbound_events.push(ToSerializer::Message(id, player_meta.update_my_meta()));
                                     };
                                 }
                             }
@@ -604,7 +604,7 @@ async fn main() {
                     },
                     ToServerMsg::BeamOut => {
                         if let Some(player) = players.get(&id) {
-                            if player.can_beamout {
+                            if matches!(player.beamout_status, BeamoutKind::Beamout | BeamoutKind::Dock) {
                                 let player = players.remove(&id).unwrap();
                                 let core = simulation.world.get_part(player.core).unwrap();
                                 let beamout_layout = core.deflate(&simulation.world);
@@ -612,7 +612,7 @@ async fn main() {
                                 outbound_events.push(ToSerializer::Broadcast(codec::ToClientMsg::ChatMessage { username: "Server".to_owned(), msg: format!("{} has left the game", player.name), color: "#e270ff".to_owned() }));
                                 simulation.delete_parts_recursive(player.core);
                                 if let (Some(beamout_token), Some(api)) = (player.beamout_token, api.as_ref()) { 
-                                    beamout::spawn_beamout_request(beamout_token, beamout_layout, api.clone());
+                                    beamout::spawn_beamout_request(beamout_token, player.beamout_status, player.touching_planet, beamout_layout, api.clone());
                                 };
                                 let my_to_serializer = to_serializer.clone();
                                 async_std::task::spawn(async move {
@@ -705,7 +705,7 @@ fn broken_part_detach_finish(affected_parts: BTreeSet<PartHandle>, simulation: &
                 out.push(ToSerializerEvent::Broadcast(part.update_meta_msg()));
                 if player.parts_touching_planet.remove(&part_handle) {
                     if player.parts_touching_planet.is_empty() {
-                        player.can_beamout = false;
+                        player.beamout_status = BeamoutKind::None;
                         player.touching_planet = None;
                     }
                 }
@@ -779,7 +779,7 @@ pub struct PlayerMeta {
     pub touching_planet: Option<u8>,
     ticks_til_cargo_transform: u8,
     parts_touching_planet: BTreeSet<PartHandle>,
-    can_beamout: bool,
+    beamout_status: BeamoutKind,
 }
 impl PlayerMeta {
     fn new(my_id: u16, core_handle: PartHandle, name: String, beamout_token: Option<String>) -> PlayerMeta { PlayerMeta {
@@ -795,7 +795,7 @@ impl PlayerMeta {
         touching_planet: None,
         parts_touching_planet: BTreeSet::new(),
         ticks_til_cargo_transform: TICKS_PER_SECOND,
-        can_beamout: false,
+        beamout_status: BeamoutKind::None,
     } }
 
     fn update_meta_msg(&self) -> ToClientMsg {
@@ -811,7 +811,7 @@ impl PlayerMeta {
     fn update_my_meta(&self) -> ToClientMsg {
         ToClientMsg::UpdateMyMeta {
             max_power: self.max_power,
-            can_beamout: self.can_beamout,
+            beamout: self.beamout_status,
         }
     }
 }
@@ -826,7 +826,7 @@ async fn emergency_stop(players: &BTreeMap<u16, PlayerMeta>, world: &world::Worl
             let beamout_layout = core.deflate(world);
             if let Some(beamout_token) = &player.beamout_token {
                 println!("Beaming out {} (token: {})", player.name, beamout_token);
-                beamout::spawn_beamout_request(beamout_token.to_owned(), beamout_layout, api.clone()).await; 
+                beamout::spawn_beamout_request(beamout_token.to_owned(), BeamoutKind::Beamout, None, beamout_layout, api.clone()).await; 
                 println!("Finished taht player");
             } else {
                 println!("Player {} has no beamout token", player.name);

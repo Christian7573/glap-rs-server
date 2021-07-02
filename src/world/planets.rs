@@ -4,7 +4,7 @@ use rapier2d::dynamics::{RigidBody, RigidBodyBuilder, BodyStatus, RigidBodyHandl
 use rapier2d::geometry::{ColliderBuilder, SharedShape, Collider, ColliderSet, ColliderHandle};
 use rapier2d::pipeline::ActiveEvents;
 use super::typedef::*;
-use crate::codec::{ PlanetKind, ToClientMsg };
+use crate::codec::{ PlanetKind, ToClientMsg, BeamoutKind };
 use crate::storage7573::Storage7573;
 use rand::Rng;
 use super::parts::PartKind;
@@ -49,7 +49,7 @@ impl Planets {
                 radius: RADIUS,
                 mass,
                 cargo_upgrade: None,
-                can_beamout: false,
+                beamout: BeamoutKind::None,
                 body_handle,
                 position: (0.0, 0.0),
             });
@@ -85,7 +85,7 @@ impl Planets {
                 radius: RADIUS,
                 mass,
                 cargo_upgrade: None,
-                can_beamout: true,
+                beamout: BeamoutKind::Beamout,
                 body_handle,
                 position: (0.0, 0.0),
             });
@@ -121,7 +121,7 @@ impl Planets {
                 radius: RADIUS,
                 mass,
                 cargo_upgrade: Some(super::parts::PartKind::LandingThruster),
-                can_beamout: true,
+                beamout: BeamoutKind::Beamout,
                 body_handle,
                 position: (0.0, 0.0),
             });
@@ -155,7 +155,7 @@ impl Planets {
                 }),
                 radius: RADIUS,
                 cargo_upgrade: Some(super::parts::PartKind::Hub),
-                can_beamout: false,
+                beamout: BeamoutKind::Dock,
                 mass,
                 body_handle,
                 position: (0.0, 0.0),
@@ -191,7 +191,7 @@ impl Planets {
                 radius: RADIUS,
                 mass,
                 cargo_upgrade: Some(super::parts::PartKind::SolarPanel),
-                can_beamout: false,
+                beamout: BeamoutKind::Dock,
                 body_handle,
                 position: (0.0, 0.0),
             });
@@ -226,7 +226,7 @@ impl Planets {
                 radius: RADIUS,
                 mass,
                 cargo_upgrade: Some(super::parts::PartKind::SuperThruster),
-                can_beamout: false,
+                beamout: BeamoutKind::Dock,
                 body_handle,
                 position: (0.0, 0.0),
             });
@@ -261,7 +261,7 @@ impl Planets {
                 radius: RADIUS,
                 mass,
                 cargo_upgrade: Some(PartKind::LandingWheel),
-                can_beamout: false,
+                beamout: BeamoutKind::Dock,
                 body_handle,
                 position: (0.0, 0.0),
             });
@@ -297,7 +297,7 @@ impl Planets {
                 radius: RADIUS,
                 mass,
                 cargo_upgrade: Some(PartKind::Thruster),
-                can_beamout: false,
+                beamout: BeamoutKind::Dock,
                 body_handle,
                 position: (0.0, 0.0),
             });
@@ -332,7 +332,7 @@ impl Planets {
                 radius: RADIUS,
                 mass,
                 cargo_upgrade: Some(PartKind::HubThruster),
-                can_beamout: false,
+                beamout: BeamoutKind::Dock,
                 body_handle,
                 position: (0.0, 0.0),
             });
@@ -367,7 +367,7 @@ impl Planets {
                 radius: RADIUS,
                 mass,
                 cargo_upgrade: Some(PartKind::EcoThruster),
-                can_beamout: false,
+                beamout: BeamoutKind::Dock,
                 body_handle,
                 position: (0.0, 0.0),
             });
@@ -402,7 +402,7 @@ impl Planets {
                 radius: RADIUS,
                 mass,
                 cargo_upgrade: Some(PartKind::PowerHub),
-                can_beamout: false,
+                beamout: BeamoutKind::Dock,
                 body_handle,
                 position: (0.0, 0.0),
             });
@@ -438,7 +438,7 @@ impl Planets {
                 radius: RADIUS,
                 mass,
                 cargo_upgrade: None,
-                can_beamout: true,
+                beamout: BeamoutKind::Beamout,
                 body_handle,
                 position: (0.0, 0.0),
             });
@@ -481,7 +481,7 @@ pub struct CelestialObject {
     pub radius: f32,
     pub mass: f32,
     pub cargo_upgrade: Option<super::parts::PartKind>,
-    pub can_beamout: bool,
+    pub beamout: BeamoutKind,
     pub body_handle: RigidBodyHandle,
     pub position: (f32, f32),
 }

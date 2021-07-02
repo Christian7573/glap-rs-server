@@ -119,6 +119,14 @@ PlanetKind = Enum("PlanetKind", [
 enums.append(PlanetKind)
 TypePlanetKind = EnumType("PlanetKind")
 
+BeamoutKind = Enum("BeamoutKind", [
+    "Beamout",
+    "Dock",
+    "None"
+])
+TypeBeamoutKind = EnumType("BeamoutKind")
+enums.append(BeamoutKind)
+
 ToServerMsg = MessageCategory("ToServerMsg")
 categories.append(ToServerMsg)
 
@@ -251,7 +259,7 @@ ToClientMsg.messages.append(PostSimulationTick)
 
 UpdateMyMeta = Message("UpdateMyMeta")
 UpdateMyMeta.fields.append(Field("max_power", TypeUInt))
-UpdateMyMeta.fields.append(Field("can_beamout", TypeBoolean))
+UpdateMyMeta.fields.append(Field("beamout", TypeBeamoutKind))
 ToClientMsg.messages.append(UpdateMyMeta)
 
 BeamOutAnimation = Message("BeamOutAnimation")

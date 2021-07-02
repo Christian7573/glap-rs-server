@@ -5,7 +5,7 @@ use crate::ApiDat;
 use std::sync::Arc;
 use futures::FutureExt;
 use async_std::task::JoinHandle;
-
+use crate::codec::BeamoutKind;
 
 impl Serialize for PartKind {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -22,7 +22,14 @@ impl<'de> Deserialize<'de> for PartKind {
     }
 }
 
-pub fn spawn_beamout_request(beamout_token: String, mut beamout_layout: RecursivePartDescription, api: Arc<ApiDat>) -> JoinHandle<()> {
+#[derive(serde::Serialize)]
+pub struct BeamoutRequest {
+    layout: RecursivePartDescription,
+    beamout_kind: String,
+    beamout_from: Option<u8>
+}
+
+pub fn spawn_beamout_request(beamout_token: String, beamout_kind: BeamoutKind, beamout_from: Option<u8>, mut beamout_layout: RecursivePartDescription, api: Arc<ApiDat>) -> JoinHandle<()> {
     fn recurse_can_beamout(part: &mut RecursivePartDescription) {
         for attachment in &mut part.attachments {
             if let Some(part) = attachment {
@@ -33,11 +40,21 @@ pub fn spawn_beamout_request(beamout_token: String, mut beamout_layout: Recursiv
     }
     recurse_can_beamout(&mut beamout_layout);
 
+    let request = BeamoutRequest {
+        layout: beamout_layout,
+        beamout_kind: match beamout_kind {
+            BeamoutKind::Beamout => "beamout".to_string(),
+            BeamoutKind::Dock => "dock".to_string(),
+            BeamoutKind::None => panic!()
+        },
+        beamout_from,
+    };
+
     let uri = api.beamout.replacen("^^^^", &beamout_token, 1);
     let password = api.password.clone();
     async_std::task::spawn(async move {
-        let beamout_layout = beamout_layout;
-        match surf::post(uri).header("password", password).body(serde_json::to_string(&beamout_layout).unwrap()).await {
+        let request = request;
+        match surf::post(uri).header("password", password).body(serde_json::to_string(&request).unwrap()).await {
             Ok(res) if !res.status().is_success() => { eprintln!("Beamout post for {} does not indicate success {}", beamout_token, res.status()); },
             Err(err) => { eprintln!("Beamout post failed for {}\n{}", beamout_token, err); },
             _ => {}
@@ -45,7 +62,7 @@ pub fn spawn_beamout_request(beamout_token: String, mut beamout_layout: Recursiv
     })
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Deserialize, Debug)]
 pub struct BeaminResponse {
     pub is_admin: bool,
     pub beamout_token: String,

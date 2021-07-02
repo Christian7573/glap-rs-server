@@ -110,6 +110,24 @@ impl PlanetKind {
 		}
 	}
 }
+#[derive(Copy, Clone, Eq, PartialEq, Debug)] pub enum BeamoutKind {
+	Beamout, Dock, None
+}
+impl BeamoutKind {
+	pub fn val_of(&self) -> u8 { match self {
+			Self::Beamout => 0, Self::Dock => 1, Self::None => 2
+		} }
+	pub fn serialize(&self, buf: &mut Vec<u8>) {
+		buf.push(self.val_of());
+	}
+	pub async fn deserialize<S: Stream<Item=u8>+Unpin>(stream: &mut S) -> Result<Self, ()> {
+		let me = stream.next().await.ok_or(())?;
+		match me {
+			0 => Ok(Self::Beamout), 1 => Ok(Self::Dock), 2 => Ok(Self::None),
+			_ => Err(())
+		}
+	}
+}
 
 pub enum ToServerMsg {
 	Handshake { client: String, session: Option<String>, name: String, },
@@ -231,7 +249,7 @@ pub enum ToClientMsg {
 	RemovePlayer { id: u16, },
 	OrbitAdvanceTick,
 	PostSimulationTick { your_power: u32, },
-	UpdateMyMeta { max_power: u32, can_beamout: bool, },
+	UpdateMyMeta { max_power: u32, beamout: BeamoutKind, },
 	BeamOutAnimation { player_id: u16, },
 	IncinerationAnimation { player_id: u16, },
 	ChatMessage { username: String, msg: String, color: String, },
@@ -324,10 +342,10 @@ impl ToClientMsg {
 				out.push(14);
 				type_u32_serialize(out, your_power);
 			},
-			Self::UpdateMyMeta { max_power, can_beamout} => {
+			Self::UpdateMyMeta { max_power, beamout} => {
 				out.push(15);
 				type_u32_serialize(out, max_power);
-				type_bool_serialize(out, can_beamout);
+				beamout.serialize(out);
 			},
 			Self::BeamOutAnimation { player_id} => {
 				out.push(16);
@@ -448,10 +466,10 @@ impl ToClientMsg {
 				Ok(ToClientMsg::PostSimulationTick { your_power})
 			},
 			15 => {
-				let max_power; let can_beamout;
+				let max_power; let beamout;
 				max_power = type_u32_deserialize(stream).await?;
-				can_beamout = type_bool_deserialize(stream).await?;
-				Ok(ToClientMsg::UpdateMyMeta { max_power, can_beamout})
+				beamout = BeamoutKind::deserialize(stream).await?;
+				Ok(ToClientMsg::UpdateMyMeta { max_power, beamout})
 			},
 			16 => {
 				let player_id;
