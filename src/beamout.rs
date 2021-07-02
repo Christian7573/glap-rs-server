@@ -30,15 +30,15 @@ pub struct BeamoutRequest {
 }
 
 pub fn spawn_beamout_request(beamout_token: String, beamout_kind: BeamoutKind, beamout_from: Option<u8>, mut beamout_layout: RecursivePartDescription, api: Arc<ApiDat>) -> JoinHandle<()> {
-    fn recurse_can_beamout(part: &mut RecursivePartDescription) {
+    fn recurse_can_beamout(part: &mut RecursivePartDescription, beamout_kind: BeamoutKind) {
         for attachment in &mut part.attachments {
             if let Some(part) = attachment {
-                if !part.kind.can_beamout() { *attachment = None }
-                else { recurse_can_beamout(part) }
+                if !part.kind.can_beamout(beamout_kind) { *attachment = None }
+                else { recurse_can_beamout(part, beamout_kind) }
             }
         }
     }
-    recurse_can_beamout(&mut beamout_layout);
+    recurse_can_beamout(&mut beamout_layout, beamout_kind);
 
     let request = BeamoutRequest {
         layout: beamout_layout,

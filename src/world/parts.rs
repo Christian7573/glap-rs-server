@@ -5,7 +5,7 @@ use super::typedef::*;
 /*use ncollide2d::pipeline::object::CollisionGroups;
 use nphysics2d::joint::DefaultJointConstraintHandle;*/
 use crate::PlayerMeta;
-use crate::codec::ToClientMsg;
+use crate::codec::{ ToClientMsg, BeamoutKind };
 use crate::storage7573::Storage7573;
 use super::{/*WorldAddHandle,*/ World, make_local_point, apply_force_locally, PartsReverseLookup};
 use crate::session::WorldUpdatePartMove;
@@ -426,9 +426,9 @@ impl PartKind {
         }
     }
 
-    pub fn can_beamout(&self) -> bool {
+    pub fn can_beamout(&self, beamout_kind: BeamoutKind) -> bool {
         match self {
-            PartKind::Cargo => false,
+            PartKind::Cargo => beamout_kind == BeamoutKind::Dock,
             _ => true
         }
     }
