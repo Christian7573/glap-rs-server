@@ -32,7 +32,7 @@ impl Planets {
             let id = sun_id;
             let mass = EARTH_MASS * 50.0;
             let body = RigidBodyBuilder::new_static()
-                .additional_mass(1.0) //.additional_mass(EARTH_MASS * 50.0)
+                .additional_mass(0.001) //.additional_mass(EARTH_MASS * 50.0)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -61,7 +61,7 @@ impl Planets {
 			let id = earth_id;
             let mass = EARTH_MASS;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(1.0) //.additional_mass(mass)
+                .additional_mass(0.001) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -81,6 +81,7 @@ impl Planets {
                     total_ticks: earth_orbit_duration,
                     ticks_ellapsed: earth_ticks_ellapsed,
                     last_next_position: (0.0, 0.0),
+                    last_velocity: (0.0, 0.0),
                 }),
                 radius: RADIUS,
                 mass,
@@ -95,7 +96,7 @@ impl Planets {
             let id = make_planet_id();
             let mass = EARTH_MASS / 35.0 * 4.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(1.0) //.additional_mass(mass)
+                .additional_mass(0.001) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -103,7 +104,7 @@ impl Planets {
             let collider = ColliderBuilder::new(SharedShape::ball(RADIUS))
 				.user_data(Storage7573::Planet(id).into())
 				.active_events(ActiveEvents::CONTACT_EVENTS)
-                .restitution(0.25)
+                .restitution(0.0)
 				.build();
             colliders.insert_with_parent(collider, body_handle, bodies);
 
@@ -117,6 +118,7 @@ impl Planets {
                     total_ticks,
                     ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
+                    last_velocity: (0.0, 0.0),
                 }),
                 radius: RADIUS,
                 mass,
@@ -131,7 +133,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS / 4.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(1.0) //.additional_mass(mass)
+                .additional_mass(0.001) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -152,6 +154,7 @@ impl Planets {
                     total_ticks,
                     ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
+                    last_velocity: (0.0, 0.0),
                 }),
                 radius: RADIUS,
                 cargo_upgrade: Some(super::parts::PartKind::Hub),
@@ -166,7 +169,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS / 15.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(1.0) //.additional_mass(mass)
+                .additional_mass(0.001) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -187,6 +190,7 @@ impl Planets {
                     total_ticks,
                     ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
+                    last_velocity: (0.0, 0.0),
                 }),
                 radius: RADIUS,
                 mass,
@@ -201,7 +205,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 10.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(1.0) //.additional_mass(mass)
+                .additional_mass(0.001) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -222,6 +226,7 @@ impl Planets {
                     total_ticks,
                     ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
+                    last_velocity: (0.0, 0.0),
                 }),
                 radius: RADIUS,
                 mass,
@@ -236,7 +241,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS / 10.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(1.0) //.additional_mass(mass)
+                .additional_mass(0.001) //.additional_mass(mass)
                 .user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -257,6 +262,7 @@ impl Planets {
                     total_ticks,
                     ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
+                    last_velocity: (0.0, 0.0),
                 }),
                 radius: RADIUS,
                 mass,
@@ -271,7 +277,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 10.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(1.0) //.additional_mass(mass)
+                .additional_mass(0.001) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let position = (body.position().translation.x, body.position().translation.y);
@@ -293,6 +299,7 @@ impl Planets {
                     total_ticks,
                     ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
+                    last_velocity: (0.0, 0.0),
                 }),
                 radius: RADIUS,
                 mass,
@@ -307,7 +314,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 4.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(1.0) //.additional_mass(mass)
+                .additional_mass(0.001) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -328,6 +335,7 @@ impl Planets {
                     total_ticks,
                     ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
+                    last_velocity: (0.0, 0.0),
                 }),
                 radius: RADIUS,
                 mass,
@@ -342,7 +350,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 1.3;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(1.0) //.additional_mass(EARTH_MASS * 1.3)
+                .additional_mass(0.001) //.additional_mass(EARTH_MASS * 1.3)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -363,6 +371,7 @@ impl Planets {
                     total_ticks,
                     ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
+                    last_velocity: (0.0, 0.0),
                 }),
                 radius: RADIUS,
                 mass,
@@ -377,7 +386,7 @@ impl Planets {
 			let id = make_planet_id();
             let mass = EARTH_MASS * 4.0;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(1.0) //.additional_mass(mass)
+                .additional_mass(0.001) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -398,6 +407,7 @@ impl Planets {
                     total_ticks,
                     ticks_ellapsed: rand.gen_range(0..total_ticks),
                     last_next_position: (0.0, 0.0),
+                    last_velocity: (0.0, 0.0),
                 }),
                 radius: RADIUS,
                 mass,
@@ -414,7 +424,7 @@ impl Planets {
 			let id = trade_id;
             let mass = EARTH_MASS;
             let body = RigidBodyBuilder::new_kinematic_velocity_based()
-                .additional_mass(1.0) //.additional_mass(mass)
+                .additional_mass(0.001) //.additional_mass(mass)
 				.user_data(Planet(id).into())
                 .build();
             let body_handle = bodies.insert(body);
@@ -434,6 +444,7 @@ impl Planets {
                     total_ticks: earth_orbit_duration,
                     ticks_ellapsed: (earth_ticks_ellapsed + (earth_orbit_duration / 2)) % earth_orbit_duration,
                     last_next_position: (0.0, 0.0),
+                    last_velocity: (0.0, 0.0),
                 }),
                 radius: RADIUS,
                 mass,
@@ -493,6 +504,7 @@ pub struct Orbit {
     total_ticks: u32,
     ticks_ellapsed: u32,
     last_next_position: (f32, f32),
+    last_velocity: (f32, f32),
 }
 const TICKS_PER_SECOND: f32 = crate::TICKS_PER_SECOND as f32;
 impl Orbit {
@@ -514,6 +526,7 @@ impl Orbit {
         let next_pos = (next_pos.0 + parent_next_pos.0, next_pos.1 + parent_next_pos.1);
 
         let vel = ((next_pos.0 - pos.0) * TICKS_PER_SECOND, (next_pos.1 - pos.1) * TICKS_PER_SECOND);
+        self.last_velocity = vel;
         (pos, vel)
     }
 
@@ -543,6 +556,8 @@ impl Orbit {
             }
         )
     }
+    
+    pub fn last_velocity(&self) -> (f32, f32) { self.last_velocity }
 }
 
 #[derive(Copy, Clone)]

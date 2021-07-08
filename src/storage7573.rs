@@ -66,3 +66,11 @@ impl Into<u128> for Storage7573 {
         storage.into()
     }
 }
+impl Storage7573 {
+    pub fn planet_id(&self) -> u8 {
+        match self {
+            Storage7573::Planet(id) => *id,
+            _ => panic!("planet_id called on non storage7573::planet")
+        }
+    }
+}

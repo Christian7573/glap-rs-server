@@ -169,6 +169,28 @@ impl Simulation {
                     }
                 }
             }
+
+            for contact_pair in self.narrow_phase.contact_pairs() {
+                if !contact_pair.has_any_active_contact { continue };
+                let collider1 = &self.colliders[contact_pair.collider1];
+                let collider2 = &self.colliders[contact_pair.collider2];
+                let storage1 = Storage7573::from(collider1.user_data);
+                let storage2 = Storage7573::from(collider2.user_data);
+                let non_planet;
+                let planet;
+                if matches!(storage1, Storage7573::Planet(_id)) && !matches!(storage2, Storage7573::Planet(_id)) {
+                    non_planet = collider2;
+                    planet = &self.world.planets.planets[&storage1.planet_id()];
+                } else if matches!(storage2, Storage7573::Planet(_id)) && !matches!(storage1, Storage7573::Planet(_id)) {
+                    non_planet = collider1;
+                    planet = &self.world.planets.planets[&storage2.planet_id()];
+                } else {
+                    continue;
+                }
+                let planet_vel = planet.orbit.as_ref().map(|orbit| orbit.last_velocity()).unwrap_or((0.0, 0.0));
+                let body = self.world.get_part_rigid_mut(*self.world.parts_reverse_lookup.get(&non_planet.parent().unwrap().into_raw_parts()).unwrap()).unwrap();
+                body.set_linvel(Vector::new(planet_vel.0, planet_vel.1), true);
+            }
         }
     }
 
